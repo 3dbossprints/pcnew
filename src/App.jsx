@@ -205,23 +205,84 @@ function Practice({ running, setRunning, onStart, onFinish, time, seconds, selec
 
 function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
   const [tab, setTab] = useState("my-sheets");
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
   const [drag, setDrag] = useState(false);
-  const onFile = f => { if(f) {setFileName(f.name);toast(`${f.name} selected. Converter processing will be connected next.`);} };
+
+  async function token() {
+    if (!auth.currentUser) throw new Error("Please sign in again.");
+    return auth.currentUser.getIdToken();
+  }
+  async function loadFiles() {
+    setLoading(true); setError("");
+    try {
+      const response = await fetch("/api/uploads", { headers: { Authorization: "Bearer " + await token() } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Your library couldn't be loaded.");
+      setFiles(body.files || []);
+    } catch (e) { setError(e.message || "Your library couldn't be loaded."); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { loadFiles(); }, []);
+
+  async function onFile(file) {
+    if (!file) return;
+    setFileName(file.name);
+    if (file.size > 25 * 1024 * 1024) { setError("Files must be 25 MB or smaller."); return; }
+    setUploading(true); setError("");
+    try {
+      const bearer = await token();
+      const signResponse = await fetch("/api/uploads/sign", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer },
+        body: JSON.stringify({ filename: file.name, contentType: file.type || "application/octet-stream", size: file.size }),
+      });
+      const signed = await signResponse.json();
+      if (!signResponse.ok) throw new Error(signed.error || "Upload could not be prepared.");
+      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!put.ok) throw new Error("Cloudflare R2 rejected the upload. Check the bucket CORS settings and try again.");
+      const completeResponse = await fetch("/api/uploads/complete", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer },
+        body: JSON.stringify({ fileId: signed.fileId }),
+      });
+      const completed = await completeResponse.json();
+      if (!completeResponse.ok) throw new Error(completed.error || "The uploaded file couldn't be verified.");
+      setFiles(current => [completed.file, ...current.filter(item => item.id !== completed.file.id)]);
+      setTab("my-sheets");
+      toast("Saved to your sheet music library.");
+    } catch (e) { setError(e.message || "Upload failed. Please try again."); }
+    finally { setUploading(false); setFileName(""); }
+  }
+  async function openFile(file) {
+    try {
+      const response = await fetch("/api/uploads/download?id=" + encodeURIComponent(file.id), { headers: { Authorization: "Bearer " + await token() } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "This file couldn't be opened.");
+      window.open(body.url, "_blank", "noopener,noreferrer");
+    } catch (e) { setError(e.message || "This file couldn't be opened."); }
+  }
+  const visible = files.filter(file => file.original_name.toLowerCase().includes(search.toLowerCase()));
+  const iconFor = file => file.kind === "audio" ? "◖" : file.kind === "image" ? "▧" : "♫";
+  const formatFor = file => (file.original_name.split(".").pop() || "FILE").toUpperCase();
+  const sizeFor = bytes => bytes < 1024 * 1024 ? Math.max(1, Math.round(bytes / 1024)) + " KB" : (bytes / (1024 * 1024)).toFixed(1) + " MB";
+
   return <>
-    <PageHeading eyebrow="YOUR MUSIC LIBRARY" title="Sheet Music" subtitle="Bring your scores together, ready for your next practice." action={<Button onClick={()=>document.getElementById("sheet-upload").click()}>＋ Import sheet music</Button>}/>
+    <PageHeading eyebrow="YOUR MUSIC LIBRARY" title="Sheet Music" subtitle="Your scores and recordings, securely stored in your own library." action={<Button onClick={()=>document.getElementById("sheet-upload").click()} disabled={uploading}>{uploading?"Uploading…":"＋ Import sheet music"}</Button>}/>
     <div className="panel sheet-converter">
-      <div className="converter-copy"><div className="eyebrow">SHEET MUSIC CONVERTER</div><h2>Your music, ready to play.</h2><p>Import a score to organise it in your collection and prepare it for practice.</p><div className="format-list"><span>PDF</span><span>PNG / JPG</span><span>MusicXML</span><span>MIDI</span></div></div>
-      <label className={`upload-zone ${drag?"dragging":""}`} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);onFile(e.dataTransfer.files[0]);}}><input id="sheet-upload" type="file" accept=".pdf,.png,.jpg,.jpeg,.xml,.musicxml,.mid,.midi" onChange={e=>onFile(e.target.files[0])}/><span className="upload-icon">↑</span><strong>{fileName || "Drop a score here, or browse files"}</strong><small>PDF, image, MusicXML or MIDI · One score at a time</small><span className="upload-browse">Choose a file</span></label>
+      <div className="converter-copy"><div className="eyebrow">SHEET MUSIC CONVERTER</div><h2>Your music, ready to play.</h2><p>Upload a score or recording. Your files are saved privately to your Cloudflare library.</p><div className="format-list"><span>PDF</span><span>PNG / JPG</span><span>MusicXML</span><span>MIDI</span><span>MP3 / WAV</span></div></div>
+      <label className={`upload-zone ${drag?"dragging":""} ${uploading?"uploading":""}`} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);onFile(e.dataTransfer.files[0]);}}>
+        <input id="sheet-upload" type="file" accept=".pdf,.png,.jpg,.jpeg,.xml,.musicxml,.mid,.midi,.mp3,.m4a,.mp4,.webm,.wav" disabled={uploading} onChange={e=>{onFile(e.target.files[0]);e.target.value="";}}/>
+        <span className="upload-icon">{uploading?"◌":"↑"}</span><strong>{uploading?"Saving to your library…":"Drop a score here, or browse files"}</strong><small>PDF, PNG, JPG, MusicXML, MIDI or audio · Maximum 25 MB</small><span className="upload-browse">{uploading?"Please wait":"Choose a file"}</span>
+      </label>
     </div>
-    <div className="tabs-row"><button className={tab==="my-sheets"?"active":""} onClick={()=>setTab("my-sheets")}>My sheet music <span>6</span></button><button className={tab==="recent"?"active":""} onClick={()=>setTab("recent")}>Recently opened</button><div className="search-box"><Icon>⌕</Icon><input placeholder="Search your music..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
-    {tab==="my-sheets" ? <div className="library-grid">{[
-      ["Clair de Lune","Claude Debussy","PDF","score","72%"],
-      ["Sonatina in C","Muzio Clementi","MUSICXML","score","46%"],
-      ["The Swing","Traditional","PDF","score","88%"],
-      ["A minor scales","ABRSM","MUSICCOACH","score","Ready"],
-      ["Moonlight Sonata","Ludwig van Beethoven","MIDI","music","New"],
-      ["Practice recording 04","Your recording","AUDIO","audio","02:18"],
-    ].filter(a=>a[0].toLowerCase().includes(search.toLowerCase())).map((a,i)=><div className="library-card" key={a[0]}><div className={`library-thumb ${a[3]}`}>{a[3]==="audio"?"◖":a[3]==="music"?"♫":"𝄞"}<span>{a[2]}</span></div><div className="library-info"><strong>{a[0]}</strong><small>{a[1]}</small><div><span>{a[4]}</span><button onClick={()=>toast(`Opening ${a[0]}…`)}>Open ↗</button></div></div></div>)}</div> : <div className="empty-state"><span>◷</span><h3>No recent scores yet</h3><p>Scores you open will appear here.</p></div>}
+    {error && <div className="library-error" role="alert">{error}<button onClick={()=>setError("")}>Dismiss</button></div>}
+    <div className="tabs-row"><button className={tab==="my-sheets"?"active":""} onClick={()=>setTab("my-sheets")}>My library <span>{files.length}</span></button><button className={tab==="recent"?"active":""} onClick={()=>setTab("recent")}>Recently added</button><div className="search-box"><Icon>⌕</Icon><input placeholder="Search your music..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
+    {loading ? <div className="empty-state"><span>◌</span><h3>Loading your library…</h3></div> :
+      visible.length ? <div className="library-grid">{visible.map(file=><div className="library-card" key={file.id}>
+        <div className={`library-thumb ${file.kind==="audio"?"audio":file.kind==="image"?"image":"score"}`}>{iconFor(file)}<span>{formatFor(file)}</span></div>
+        <div className="library-info"><strong title={file.original_name}>{file.original_name}</strong><small>{sizeFor(Number(file.size_bytes))} · {new Date(file.created_at).toLocaleDateString()}</small><div><span>Saved</span><button onClick={()=>openFile(file)}>Open ↗</button></div></div>
+      </div>)}</div> : <div className="empty-state"><span>♫</span><h3>{search?"No matching files":"Your library is ready"}</h3><p>{search?"Try a different search.":"Import your first score or recording to see it here."}</p><button className="text-link" onClick={()=>document.getElementById("sheet-upload").click()}>＋ Add sheet music</button></div>}
   </>;
 }
 function GradePlan({ toast }) {
