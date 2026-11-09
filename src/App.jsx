@@ -262,6 +262,19 @@ function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
       window.open(body.url, "_blank", "noopener,noreferrer");
     } catch (e) { setError(e.message || "This file couldn't be opened."); }
   }
+  async function deleteFile(file) {
+    if (!window.confirm(`Delete "${file.original_name}" from your library? This permanently removes the stored file.`)) return;
+    try {
+      const response = await fetch("/api/uploads/delete?id=" + encodeURIComponent(file.id), {
+        method: "DELETE",
+        headers: { Authorization: "Bearer " + await token() },
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "This file couldn't be deleted.");
+      setFiles(current => current.filter(item => item.id !== file.id));
+      toast("File deleted from your library.");
+    } catch (e) { setError(e.message || "This file couldn't be deleted."); }
+  }
   const visible = files.filter(file => file.original_name.toLowerCase().includes(search.toLowerCase()));
   const iconFor = file => file.kind === "audio" ? "◖" : file.kind === "image" ? "▧" : "♫";
   const formatFor = file => (file.original_name.split(".").pop() || "FILE").toUpperCase();
@@ -281,7 +294,7 @@ function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
     {loading ? <div className="empty-state"><span>◌</span><h3>Loading your library…</h3></div> :
       visible.length ? <div className="library-grid">{visible.map(file=><div className="library-card" key={file.id}>
         <div className={`library-thumb ${file.kind==="audio"?"audio":file.kind==="image"?"image":"score"}`}>{iconFor(file)}<span>{formatFor(file)}</span></div>
-        <div className="library-info"><strong title={file.original_name}>{file.original_name}</strong><small>{sizeFor(Number(file.size_bytes))} · {new Date(file.created_at).toLocaleDateString()}</small><div><span>Saved</span><button onClick={()=>openFile(file)}>Open ↗</button></div></div>
+        <div className="library-info"><strong title={file.original_name}>{file.original_name}</strong><small>{sizeFor(Number(file.size_bytes))} · {new Date(file.created_at).toLocaleDateString()}</small><div className="library-actions"><span>Saved</span><button onClick={()=>openFile(file)}>Open ↗</button><button className="library-delete" onClick={()=>deleteFile(file)} aria-label={`Delete ${file.original_name}`}>Delete</button></div></div>
       </div>)}</div> : <div className="empty-state"><span>♫</span><h3>{search?"No matching files":"Your library is ready"}</h3><p>{search?"Try a different search.":"Import your first score or recording to see it here."}</p><button className="text-link" onClick={()=>document.getElementById("sheet-upload").click()}>＋ Add sheet music</button></div>}
   </>;
 }
