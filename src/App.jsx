@@ -25,7 +25,7 @@ function Button({ children, kind = "primary", onClick, className = "", ...props 
 function Progress({ value, small = false }) {
   return <div className={`progress ${small ? "small" : ""}`}><span style={{ width: `${value}%` }} /></div>;
 }
-function App() {
+export default function App() {
   const [page, setPage] = useState("home");
   const [collapsed, setCollapsed] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
