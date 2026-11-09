@@ -75,3 +75,19 @@ Supported extensions: PDF, PNG, JPG/JPEG, XML/MusicXML, MID/MIDI, MP3, M4A, MP4,
 - Add the bucket-scoped R2 S3 credentials.
 - Apply the R2 CORS policy for the exact test origin.
 - Redeploy after environment variables are added.
+
+
+## Gmail SMTP (transactional email)
+
+Configure these Vercel environment variables for Production, Preview and Development. Keep the password sensitive and server-side only:
+
+- `GMAIL_HOST=smtp.gmail.com`
+- `GMAIL_PORT=465`
+- `GMAIL_SECURE=true`
+- `GMAIL_USER=noreply@musiccoach.cc.cd`
+- `GMAIL_APP_PASSWORD` — a Google App Password (16 characters); never use your normal Google account password
+- `GMAIL_FROM=Music Coach <noreply@musiccoach.cc.cd>`
+
+Port 465 uses implicit TLS. If you choose port 587 instead, set `GMAIL_PORT=587` and `GMAIL_SECURE=false` (STARTTLS). The sending Google account must have permission to send as `noreply@musiccoach.cc.cd` (for example, a verified Gmail “Send mail as” alias or Google Workspace mailbox). Domain ownership alone does not authorise Gmail to send as that address.
+
+Server-side email code imports `sendEmail` from `api/_lib/email.js`. SMTP credentials must never be exposed in a `VITE_*` variable.
