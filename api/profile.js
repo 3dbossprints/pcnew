@@ -16,6 +16,7 @@ export default async function handler(req, res) {
   if (!boards.has(examBoard) || !grades.has(grade) || !plans.has(plan)) {
     return sendJson(res, 400, { error: "Choose a valid exam board, grade and plan." });
   }
+  if (plan !== "free") return sendJson(res, 409, { error: "Paid checkout is not available yet. Choose the free demo for now; no payment has been taken." });
   if (plan !== "free" && (!Array.isArray(bookSources) || bookSources.length === 0)) {
     return sendJson(res, 400, { error: "Add at least one exam-book reference for a paid plan." });
   }
