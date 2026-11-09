@@ -42,7 +42,22 @@ export default function App() {
   const [fileName, setFileName] = useState("");
   const [profileTab, setProfileTab] = useState("details");
   const [showAdmin, setShowAdmin] = useState(false);
+  const [studentProfile, setStudentProfile] = useState(null);
 
+  useEffect(() => {
+    let active = true;
+    async function loadProfile() {
+      try {
+        const current = auth.currentUser;
+        if (!current) return;
+        const token = await current.getIdToken();
+        const response = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } });
+        if (response.ok) { const body = await response.json(); if (active) setStudentProfile(body.user); }
+      } catch { /* Keep the app usable while profile data reconnects. */ }
+    }
+    loadProfile();
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     if (!practiceRunning) return;
     const id = window.setInterval(() => setSeconds(s => s + 1), 1000);
@@ -51,6 +66,8 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  const studentName = studentProfile?.preferred_name || studentProfile?.display_name || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Piano student";
+  const studentInitials = studentName.split(/\\s+/).map(part => part[0]).join("").slice(0,2).toUpperCase();
   const time = useMemo(() => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`, [seconds]);
   const go = id => { setPage(id); setShowProfile(false); setShowAdmin(false); };
   const startPractice = async () => {
@@ -102,19 +119,19 @@ export default function App() {
       <div className="sidebar-bottom">
         <button className={`nav-item ${showProfile ? "active" : ""}`} onClick={() => {setShowProfile(true);setShowAdmin(false);}}><Icon>◉</Icon>{!collapsed && <span>Profile & settings</span>}</button>
         <button className="nav-item" onClick={() => toast("Help centre is coming soon.")}><Icon>?</Icon>{!collapsed && <span>Help & support</span>}</button>
-        <div className="user-chip"><div className="avatar">AT</div>{!collapsed && <div className="user-meta"><strong>Alex Taylor</strong><small>Grade 5 · ABRSM</small></div>}{!collapsed && <span className="more">•••</span>}</div>
+        <div className="user-chip"><div className="avatar">{studentInitials}</div>{!collapsed && <div className="user-meta"><strong>{studentName}</strong><small>{studentProfile?.grade || "Piano student"}{studentProfile?.exam_board ? " · " + studentProfile.exam_board : ""}</small></div>}{!collapsed && <span className="more">•••</span>}</div>
       </div>
     </aside>
 
     <main className="main-area">
       <header className="topbar">
         <div className="breadcrumbs"><span>Workspace</span><b>/</b><strong>{showProfile ? "Profile" : showAdmin ? "Admin" : nav.find(n => n.id === page)?.label}</strong></div>
-        <div className="top-actions"><button className="icon-button" onClick={() => toast("You're all caught up.")} aria-label="Notifications">♧<i /></button><div className="top-divider" /><button className="top-user" onClick={() => setShowProfile(true)}><div className="avatar small-avatar">AT</div><span>Alex Taylor</span><span className="chevron">⌄</span></button></div>
+        <div className="top-actions"><button className="icon-button" onClick={() => toast("You're all caught up.")} aria-label="Notifications">♧<i /></button><div className="top-divider" /><button className="top-user" onClick={() => setShowProfile(true)}><div className="avatar small-avatar">{studentInitials}</div><span>{studentName}</span><span className="chevron">⌄</span></button></div>
       </header>
       <div className="page-content">
-        {showProfile ? <Profile theme={theme} setTheme={setTheme} notation={notation} setNotation={setNotation} reminders={reminders} setReminders={setReminders} toast={toast} profileTab={profileTab} setProfileTab={setProfileTab}/> :
+        {showProfile ? <Profile theme={theme} setTheme={setTheme} notation={notation} setNotation={setNotation} reminders={reminders} setReminders={setReminders} toast={toast} profileTab={profileTab} setProfileTab={setProfileTab} studentProfile={studentProfile}/> :
         showAdmin ? <Admin toast={toast}/> :
-        page === "home" ? <Dashboard go={go} streak={streak} setStreak={setStreak} toast={toast}/> :
+        page === "home" ? <Dashboard go={go} streak={streak} setStreak={setStreak} toast={toast} studentName={studentName} studentProfile={studentProfile}/> :
         page === "practice" ? <Practice running={practiceRunning} setRunning={setPracticeRunning} onStart={startPractice} onFinish={finishPractice} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
         page === "sheets" ? <SheetMusic search={search} setSearch={setSearch} fileName={fileName} setFileName={setFileName} toast={toast}/> :
         page === "grade" ? <GradePlan toast={toast}/> :
@@ -128,11 +145,11 @@ export default function App() {
 function PageHeading({ eyebrow, title, subtitle, action }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>{action}</div>;
 }
-function Dashboard({ go, streak, setStreak, toast }) {
+function Dashboard({ go, streak, setStreak, toast, studentName, studentProfile }) {
   const [done, setDone] = useState([true, false, false]);
   const complete = done.filter(Boolean).length;
   return <>
-    <PageHeading eyebrow="MONDAY, 9 NOVEMBER" title={<>Good afternoon, Alex<span className="heading-period">.</span></>} subtitle="A little time at the piano today goes a long way." action={<Button kind="outline" onClick={() => toast("Your weekly practice report is being prepared.")}>↗ <span>Weekly report</span></Button>}/>
+    <PageHeading eyebrow="MONDAY, 9 NOVEMBER" title={<>Good afternoon, {studentName}<span className="heading-period">.</span></>} subtitle="A little time at the piano today goes a long way." action={<Button kind="outline" onClick={() => toast("Your weekly practice report is being prepared.")}>↗ <span>Weekly report</span></Button>}/>
     <section className="welcome-grid">
       <div className="hero-card">
         <div className="hero-copy"><div className="hero-kicker"><span className="spark">✦</span> YOUR DAILY PRACTICE</div><h2>Make today<br/><em>sound beautiful.</em></h2><p>You're building something lovely, one practice at a time.</p><Button kind="cream" onClick={() => go("practice")}>Begin practice <span>→</span></Button></div>
@@ -145,7 +162,7 @@ function Dashboard({ go, streak, setStreak, toast }) {
     <section className="stats-grid">
       <Stat label="THIS WEEK" value="2h 35m" note="+18% from last week" icon="◷" />
       <Stat label="PRACTICE SESSIONS" value="8" note="Across 4 different days" icon="♫"/>
-      <Stat label="GRADE PROGRESS" value="64%" note="ABRSM Grade 5" icon="⌁"/>
+      <Stat label="GRADE PROGRESS" value="64%" note={`${studentProfile?.exam_board || "Exam"} ${studentProfile?.grade || ""}`.trim()} icon="⌁"/>
       <Stat label="NEXT MILESTONE" value="30 days" note="18 days to go" icon="✧"/>
     </section>
     <div className="content-grid">
@@ -227,9 +244,12 @@ function GradePlan({ toast }) {
 function Extras({ toast }) {
   return <><PageHeading eyebrow="YOUR CREATIVE SPACE" title="Extras" subtitle="Explore music beyond your exam programme." action={<span className="pro-label">✦ PIANO COACH PRO</span>}/><div className="extras-hero"><div><div className="eyebrow">BEYOND THE SYLLABUS</div><h2>Your music.<br/><em>Your way.</em></h2><p>Upload the pieces you love, explore something new, and make the piano yours.</p><Button kind="cream" onClick={()=>toast("Choose a score to add to Extras.")}>＋ Add your own music</Button></div><div className="extras-illustration">♫<span>♪</span><i>♬</i></div></div><div className="extras-cards"><div className="panel"><span className="feature-icon">♬</span><h3>My own pieces</h3><p>Keep personal repertoire separate from your exam grade plan.</p><button className="text-link" onClick={()=>toast("Your personal repertoire will appear here.")}>Explore pieces →</button></div><div className="panel"><span className="feature-icon">✧</span><h3>Music Assistant</h3><p>Ask questions about your music, technique and practice routine.</p><button className="text-link" onClick={()=>toast("Music Assistant is being prepared.")}>Open assistant →</button></div></div></>;
 }
-function Profile({ theme,setTheme,notation,setNotation,reminders,setReminders,toast,profileTab,setProfileTab }) {
+function Profile({ theme,setTheme,notation,setNotation,reminders,setReminders,toast,profileTab,setProfileTab,studentProfile }) {
+  const displayName = studentProfile?.preferred_name || studentProfile?.display_name || auth.currentUser?.displayName || "Piano student";
+  const email = studentProfile?.email || auth.currentUser?.email || "";
+  const gradeBoard = [studentProfile?.grade, studentProfile?.exam_board].filter(Boolean).join(" · ") || "Not set";
   return <><PageHeading eyebrow="YOUR ACCOUNT" title="Profile" subtitle="A few details to make Piano Coach feel like yours."/><div className="profile-tabs"><button className={profileTab==="details"?"active":""} onClick={()=>setProfileTab("details")}>Personal details</button><button className={profileTab==="preferences"?"active":""} onClick={()=>setProfileTab("preferences")}>Preferences</button><button className={profileTab==="account"?"active":""} onClick={()=>setProfileTab("account")}>Account & billing</button></div>
-    {profileTab==="details"&&<div className="panel profile-panel"><div className="profile-section"><div className="profile-avatar">AT</div><div><h2>Alex Taylor</h2><p>Grade 5 · ABRSM Board</p></div><Button kind="outline" onClick={()=>toast("Profile editing will be connected to your account.")}>Edit profile</Button></div><div className="form-grid"><Field label="Name" value="Alex Taylor"/><Field label="Preferred name" value="Alex"/><Field label="Email address" value="alex.taylor@example.com"/><Field label="Grade and exam board" value="Grade 5 ABRSM Board"/><Field label="Target completion date" value="30 June 2027"/></div><div className="profile-section compact"><div><h3>Connected services</h3><p>Google · Not connected &nbsp; Microsoft · Not connected</p></div><button className="text-link" onClick={()=>toast("Connected account settings opened.")}>Manage ↗</button></div></div>}
+    {profileTab==="details"&&<div className="panel profile-panel"><div className="profile-section"><div className="profile-avatar">{displayName.split(/\\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase()}</div><div><h2>{displayName}</h2><p>{gradeBoard}</p></div><Button kind="outline" onClick={()=>toast("Profile editing will be connected to your account.")}>Edit profile</Button></div><div className="form-grid"><Field label="Name" value={studentProfile?.display_name || displayName}/><Field label="Preferred name" value={studentProfile?.preferred_name || ""}/><Field label="Email address" value={email}/><Field label="Grade and exam board" value={gradeBoard}/><Field label="Target completion date" value={studentProfile?.target_date ? String(studentProfile.target_date).slice(0,10) : ""}/></div><div className="profile-section compact"><div><h3>Connected services</h3><p>Google · Not connected &nbsp; Microsoft · Not connected</p></div><button className="text-link" onClick={()=>toast("Connected account settings opened.")}>Manage ↗</button></div></div>}
     {profileTab==="preferences"&&<div className="panel profile-panel"><h2>Practice preferences</h2><div className="setting-row"><div><strong>Reminders</strong><p>Receive practice reminders by email and browser notification.</p></div><button className={`toggle ${reminders?"on":""}`} onClick={()=>setReminders(v=>!v)}><i/></button></div><div className="setting-row"><div><strong>Notation style</strong><p>Choose how your sheet music is displayed.</p></div><select value={notation} onChange={e=>setNotation(e.target.value)}><option value="standard">Standard</option><option value="closer">Closer together</option><option value="larger">Larger noteheads</option><option value="inverted">Inverted</option></select></div><div className="notation-preview"><div className="eyebrow">PREVIEW</div><div className={`mini-staff ${notation}`}>𝄞　♩　♪　♫　♬　♩</div></div><h2 className="settings-title">Interface settings</h2><div className="theme-options">{["light","dark","contrast"].map(t=><button className={theme===t?"selected":""} onClick={()=>setTheme(t)} key={t}><span className={`theme-swatch ${t}`}/>{t==="contrast"?"High contrast":t[0].toUpperCase()+t.slice(1)}</button>)}</div><div className="setting-row"><div><strong>Interface font size</strong><p>Adjust text size across Piano Coach.</p></div><select onChange={()=>toast("Font size preference saved.")} defaultValue="normal"><option value="normal">Standard</option><option>Large</option><option>Extra large</option></select></div></div>}
     {profileTab==="account"&&<div className="panel profile-panel"><h2>Account & billing</h2><div className="billing-card"><div><span className="eyebrow">CURRENT PLAN</span><h3>Basic <span>£9.99 / month</span></h3><p>Your next renewal date will appear here.</p></div><span className="soft-badge">ACTIVE</span></div><div className="setting-row"><div><strong>Change password</strong><p>Update the password used to sign in.</p></div><Button kind="outline" onClick={()=>toast("Password change flow will be connected.")}>Change password</Button></div><div className="setting-row"><div><strong>Cancel subscription</strong><p>Manage your recurring payment through Stripe.</p></div><button className="text-link" onClick={()=>toast("Stripe customer portal will open here.")}>Manage billing ↗</button></div><div className="danger-zone"><div><strong>Delete account</strong><p>Account deletion includes a 15-day cancellation period before permanent removal.</p></div><Button kind="danger" onClick={()=>toast("Identity confirmation is required before account deletion.")}>Delete account</Button></div></div>}
   </>;
