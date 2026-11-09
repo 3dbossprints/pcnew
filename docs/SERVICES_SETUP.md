@@ -68,13 +68,16 @@ Add the exact Vercel preview origin temporarily when testing preview deployments
 
 Supported extensions: PDF, PNG, JPG/JPEG, XML/MusicXML, MID/MIDI, MP3, M4A, MP4, WEBM and WAV. Maximum upload size is 25 MB. This is private file storage; there is no public bucket URL in the app.
 
-## Remaining before end-to-end upload testing
+## End-to-end upload verification checklist
 
-- Add the Firebase web API key.
-- Add Firebase Admin service-account JSON.
-- Add the bucket-scoped R2 S3 credentials.
-- Apply the R2 CORS policy for the exact test origin.
-- Redeploy after environment variables are added.
+Before declaring uploads production-ready, verify that the current Vercel environment has:
+- The Firebase web configuration for the same project.
+- Firebase Admin service-account JSON as a server-only Sensitive variable.
+- Bucket-scoped R2 S3 credentials as server-only Sensitive variables.
+- The R2 CORS policy covering the exact production or preview origin.
+- A successful sign-in, upload, completion, library listing, download and delete test.
+
+The credentials are configured in Vercel by the project owner; this repository intentionally does not contain their values.
 
 
 ## Gmail SMTP (transactional email)
@@ -82,12 +85,12 @@ Supported extensions: PDF, PNG, JPG/JPEG, XML/MusicXML, MID/MIDI, MP3, M4A, MP4,
 Configure these Vercel environment variables for Production, Preview and Development. Keep the password sensitive and server-side only:
 
 - `GMAIL_HOST=smtp.gmail.com`
-- `GMAIL_PORT=465`
-- `GMAIL_SECURE=true`
-- `GMAIL_USER=noreply@musiccoach.cc.cd`
+- `GMAIL_PORT=587`
+- `GMAIL_SECURE=false`
+- `GMAIL_USER=<the Gmail account used to authenticate SMTP>`
 - `GMAIL_APP_PASSWORD` — a Google App Password (16 characters); never use your normal Google account password
 - `GMAIL_FROM=Music Coach <noreply@musiccoach.cc.cd>`
 
-Port 465 uses implicit TLS. If you choose port 587 instead, set `GMAIL_PORT=587` and `GMAIL_SECURE=false` (STARTTLS). The sending Google account must have permission to send as `noreply@musiccoach.cc.cd` (for example, a verified Gmail “Send mail as” alias or Google Workspace mailbox). Domain ownership alone does not authorise Gmail to send as that address.
+Port 587 uses STARTTLS, so set `GMAIL_PORT=587` and `GMAIL_SECURE=false`. The sending Google account must have permission to send as `noreply@musiccoach.cc.cd` (for example, a verified Gmail “Send mail as” alias or Google Workspace mailbox). Domain ownership alone does not authorise Gmail to send as that address.
 
 Server-side email code imports `sendEmail` from `api/_lib/email.js`. SMTP credentials must never be exposed in a `VITE_*` variable.
