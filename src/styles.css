@@ -60,3 +60,5 @@
 .onboarding-actions button:disabled{opacity:.6;cursor:wait}
 .onboarding-foot{font:italic 13px "Playfair Display",serif;color:#a39486;margin:20px 0 0}
 @media(max-width:650px){.onboarding-card{padding:25px 20px}.plan-options{grid-template-columns:1fr}.plan-desc{min-height:0}.onboarding-options{grid-template-columns:1fr}.grade-choice-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+.library-actions{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:8px;color:#8d7d6e}.library-actions button{border:0;background:transparent;color:#9b714d;font-size:8px;font-weight:700;padding:0}.library-actions .library-delete{color:#a45c52}
