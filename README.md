@@ -1,13 +1,17 @@
 # Piano Coach
 
-Piano Coach is a React + Vite web application for piano students, exam preparation and deliberate practice.
+A React + Vite music-learning platform for piano students, exam preparation and deliberate practice.
 
-## Stack
+## Agreed infrastructure
 
-- React 18 + Vite 6
-- PocketBase JavaScript SDK (backend endpoint configured with `VITE_POCKETBASE_URL`)
-- Plain CSS design system
-- Vercel-ready static frontend
+- **Frontend and API:** Vercel (Vite frontend plus serverless Node API routes).
+- **Database:** Neon PostgreSQL. Database access is server-side only through `DATABASE_URL`.
+- **File storage:** Cloudflare R2 using short-lived, user-scoped presigned uploads.
+- **Authentication:** Firebase Authentication (email/password and Google).
+- **Email:** Gmail SMTP for future application notifications and custom verification workflows.
+- **Payments:** Stripe; checkout, subscriptions and webhook processing are not yet implemented.
+
+PocketBase is not part of the current architecture. Do not configure or deploy it for this project.
 
 ## Local development
 
@@ -25,30 +29,48 @@ npm run build
 npm run preview
 ```
 
-## Deployment
+## Environment variables
 
-Import this repository into Vercel. Use:
-- Framework preset: Vite
-- Build command: `npm run build`
-- Output directory: `dist`
+Copy `.env.example` to `.env.local` for local development. In Vercel, configure the equivalent values for the relevant environments.
 
-Set `VITE_POCKETBASE_URL=https://data.musiccoach.cc.cd` in the Vercel project environment once the PocketBase server is provisioned.
+Public Firebase web configuration uses the `VITE_FIREBASE_*` variables. The Firebase API key is a public web-app identifier; protect the project with Firebase Authentication, authorized domains and API restrictions.
 
-## Product decisions reflected in this foundation
+The following are server-only secrets and must never use the `VITE_` prefix:
 
-- Main workspace: Dashboard, Practice, Sheet Music, Grade Plan and Pro-only Extras.
-- Profile is an account page, not a separate primary navigation area.
-- Free: one lifetime hour of eligible practice/demo time.
-- Basic: £9.99/month with browser-based on-device AI.
-- Pro: £19.99/month with Kilo AI-powered cloud processing and Extras.
-- Every user earns a daily streak after at least 15 minutes of practice.
-- Pro users can earn 10% off the next month after 30 consecutive practice days from renewal.
-- Sheet Music includes the converter and the student's own collection. There is no hosted Piano Coach e-book library.
-- Students upload their own exam-board e-book or follow an external retailer/affiliate purchase link.
-- Account deletion has a 15-day cancellation window.
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+- `DATABASE_URL`
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
 
-## Important implementation status
+Never commit real credentials or paste them into source files.
 
-This repository currently contains the first frontend foundation and interactive UI preview. The visible sample student, grade data, practice timer, library items, plan details and admin discount-code preview are demo data/local interactions. They are not yet connected to PocketBase, Stripe, Gmail SMTP, Web Push, Kilo AI, real model downloads, exam-board content, or production authentication. Those services must be implemented and tested before real users or payments are enabled.
+## Neon schema
 
-Do not add private API keys to frontend environment variables. Kilo AI credentials, Stripe secret keys, SMTP credentials and PocketBase admin credentials belong only in trusted server-side configuration.
+The initial schema is in `database/schema.sql`. Review and apply it to the intended Neon project before using the account and upload API routes. This file has not been run against the live database automatically.
+
+## API foundation
+
+- `GET /api/me`: verifies a Firebase ID token, requires a verified email, and creates/returns the matching Neon user profile.
+- `POST /api/uploads/sign`: verifies the user, validates file type/size and returns a five-minute R2 presigned upload URL. Uploads are scoped to the authenticated Firebase UID.
+
+The API never exposes Neon or R2 credentials to the browser.
+
+## Product scope and implementation status
+
+The current frontend is an early visual foundation, not a production-ready product. Existing sample student details, grade content, practice timer, library entries and some controls are illustrative. The Firebase sign-in gate and the first secure Neon/R2 API routes have now been added on the development branch.
+
+Still to implement and test before launch:
+
+- The full verify-first email flow with a six-digit code and five-minute expiry, plus reset codes/links, delivered through Gmail SMTP. The current Firebase email/password screen is an interim baseline and does not yet implement that custom flow.
+- Required onboarding and plan selection, including the one-hour lifetime demo.
+- Persistent grade plans, pieces, exercises, scales, section-level progress and practice history.
+- Real score conversion, library uploads/listing/downloads and Listen & Learn.
+- Assisted and Standard practice, microphone/MIDI analysis, mistake recordings and linked feedback.
+- Local Basic AI model download/cache/performance checks and Pro Kilo AI server proxy.
+- Stripe checkout, billing portal, signed webhooks and renewal discount rules.
+- Email and Web Push reminders, profile preferences, account deletion with a 15-day grace period, and admin authorization.
+- Security review, automated tests, accessibility and production deployment verification.
+
+Do not enable live billing or invite real students until the remaining integrations and security checks are complete.
