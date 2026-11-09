@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { auth } from "./lib/firebase.js";
 
 const nav = [
   { id: "home", label: "Dashboard", icon: "⌂" },
@@ -31,6 +32,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [streak, setStreak] = useState(12);
   const [practiceRunning, setPracticeRunning] = useState(false);
+  const [practiceSessionId, setPracticeSessionId] = useState(null);
   const [seconds, setSeconds] = useState(0);
   const [theme, setTheme] = useState("light");
   const [notation, setNotation] = useState("standard");
@@ -51,6 +53,31 @@ function App() {
   }, [theme]);
   const time = useMemo(() => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`, [seconds]);
   const go = id => { setPage(id); setShowProfile(false); setShowAdmin(false); };
+  const startPractice = async () => {
+    if (!practiceSessionId) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        const response = await fetch("/api/practice/start", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "standard" }) });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not start practice.");
+        setPracticeSessionId(body.session.id);
+      } catch (error) { toast(error.message || "Could not start practice."); return; }
+    }
+    setPracticeRunning(true);
+  };
+  const finishPractice = async () => {
+    setPracticeRunning(false);
+    if (practiceSessionId) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        const response = await fetch("/api/practice/finish", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ sessionId: practiceSessionId }) });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not save practice.");
+        setPracticeSessionId(null);
+        toast("Practice saved · " + Math.floor(body.session.duration_seconds / 60) + " minutes recorded.");
+      } catch (error) { toast(error.message || "Could not save practice."); }
+    } else toast("Start a session first to record your practice.");
+  };
   const toast = message => { setNotice(message); window.setTimeout(() => setNotice(""), 2800); };
 
   return <div className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
@@ -87,7 +114,7 @@ function App() {
         {showProfile ? <Profile theme={theme} setTheme={setTheme} notation={notation} setNotation={setNotation} reminders={reminders} setReminders={setReminders} toast={toast} profileTab={profileTab} setProfileTab={setProfileTab}/> :
         showAdmin ? <Admin toast={toast}/> :
         page === "home" ? <Dashboard go={go} streak={streak} setStreak={setStreak} toast={toast}/> :
-        page === "practice" ? <Practice running={practiceRunning} setRunning={setPracticeRunning} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
+        page === "practice" ? <Practice running={practiceRunning} setRunning={setPracticeRunning} onStart={startPractice} onFinish={finishPractice} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
         page === "sheets" ? <SheetMusic search={search} setSearch={setSearch} fileName={fileName} setFileName={setFileName} toast={toast}/> :
         page === "grade" ? <GradePlan toast={toast}/> :
         page === "extras" ? <Extras toast={toast}/> : null}
@@ -136,7 +163,7 @@ function Dashboard({ go, streak, setStreak, toast }) {
 }
 function Stat({ label, value, note, icon }) { return <div className="stat-card"><div className="stat-top"><span>{label}</span><i>{icon}</i></div><strong>{value}</strong><small>{note}</small></div>; }
 
-function Practice({ running, setRunning, time, seconds, selected, setSelected, toast }) {
+function Practice({ running, setRunning, onStart, onFinish, time, seconds, selected, setSelected, toast }) {
   const [hand, setHand] = useState("both");
   const [tempo, setTempo] = useState(72);
   const [finished, setFinished] = useState(false);
