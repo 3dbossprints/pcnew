@@ -9,7 +9,7 @@ Set these Vercel project variables for Preview, Production and Development:
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN=musiccoachuk.firebaseapp.com`
 - `VITE_FIREBASE_PROJECT_ID=musiccoachuk`
-- `VITE_FIREBASE_APP_ID=1:304299202384:web:1ad299bc3ec9f3bd9e4755`
+- `VITE_FIREBASE_APP_ID=1:304887202384:web:1ad299bc3ec9f3bd9e4755`
 - `VITE_FIREBASE_MESSAGING_SENDER_ID=304887202384`
 
 The Firebase web API key is public client configuration. Never put a Firebase Admin private key in a `VITE_*` variable.
