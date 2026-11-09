@@ -61,6 +61,7 @@ function App() {
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Could not start practice.");
         setPracticeSessionId(body.session.id);
+        setSeconds(0);
       } catch (error) { toast(error.message || "Could not start practice."); return; }
     }
     setPracticeRunning(true);
@@ -70,7 +71,7 @@ function App() {
     if (practiceSessionId) {
       try {
         const token = await auth.currentUser.getIdToken();
-        const response = await fetch("/api/practice/finish", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ sessionId: practiceSessionId }) });
+        const response = await fetch("/api/practice/finish", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ sessionId: practiceSessionId, durationSeconds: seconds }) });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Could not save practice.");
         setPracticeSessionId(null);
