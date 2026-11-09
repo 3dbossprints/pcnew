@@ -1,0 +1,30 @@
+import { requireUser } from "../_lib/auth.js";
+import { database } from "../_lib/db.js";
+import { requireMethod, sendJson } from "../_lib/http.js";
+
+export default async function handler(req, res) {
+  if (!requireMethod(req, res, "PATCH")) return;
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const { sessionId, score = null } = req.body || {};
+  if (typeof sessionId !== "string" || !/^[0-9a-f-]{36}$/i.test(sessionId)) {
+    return sendJson(res, 400, { error: "A valid practice session is required." });
+  }
+  if (score !== null && (!Number.isFinite(score) || score < 0 || score > 100)) {
+    return sendJson(res, 400, { error: "Score must be between 0 and 100." });
+  }
+  try {
+    const result = await database().query(
+      "UPDATE practice_sessions SET ended_at = NOW(), " +
+      "duration_seconds = LEAST(14400, GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)))))::integer, " +
+      "score = $3 WHERE id = $1 AND firebase_uid = $2 AND ended_at IS NULL " +
+      "RETURNING id, started_at, ended_at, duration_seconds, mode, score",
+      [sessionId, user.uid, score],
+    );
+    if (!result.rowCount) return sendJson(res, 404, { error: "This session is already finished or doesn't belong to your account." });
+    return sendJson(res, 200, { session: result.rows[0] });
+  } catch (error) {
+    console.error("PATCH /api/practice/finish failed:", error.message);
+    return sendJson(res, 503, { error: "Your practice session couldn't be saved." });
+  }
+}
