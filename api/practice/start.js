@@ -14,6 +14,14 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { error: "Invalid practice task." });
   }
   try {
+    const account = await database().query(
+      "SELECT plan, demo_seconds_used FROM users WHERE firebase_uid = $1",
+      [user.uid],
+    );
+    if (!account.rowCount) return sendJson(res, 404, { error: "Complete your account setup first." });
+    if (account.rows[0].plan === "free" && account.rows[0].demo_seconds_used >= 3600) {
+      return sendJson(res, 403, { error: "Your free 60-minute demo has been used. Subscribe to continue practising." });
+    }
     const id = randomUUID();
     const result = await database().query(
       "INSERT INTO practice_sessions (id, firebase_uid, task_id, started_at, mode) " +
