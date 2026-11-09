@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     const key = "users/" + user.uid + "/" + randomUUID();
     const command = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType,
-      ContentLength: size, Metadata: { owner: user.uid },
+      ContentLength: size,
     });
     const uploadUrl = await getSignedUrl(storage(), command, { expiresIn: 300 });
     const result = await database().query(
