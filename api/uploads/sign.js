@@ -5,7 +5,14 @@ import { requireUser } from "../_lib/auth.js";
 import { database } from "../_lib/db.js";
 import { requireMethod, sendJson } from "../_lib/http.js";
 
-const allowed = new Set(["application/pdf", "image/png", "image/jpeg", "application/vnd.recordare.musicxml+xml", "application/xml", "audio/mpeg", "audio/mp4", "audio/webm"]);
+const allowed = new Set(["application/pdf", "image/png", "image/jpeg", "application/vnd.recordare.musicxml+xml", "application/xml", "application/octet-stream", "audio/mpeg", "audio/mp4", "audio/webm", "audio/midi", "audio/x-midi", "audio/wav", "audio/x-wav"]);
+const extensions = new Set([".pdf", ".png", ".jpg", ".jpeg", ".xml", ".musicxml", ".mid", ".midi", ".mp3", ".m4a", ".mp4", ".webm", ".wav"]);
+function kindFor(name) {
+  const ext = name.toLowerCase().slice(name.lastIndexOf("."));
+  if ([".mp3", ".m4a", ".mp4", ".webm", ".wav"].includes(ext)) return "audio";
+  if ([".png", ".jpg", ".jpeg"].includes(ext)) return "image";
+  return "sheet";
+}
 const maxBytes = 25 * 1024 * 1024;
 function storage() {
   const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME } = process.env;
@@ -22,8 +29,9 @@ export default async function handler(req, res) {
   if (!user) return;
   if (!user.emailVerified) return sendJson(res, 403, { error: "Verify your email address before uploading." });
   const { filename, contentType, size } = req.body || {};
+  const extension = typeof filename === "string" ? filename.toLowerCase().slice(filename.lastIndexOf(".")) : "";
   if (typeof filename !== "string" || !filename.trim() || filename.length > 180 ||
-      !allowed.has(contentType) || !Number.isInteger(size) || size < 1 || size > maxBytes) {
+      !extensions.has(extension) || !allowed.has(contentType) || !Number.isInteger(size) || size < 1 || size > maxBytes) {
     return sendJson(res, 400, { error: "Unsupported file or file size. Maximum upload size is 25 MB." });
   }
   try {
@@ -34,9 +42,9 @@ export default async function handler(req, res) {
     });
     const uploadUrl = await getSignedUrl(storage(), command, { expiresIn: 300 });
     const result = await database().query(
-      "INSERT INTO user_files (firebase_uid, object_key, original_name, content_type, size_bytes, status) " +
-      "VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id",
-      [user.uid, key, filename.trim(), contentType, size],
+      "INSERT INTO user_files (firebase_uid, object_key, original_name, content_type, size_bytes, kind, status) " +
+      "VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id",
+      [user.uid, key, filename.trim(), contentType, size, kindFor(filename)],
     );
     return sendJson(res, 200, { fileId: result.rows[0].id, uploadUrl, objectKey: key, expiresIn: 300 });
   } catch (error) {
