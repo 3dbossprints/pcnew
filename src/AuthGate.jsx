@@ -16,6 +16,9 @@ export default function AuthGate({ children }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [resetRequested, setResetRequested] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -76,6 +79,23 @@ export default function AuthGate({ children }) {
     event.preventDefault();
     setBusy(true); setMessage("");
     try {
+      if (mode === "forgot") {
+        if (!resetRequested) {
+          const response = await fetch("/api/auth/password-reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || "We could not process that request.");
+          setResetRequested(true);
+          setMessage(body.message || "If an account exists for that email, a reset link and code will be sent shortly.");
+        } else {
+          if (!passwordIsValid(newPassword)) throw new Error("Use at least 8 characters, including uppercase, lowercase and a number.");
+          const response = await fetch("/api/auth/password-reset-confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim(), code: resetCode, password: newPassword }) });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || "We could not reset your password.");
+          setMode("signin"); setResetRequested(false); setResetCode(""); setNewPassword(""); setPassword("");
+          setMessage(body.message || "Your password has been updated. Sign in with your new password.");
+        }
+        return;
+      }
       if (mode === "signup") {
         if (!passwordIsValid(password)) throw new Error("Use at least 8 characters, including an uppercase letter, a lowercase letter and a number.");
         const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
@@ -101,17 +121,16 @@ export default function AuthGate({ children }) {
 
   return <main className="auth-screen"><section className="auth-card">
     <div className="auth-mark">𝄞</div><p className="eyebrow">YOUR MUSICAL JOURNEY</p>
-    <h1>{mode === "signup" ? "A lovely place to begin." : "Welcome back."}</h1>
-    <p>{mode === "signup" ? "Create your account and start making music." : "Sign in to continue your progress."}</p>
+    <h1>{mode === "signup" ? "A lovely place to begin." : mode === "forgot" ? "Reset your password." : "Welcome back."}</h1>
+    <p>{mode === "signup" ? "Create your account and start making music." : mode === "forgot" ? resetRequested ? "Enter the six-digit code from your email and choose a new password." : "We will email you a secure reset link and a six-digit code." : "Sign in to continue your progress."}</p>
     <form onSubmit={submit} className="auth-form">
-      <label className="field"><span>Email address</span><input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required /></label>
-      <label className="field"><span>Password</span><input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={e=>setPassword(e.target.value)} required /></label>
-      {mode === "signup" && <small className="auth-help">At least 8 characters, with uppercase, lowercase and a number.</small>}
+      <label className="field"><span>Email address</span><input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required disabled={mode === "forgot" && resetRequested}/></label>
+      {mode === "forgot" && resetRequested ? <><label className="field"><span>Six-digit reset code</span><input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={resetCode} onChange={e=>setResetCode(e.target.value.replace(/[^0-9]/g,"").slice(0,6))} required/></label><label className="field"><span>New password</span><input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} required/></label><small className="auth-help">At least 8 characters, with uppercase, lowercase and a number.</small></> : mode !== "forgot" ? <><label className="field"><span>Password</span><input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={e=>setPassword(e.target.value)} required/></label>{mode === "signup" && <small className="auth-help">At least 8 characters, with uppercase, lowercase and a number.</small>}</> : null}
       {message && <p className="auth-message" role="alert">{message}</p>}
-      <button className="button primary auth-wide" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"}</button>
+      <button className="button primary auth-wide" disabled={busy || (mode === "forgot" && resetRequested && (resetCode.length !== 6 || !newPassword))}>{busy ? "Please wait…" : mode === "signup" ? "Create account" : mode === "forgot" ? resetRequested ? "Set new password" : "Send reset email" : "Sign in"}</button>
     </form>
-    <div className="auth-separator"><span>or</span></div>
-    <button className="button outline auth-wide" disabled={busy} onClick={async()=>{setBusy(true);setMessage("");try{await signInWithPopup(auth,googleProvider);}catch(error){setMessage(error.message);}finally{setBusy(false);}}}>Continue with Google</button>
-    <p className="auth-switch">{mode === "signup" ? "Already have an account?" : "New to Piano Coach?"} <button className="auth-text-button" onClick={()=>{setMode(mode==="signup"?"signin":"signup");setMessage("");}}> {mode === "signup" ? "Sign in" : "Create an account"}</button></p>
+    {mode === "signin" && <button className="auth-text-button" onClick={()=>{setMode("forgot");setResetRequested(false);setMessage("");}}>Forgot password?</button>}
+    {mode !== "forgot" && <><div className="auth-separator"><span>or</span></div><button className="button outline auth-wide" disabled={busy} onClick={async()=>{setBusy(true);setMessage("");try{await signInWithPopup(auth,googleProvider);}catch(error){setMessage(error.message);}finally{setBusy(false);}}}>Continue with Google</button></>}
+    <p className="auth-switch">{mode === "signup" ? "Already have an account?" : mode === "forgot" ? "Remembered your password?" : "New to Piano Coach?"} <button className="auth-text-button" onClick={()=>{setMode(mode==="signup"?"signin":"signin");setResetRequested(false);setMessage("");}}> {mode === "signup" ? "Sign in" : "Back to sign in"}</button>{mode === "signin" && <> · <button className="auth-text-button" onClick={()=>{setMode("signup");setMessage("");}}>Create an account</button></>}</p>
   </section></main>;
 }
