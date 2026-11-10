@@ -4,6 +4,7 @@ import { database } from "./db.js";
 import { sendEmail } from "./email.js";
 import { requireMethod, sendJson } from "./http.js";
 const digest = value => createHash("sha256").update(value).digest("hex");
+const appBaseUrl = () => (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\\/+$/, "");
 const generic = { message: "If an account exists for that email, a reset link and code will be sent shortly." };
 export default async function handler(req, res) {
   if (!requireMethod(req, res, "POST")) return;
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
     }
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
     const linkToken = randomBytes(32).toString("base64url");
-    const link = (process.env.PUBLIC_APP_URL || "https://pianocoach.cc.cd") + "/?resetToken=" + encodeURIComponent(linkToken);
+    const link = appBaseUrl() + "/?resetToken=" + encodeURIComponent(linkToken);
     await db.query(
       "INSERT INTO password_reset_codes(firebase_uid,email,code_hash,link_token_hash,expires_at,requested_at,attempts,hour_requests,hour_window_started_at,created_at) VALUES($1,$2,$3,$4,NOW()+INTERVAL '5 minutes',NOW(),0,1,NOW(),NOW()) " +
       "ON CONFLICT(firebase_uid) DO UPDATE SET email=EXCLUDED.email,code_hash=EXCLUDED.code_hash,link_token_hash=EXCLUDED.link_token_hash,expires_at=EXCLUDED.expires_at,requested_at=NOW(),attempts=0,hour_requests=CASE WHEN password_reset_codes.hour_window_started_at < NOW()-INTERVAL '1 hour' THEN 1 ELSE password_reset_codes.hour_requests+1 END,hour_window_started_at=CASE WHEN password_reset_codes.hour_window_started_at < NOW()-INTERVAL '1 hour' THEN NOW() ELSE password_reset_codes.hour_window_started_at END,created_at=NOW()",
