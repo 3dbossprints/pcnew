@@ -9,3 +9,6 @@ CREATE TABLE IF NOT EXISTS email_verification_codes (
 );
 CREATE INDEX IF NOT EXISTS email_verification_codes_expiry_idx
   ON email_verification_codes (expires_at);
+
+ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS hour_requests INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS hour_window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
