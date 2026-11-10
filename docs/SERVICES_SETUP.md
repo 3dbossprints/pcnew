@@ -156,7 +156,7 @@ Subscribe it to:
 - `invoice.paid`
 - `invoice.payment_failed`
 
-The webhook uses the raw request body for signature verification and stores processed event IDs in `stripe_webhook_events` for idempotency. Neon migration: `006_stripe_subscriptions.sql`. Pending onboarding fields are in `007_pending_checkout.sql`.
+The webhook uses the raw request body for signature verification and stores processed event IDs in `stripe_webhook_events` for idempotency. Neon migrations: `006_stripe_subscriptions.sql` (subscription state and webhook idempotency), `007_pending_checkout.sql` (pending plan/interval), and `008_subscription_interval.sql` (active billing interval for the account page).
 
 The Customer Portal must be activated/configured in Stripe Dashboard (test mode for testing) to permit subscription cancellation and payment-method updates. The intended cancellation behavior is cancel at period end; verify that option in the Portal configuration.
 
