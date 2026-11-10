@@ -1,12 +1,14 @@
 import { sendJson } from "../_lib/http.js";
 import requestEmailCode from "../_lib/email-code.js";
 import verifyEmailCode from "../_lib/verify-email-code.js";
+import verifyEmailLink from "../_lib/verify-email-link.js";
 import requestPasswordReset from "../_lib/password-reset.js";
 import confirmPasswordReset from "../_lib/password-reset-confirm.js";
 
 const actions = {
   "email-code": requestEmailCode,
   "verify-email-code": verifyEmailCode,
+  "verify-email-link": verifyEmailLink,
   "password-reset": requestPasswordReset,
   "password-reset-confirm": confirmPasswordReset,
 };
