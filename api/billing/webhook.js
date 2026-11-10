@@ -29,9 +29,10 @@ async function persistSubscription(subscription, customerId) {
   const proPrices=[process.env.STRIPE_PRICE_PRO_MONTHLY,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean);
   const selectedPlan=subscription.metadata?.plan || (proPrices.includes(priceId) ? "pro" : "basic");
   const plan=["active","trialing","past_due"].includes(subscription.status) ? selectedPlan : "free";
+  const interval=subscription.metadata?.interval || ([process.env.STRIPE_PRICE_BASIC_ANNUAL,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean).includes(priceId) ? "annual" : "monthly");
   await database().query(
-    "UPDATE users SET stripe_customer_id=COALESCE($2,stripe_customer_id),stripe_subscription_id=$3,stripe_price_id=$4,plan=$5,subscription_status=$6,subscription_current_period_end=$7,cancel_at_period_end=$8,onboarding_completed=CASE WHEN $6 IN ('active','trialing','past_due') THEN TRUE ELSE onboarding_completed END,pending_plan=CASE WHEN $6 IN ('active','trialing','past_due') THEN NULL ELSE pending_plan END,pending_interval=CASE WHEN $6 IN ('active','trialing','past_due') THEN NULL ELSE pending_interval END,updated_at=NOW() WHERE firebase_uid=$1",
-    [targetUid,customer,subscription.id,priceId,plan,subscription.status,periodEnd?new Date(periodEnd*1000):null,Boolean(subscription.cancel_at_period_end)],
+    "UPDATE users SET stripe_customer_id=COALESCE($2,stripe_customer_id),stripe_subscription_id=$3,stripe_price_id=$4,plan=$5,subscription_status=$6,subscription_current_period_end=$7,cancel_at_period_end=$8,subscription_interval=$9,onboarding_completed=CASE WHEN $6 IN ('active','trialing','past_due') THEN TRUE ELSE onboarding_completed END,pending_plan=CASE WHEN $6 IN ('active','trialing','past_due') THEN NULL ELSE pending_plan END,pending_interval=CASE WHEN $6 IN ('active','trialing','past_due') THEN NULL ELSE pending_interval END,updated_at=NOW() WHERE firebase_uid=$1",
+    [targetUid,customer,subscription.id,priceId,plan,subscription.status,periodEnd?new Date(periodEnd*1000):null,Boolean(subscription.cancel_at_period_end),interval],
   );
 }
 export default async function handler(req,res) {
