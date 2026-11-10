@@ -18,7 +18,10 @@
     "react-dom": "^18.3.1",
     "nodemailer": "^7.0.5",
     "stripe": "^18.4.0",
-    "@stripe/stripe-js": "^7.9.0"
+    "@stripe/stripe-js": "^7.9.0",
+    "pdfjs-dist": "^4.10.38",
+    "epubjs": "^0.3.93",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
