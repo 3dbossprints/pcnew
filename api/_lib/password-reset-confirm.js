@@ -30,13 +30,17 @@ export default async function handler(req, res) {
     if (!token) {
       const expected=Buffer.from(row.code_hash,"hex"), supplied=Buffer.from(digest(code),"hex");
       if (expected.length!==supplied.length || !timingSafeEqual(expected,supplied)) {
-        await db.query("UPDATE password_reset_codes SET attempts=attempts+1 WHERE firebase_uid=$1",[row.firebase_uid]);
+        const attempt=await db.query("UPDATE password_reset_codes SET attempts=attempts+1 WHERE firebase_uid=$1 AND attempts<5 RETURNING attempts",[row.firebase_uid]);
+        if (!attempt.rowCount) return sendJson(res,429,{error:"Too many incorrect attempts. Request a new reset email."});
         return sendJson(res,400,{error:"That code doesn't match. Check it and try again."});
       }
     }
+    const claimed = token
+      ? await db.query("DELETE FROM password_reset_codes WHERE firebase_uid=$1 AND link_token_hash=$2 AND expires_at>NOW() RETURNING firebase_uid",[row.firebase_uid,digest(token)])
+      : await db.query("DELETE FROM password_reset_codes WHERE firebase_uid=$1 AND code_hash=$2 AND expires_at>NOW() RETURNING firebase_uid",[row.firebase_uid,digest(code)]);
+    if (!claimed.rowCount) return sendJson(res,400,{error:"That reset link or code has already been used. Request a new reset email."});
     await adminAuth().updateUser(row.firebase_uid,{password});
     await adminAuth().revokeRefreshTokens(row.firebase_uid);
-    await db.query("DELETE FROM password_reset_codes WHERE firebase_uid=$1",[row.firebase_uid]);
     return sendJson(res,200,{reset:true,message:"Your password has been updated. Sign in with your new password."});
   } catch(error) {
     console.error("POST /api/auth/password-reset-confirm failed:",error.message);
