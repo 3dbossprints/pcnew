@@ -5,8 +5,6 @@ const DocumentViewer = lazy(() => import("./DocumentViewer.jsx"));
 const nav = [
   { id: "home", label: "Dashboard", icon: "⌂" },
   { id: "practice", label: "Practice", icon: "♫" },
-  { id: "sheets", label: "Sheet Music", icon: "▤" },
-  { id: "grade", label: "Grade Plan", icon: "▥" },
 ];
 const pieces = [
   { title: "Clair de Lune", composer: "Claude Debussy", detail: "Performance piece · Grade 5", progress: 72, time: "12 min ago", tag: "Needs attention" },
@@ -127,7 +125,7 @@ export default function App() {
 
     <main className="main-area">
       <header className="topbar">
-        <div className="breadcrumbs"><span>Workspace</span><b>/</b><strong>{showProfile ? "Profile" : showAdmin ? "Admin" : nav.find(n => n.id === page)?.label}</strong></div>
+        <div className="breadcrumbs"><span>Workspace</span><b>/</b><strong>{showProfile ? "Profile" : showAdmin ? "Admin" : nav.find(n => n.id === page)?.label || (page === "grade" ? "Grade Plan" : page === "sheets" ? "Sheet Music" : "")}</strong></div>
         <div className="top-actions"><button className="icon-button" onClick={() => toast("You're all caught up.")} aria-label="Notifications">♧<i /></button><div className="top-divider" /><button className="top-user" onClick={() => setShowProfile(true)}><div className="avatar small-avatar">{studentInitials}</div><span>{studentName}</span><span className="chevron">⌄</span></button></div>
       </header>
       <div className="page-content">
