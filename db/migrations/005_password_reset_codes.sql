@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS password_reset_codes (
   firebase_uid TEXT PRIMARY KEY,
   email TEXT NOT NULL,
   code_hash TEXT NOT NULL,
+  link_token_hash TEXT,
   expires_at TIMESTAMPTZ NOT NULL,
   requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   attempts INTEGER NOT NULL DEFAULT 0,
