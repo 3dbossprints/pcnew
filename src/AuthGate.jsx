@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification,
+  createUserWithEmailAndPassword, onAuthStateChanged,
   signInWithEmailAndPassword, signInWithPopup, signOut,
 } from "firebase/auth";
 import { auth, googleProvider, firebaseConfigured } from "./lib/firebase.js";
@@ -13,6 +13,7 @@ export default function AuthGate({ children }) {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken") || "");
+  const [verifyToken, setVerifyToken] = useState(() => new URLSearchParams(window.location.search).get("verifyToken") || "");
   const [mode, setMode] = useState(() => new URLSearchParams(window.location.search).has("resetToken") ? "forgot" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,12 +44,40 @@ export default function AuthGate({ children }) {
     });
   }, []);
 
+  useEffect(() => {
+    if (checking || !verifyToken) return;
+    let active = true;
+    async function verifyLink() {
+      try {
+        const response = await fetch("/api/auth/verify-email-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: verifyToken }),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "This verification link could not be used.");
+        if (auth.currentUser) {
+          await auth.currentUser.reload();
+          await auth.currentUser.getIdToken(true);
+          if (active) setUser(auth.currentUser);
+        }
+        if (active) setMessage("Your email is verified. You can now continue to Piano Coach.");
+        window.history.replaceState({}, "", window.location.pathname);
+        if (active) setVerifyToken("");
+      } catch (error) {
+        if (active) setMessage(error.message || "This verification link could not be used.");
+      }
+    }
+    verifyLink();
+    return () => { active = false; };
+  }, [checking, verifyToken]);
+
   if (!firebaseConfigured) return <main className="auth-screen"><section className="auth-card"><div className="auth-mark">𝄞</div><p className="eyebrow">PIANO COACH SETUP</p><h1>One last connection.</h1><p>Firebase sign-in is ready in the project, but its public web configuration still needs to be added to the Vercel environment.</p><p className="auth-help">No passwords or secret keys belong in the website code. Add the VITE_FIREBASE settings in Vercel to enable sign-in.</p></section></main>;
   if (checking) return <main className="auth-screen"><section className="auth-card"><div className="auth-mark">𝄞</div><p>Preparing your musical space…</p></section></main>;
 
   if (user && !user.emailVerified) return <main className="auth-screen"><section className="auth-card">
     <div className="auth-mark">𝄞</div><p className="eyebrow">CHECK YOUR INBOX</p><h1>Verify your email.</h1>
-    <p>We sent a verification link to <strong>{user.email}</strong>. You can also enter the six-digit code sent to your inbox.</p>
+    <p>We sent a verification link and a six-digit code to <strong>{user.email}</strong>. Both expire after five minutes.</p>
     {message && <p className="auth-message" role="alert">{message}</p>}
     <form className="auth-form" onSubmit={async event => {
       event.preventDefault(); setBusy(true); setMessage("");
@@ -65,7 +94,7 @@ export default function AuthGate({ children }) {
     <button className="button outline auth-wide" onClick={async () => {
       setBusy(true); setMessage("");
       try {
-        const current = auth.currentUser; await sendEmailVerification(current); const token = await current.getIdToken();
+        const current = auth.currentUser; const token = await current.getIdToken();
         const response = await fetch("/api/auth/email-code", { method: "POST", headers: { Authorization: "Bearer " + token } });
         const body = await response.json(); if (!response.ok) throw new Error(body.error || "We couldn\u0027t send a code.");
         setMessage("A fresh verification link and code have been sent.");
@@ -102,11 +131,10 @@ export default function AuthGate({ children }) {
       if (mode === "signup") {
         if (!passwordIsValid(password)) throw new Error("Use at least 8 characters, including an uppercase letter, a lowercase letter and a number.");
         const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await sendEmailVerification(credential.user);
         const token = await credential.user.getIdToken();
         const codeResponse = await fetch("/api/auth/email-code", { method: "POST", headers: { Authorization: "Bearer " + token } });
         const codeBody = await codeResponse.json();
-        if (!codeResponse.ok) setMessage(codeBody.error || "The verification link was sent, but the code could not be sent. Use Resend link and code.");
+        if (!codeResponse.ok) setMessage(codeBody.error || "We could not send the verification link and code. Use Resend link and code.");
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
