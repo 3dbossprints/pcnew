@@ -66,6 +66,50 @@ async function checkout(req,res) {
     return sendJson(res,503,{error:error.message==="The selected subscription price is not configured."?error.message:"We couldn't start secure checkout. Please try again."});
   }
 }
+
+async function confirm(req,res) {
+  const user=await requireUser(req,res);
+  if (!user) return;
+  if (!user.emailVerified) return sendJson(res,403,{error:"Verify your email before confirming payment."});
+  const sessionId=String(req.body?.sessionId || "");
+  if (!/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId)) return sendJson(res,400,{error:"A valid Checkout Session is required."});
+  try {
+    const stripeApi=stripe();
+    const session=await stripeApi.checkout.sessions.retrieve(sessionId,{expand:["subscription"]});
+    if (session.mode!=="subscription" || session.status!=="complete" ||
+        (session.payment_status!=="paid" && session.payment_status!=="no_payment_required")) {
+      return sendJson(res,202,{pending:true,message:"Stripe is still confirming your payment."});
+    }
+    const sessionUid=session.client_reference_id || session.metadata?.firebase_uid;
+    if (sessionUid!==user.uid) return sendJson(res,403,{error:"This checkout session does not belong to your account."});
+    const subscription=typeof session.subscription==="string"
+      ? await stripeApi.subscriptions.retrieve(session.subscription)
+      : session.subscription;
+    if (!subscription || subscription.metadata?.firebase_uid!==user.uid) {
+      return sendJson(res,403,{error:"The subscription could not be matched securely to your account."});
+    }
+    if (!["active","trialing","past_due"].includes(subscription.status)) {
+      return sendJson(res,202,{pending:true,message:"Your subscription is still being activated by Stripe."});
+    }
+    const item=subscription.items?.data?.[0];
+    const priceId=item?.price?.id || null;
+    const periodEnd=subscription.current_period_end || item?.current_period_end || null;
+    const proPrices=[process.env.STRIPE_PRICE_PRO_MONTHLY,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean);
+    const selectedPlan=subscription.metadata?.plan || (proPrices.includes(priceId) ? "pro" : "basic");
+    const interval=subscription.metadata?.interval || ([process.env.STRIPE_PRICE_BASIC_ANNUAL,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean).includes(priceId) ? "annual" : "monthly");
+    const customerId=typeof session.customer==="string"?session.customer:session.customer?.id || null;
+    const result=await database().query(
+      "UPDATE users SET stripe_customer_id=COALESCE($2,stripe_customer_id),stripe_subscription_id=$3,stripe_price_id=$4,plan=$5,subscription_status=$6,subscription_current_period_end=$7,cancel_at_period_end=$8,subscription_interval=$9,onboarding_completed=TRUE,pending_plan=NULL,pending_interval=NULL,updated_at=NOW() WHERE firebase_uid=$1 RETURNING firebase_uid,onboarding_completed,plan,subscription_status",
+      [user.uid,customerId,subscription.id,priceId,selectedPlan,subscription.status,periodEnd?new Date(periodEnd*1000):null,Boolean(subscription.cancel_at_period_end),interval],
+    );
+    if (!result.rowCount) return sendJson(res,404,{error:"Your Piano Coach profile could not be found."});
+    return sendJson(res,200,{confirmed:true,user:result.rows[0]});
+  } catch(error) {
+    console.error("POST /api/billing/confirm failed:",error.message);
+    return sendJson(res,503,{error:"We couldn't confirm your payment yet. Please try again shortly."});
+  }
+}
+
 async function portal(req,res) {
   const user=await requireUser(req,res);
   if (!user) return;
@@ -85,5 +129,6 @@ export default async function handler(req,res) {
   const action=req.query?.action;
   if (action==="checkout") { if (!requireMethod(req,res,"POST")) return; return checkout(req,res); }
   if (action==="portal") { if (!requireMethod(req,res,"POST")) return; return portal(req,res); }
+  if (action==="confirm") { if (!requireMethod(req,res,"POST")) return; return confirm(req,res); }
   return sendJson(res,404,{error:"Billing action not found."});
 }
