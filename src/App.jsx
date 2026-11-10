@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { auth } from "./lib/firebase.js";
-import DocumentViewer from "./DocumentViewer.jsx";
+const DocumentViewer = lazy(() => import("./DocumentViewer.jsx"));
 
 const nav = [
   { id: "home", label: "Dashboard", icon: "⌂" },
@@ -286,7 +286,7 @@ function SheetMusic({ reference, setReference, search, setSearch, fileName, setF
   const sizeFor = bytes => bytes < 1024 * 1024 ? Math.max(1, Math.round(bytes / 1024)) + " KB" : (bytes / (1024 * 1024)).toFixed(1) + " MB";
 
   return <>
-    {selectedDocument && <DocumentViewer file={selectedDocument} url={documentUrl} getToken={token} onClose={()=>{setSelectedDocument(null);setDocumentUrl("");}} onUseForPractice={(file,audio)=>{setReference({file,audioAvailable:!!audio});setSelectedDocument(null);setDocumentUrl("");toast("Book and available audio selected for practice.");}}/>}
+    {selectedDocument && <Suspense fallback={<div className="document-loading">Loading document reader…</div>}><DocumentViewer file={selectedDocument} url={documentUrl} getToken={token} onClose={()=>{setSelectedDocument(null);setDocumentUrl("");}} onUseForPractice={(file,audio)=>{setReference({file,audioAvailable:!!audio});setSelectedDocument(null);setDocumentUrl("");toast("Book and available audio selected for practice.");}}/></Suspense>}
     <PageHeading eyebrow="YOUR MUSIC LIBRARY" title="Sheet Music" subtitle="Your scores and recordings, securely stored in your own library." action={<Button onClick={()=>document.getElementById("sheet-upload").click()} disabled={uploading}>{uploading?"Uploading…":"＋ Import sheet music"}</Button>}/>
     <div className="panel sheet-converter">
       <div className="converter-copy"><div className="eyebrow">SHEET MUSIC CONVERTER</div><h2>Your music, ready to play.</h2><p>Upload a score or recording. Your files are saved privately to your Cloudflare library.</p><div className="format-list"><span>PDF</span><span>EPUB</span><span>PNG / JPG</span><span>MusicXML</span><span>MIDI</span><span>MP3 / WAV</span></div></div>
