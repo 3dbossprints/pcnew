@@ -29,9 +29,10 @@ async function checkout(req,res) {
   }
   try {
     const db=database();
-    const existing=await db.query("SELECT stripe_customer_id,stripe_subscription_id,subscription_status FROM users WHERE firebase_uid=$1",[user.uid]);
+    const existing=await db.query("SELECT stripe_customer_id,stripe_subscription_id,subscription_status,pending_plan,pending_interval FROM users WHERE firebase_uid=$1",[user.uid]);
     if (!existing.rowCount) return sendJson(res,404,{error:"Your Piano Coach profile could not be found."});
     const current=existing.rows[0];
+    if (current.pending_plan !== plan || current.pending_interval !== interval) return sendJson(res,409,{error:"Save your plan choice again before opening checkout."});
     if (current.stripe_subscription_id && ["active","trialing","past_due","unpaid"].includes(current.subscription_status)) {
       return sendJson(res,409,{error:"You already have a subscription. Manage it from Account & billing."});
     }
@@ -57,7 +58,7 @@ async function checkout(req,res) {
       metadata:{firebase_uid:user.uid,plan,interval},
       subscription_data:{metadata:{firebase_uid:user.uid,plan,interval}},
       billing_address_collection:"auto",
-    });
+    },{idempotencyKey:"pianocoach-checkout-"+user.uid+"-"+plan+"-"+interval+"-"+Math.floor(Date.now()/60_000)});
     if (!session.client_secret) return sendJson(res,502,{error:"Stripe did not return an embedded checkout session."});
     return sendJson(res,200,{clientSecret:session.client_secret});
   } catch(error) {
