@@ -27,7 +27,8 @@ async function persistSubscription(subscription, customerId) {
   const priceId=item?.price?.id || null;
   const periodEnd=subscription.current_period_end || item?.current_period_end || null;
   const proPrices=[process.env.STRIPE_PRICE_PRO_MONTHLY,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean);
-  const plan=subscription.metadata?.plan || (proPrices.includes(priceId) ? "pro" : "basic");
+  const selectedPlan=subscription.metadata?.plan || (proPrices.includes(priceId) ? "pro" : "basic");
+  const plan=["active","trialing","past_due"].includes(subscription.status) ? selectedPlan : "free";
   await database().query(
     "UPDATE users SET stripe_customer_id=COALESCE($2,stripe_customer_id),stripe_subscription_id=$3,stripe_price_id=$4,plan=$5,subscription_status=$6,subscription_current_period_end=$7,cancel_at_period_end=$8,updated_at=NOW() WHERE firebase_uid=$1",
     [targetUid,customer,subscription.id,priceId,plan,subscription.status,periodEnd?new Date(periodEnd*1000):null,Boolean(subscription.cancel_at_period_end)],
