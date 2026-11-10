@@ -146,7 +146,7 @@ export default function OnboardingGate({ children }) {
       const completeResponse = await fetch("/api/uploads/complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ fileId: signed.fileId, purpose: "exam_book" }) });
       const completed = await completeResponse.json();
       if (!completeResponse.ok) throw new Error(completed.error || "The ebook upload could not be verified.");
-      setExamBookUploaded(true); setBookChoice("own"); setBookTitle(file.name.replace(/\\.(pdf|epub)$/i, ""));
+      setExamBookUploaded(true); setBookChoice("own"); setBookTitle(file.name.replace(/\.(pdf|epub)$/i, ""));
     } catch (uploadError) { setError(uploadError.message || "The ebook upload failed."); }
     finally { setBookUploadBusy(false); }
   }
