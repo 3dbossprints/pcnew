@@ -415,7 +415,7 @@ function PersonalPieces({ plan, onPractice, toast }) {
     setUploading(true); setError("");
     try {
       const bearer = await token();
-      const contentType = file.type || (ext === "pdf" ? "application/pdf" : ext === "epub" ? "application/epub+zip" : "application/xml");
+      const contentType = ext === "pdf" ? "application/pdf" : ext === "epub" ? "application/epub+zip" : "application/vnd.recordare.musicxml+xml";
       const signedResponse = await fetch("/api/uploads/sign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer }, body: JSON.stringify({ filename: file.name, contentType, size: file.size, purpose: "personal_piece" }) });
       const signed = await signedResponse.json();
       if (!signedResponse.ok) throw new Error(signed.error || "Upload could not be prepared.");
