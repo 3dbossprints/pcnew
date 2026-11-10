@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { unzipSync } from "fflate";
 import ePub from "epubjs";
 import "./DocumentViewer.css";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 function pdfFile(file) { return file.original_name.toLowerCase().endsWith(".pdf"); }
 function epubFile(file) { return file.original_name.toLowerCase().endsWith(".epub"); }
