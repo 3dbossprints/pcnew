@@ -94,3 +94,23 @@ Configure these Vercel environment variables for Production, Preview and Develop
 Port 587 uses STARTTLS, so set `GMAIL_PORT=587` and `GMAIL_SECURE=false`. The sending Google account must have permission to send as `noreply@musiccoach.cc.cd` (for example, a verified Gmail “Send mail as” alias or Google Workspace mailbox). Domain ownership alone does not authorise Gmail to send as that address.
 
 Server-side email code imports `sendEmail` from `api/_lib/email.js`. SMTP credentials must never be exposed in a `VITE_*` variable.
+
+
+## Email verification and password recovery
+
+The current auth API uses Firebase Authentication for identity, Neon for short-lived hashed codes/tokens, and Gmail SMTP for delivery.
+
+- `POST /api/auth/email-code` — authenticated request for a six-digit email verification code.
+- `POST /api/auth/verify-email-code` — authenticated code confirmation; verifies the Firebase user.
+- `POST /api/auth/password-reset` — sends a generic-response password reset email with both a six-digit code and a one-time app link.
+- `POST /api/auth/password-reset-confirm` — accepts the code or the one-time app link token and updates the Firebase password.
+
+Verification codes and reset links expire after five minutes. Codes are stored as SHA-256 hashes, allow at most five guesses, and requests are throttled per account (one per minute, five per rolling hour). Password-reset requests use the same generic response whether or not the email belongs to an account. Reset links are random one-time tokens stored only as hashes; they are not Firebase action links, so the five-minute expiry is enforced by the application.
+
+The reset link uses `PUBLIC_APP_URL` if configured, otherwise it defaults to `https://pianocoach.cc.cd`. Set `PUBLIC_APP_URL` if the canonical production domain changes.
+
+Neon migrations:
+- `004_email_verification_codes.sql`
+- `005_password_reset_codes.sql`
+
+These migrations have been applied to the `pianocoach.neondb` database. Do not put verification codes, reset tokens, or passwords in application logs.
