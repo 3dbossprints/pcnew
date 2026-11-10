@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_interval TEXT;

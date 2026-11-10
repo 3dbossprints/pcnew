@@ -94,3 +94,74 @@ Configure these Vercel environment variables for Production, Preview and Develop
 Port 587 uses STARTTLS, so set `GMAIL_PORT=587` and `GMAIL_SECURE=false`. The sending Google account must have permission to send as `noreply@musiccoach.cc.cd` (for example, a verified Gmail “Send mail as” alias or Google Workspace mailbox). Domain ownership alone does not authorise Gmail to send as that address.
 
 Server-side email code imports `sendEmail` from `api/_lib/email.js`. SMTP credentials must never be exposed in a `VITE_*` variable.
+
+
+## Email verification and password recovery
+
+The current auth API uses Firebase Authentication for identity, Neon for short-lived hashed codes/tokens, and Gmail SMTP for delivery.
+
+- `POST /api/auth/email-code` — authenticated request for a six-digit email verification code.
+- `POST /api/auth/verify-email-code` — authenticated code confirmation; verifies the Firebase user.
+- `POST /api/auth/verify-email-link` — one-time link confirmation; does not require an existing sign-in.
+- `POST /api/auth/password-reset` — sends a generic-response password reset email with both a six-digit code and a one-time app link.
+- `POST /api/auth/password-reset-confirm` — accepts the code or the one-time app link token and updates the Firebase password.
+
+Verification codes, verification links and reset links expire after five minutes. Resending verification replaces both the previous code and link. Codes are stored as SHA-256 hashes, allow at most five guesses, and requests are throttled per account (one per minute, five per rolling hour). Password-reset requests use the same generic response whether or not the email belongs to an account. Reset links are random one-time tokens stored only as hashes; they are not Firebase action links, so the five-minute expiry is enforced by the application.
+
+Verification and reset links use `PUBLIC_APP_URL` if configured. Otherwise production uses `https://pianocoach.cc.cd`, while Vercel Preview deployments use their own `VERCEL_URL`. Set `PUBLIC_APP_URL` if the canonical production domain changes.
+
+Neon migrations:
+- `004_email_verification_codes.sql`
+- `005_password_reset_codes.sql`
+
+These migrations have been applied to the `pianocoach.neondb` database. Do not put verification codes, reset tokens, or passwords in application logs.
+
+
+## Stripe subscriptions (test mode first)
+
+The subscription API uses Stripe Checkout Embedded, Stripe Billing Customer Portal, and signed webhooks. The app does not grant paid access from a browser success screen; the verified webhook updates the user's plan in Neon.
+
+Server-side environment variables:
+- `STRIPE_SECRET_KEY` — test secret key in Vercel Preview/Development while testing; live key only after an explicit production launch decision.
+- `STRIPE_WEBHOOK_SECRET` — signing secret for the matching test or live webhook endpoint.
+- `STRIPE_PRICE_BASIC_MONTHLY`
+- `STRIPE_PRICE_BASIC_ANNUAL`
+- `STRIPE_PRICE_PRO_MONTHLY`
+- `STRIPE_PRICE_PRO_ANNUAL`
+
+Client-side:
+- `VITE_STRIPE_PUBLISHABLE_KEY` — matching test publishable key for Preview/Development; live publishable key only in Production after approval.
+
+Create four recurring GBP prices in Stripe **test mode** before testing:
+- Basic monthly: £9.99, every month.
+- Basic annual: £109.89, every year.
+- Pro monthly: £19.99, every month.
+- Pro annual: £219.89, every year.
+
+Annual amounts are charged upfront and equal eleven monthly payments. Do not create or copy live-mode prices as part of test setup. Put the resulting four `price_...` IDs into the matching Vercel environment variables. Never expose the secret key or webhook signing secret in a `VITE_` variable.
+
+API:
+- `POST /api/billing/checkout` — authenticated embedded Checkout session for Basic or Pro, monthly or annual.
+- `POST /api/billing/portal` — authenticated Stripe Customer Portal session.
+- `POST /api/billing/webhook` — verifies Stripe's signature and processes subscription events.
+
+Configure the test-mode webhook endpoint to:
+`https://<your-preview-domain>/api/billing/webhook`
+
+Subscribe it to:
+- `checkout.session.completed`
+- `checkout.session.async_payment_succeeded`
+- `checkout.session.async_payment_failed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
+The webhook uses the raw request body for signature verification and stores processed event IDs in `stripe_webhook_events` for idempotency. Neon migrations: `006_stripe_subscriptions.sql` (subscription state and webhook idempotency), `007_pending_checkout.sql` (pending plan/interval), and `008_subscription_interval.sql` (active billing interval for the account page).
+
+The Customer Portal must be activated/configured in Stripe Dashboard (test mode for testing) to permit subscription cancellation and payment-method updates. The intended cancellation behavior is cancel at period end; verify that option in the Portal configuration.
+
+Tax collection is not enabled in the application at this stage. Stripe Tax/threshold monitoring must be configured only after confirming the merchant's VAT registration and tax obligations.
+
+Important: the Stripe account currently connected to this ChatGPT session is visible as live mode only. No live Stripe products, prices, sessions or charges have been created. The code is ready to use test credentials supplied through Vercel, but test-mode Stripe calls cannot be made from this connected account until a test-mode account/context is available.
