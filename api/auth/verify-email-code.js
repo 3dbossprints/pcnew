@@ -30,7 +30,6 @@ export default async function handler(req, res) {
     }
     if (row.email !== user.email) return sendJson(res, 409, { error: "Your account email has changed. Request a new code." });
     await adminAuth().updateUser(user.uid, { emailVerified: true });
-    await adminAuth().revokeRefreshTokens(user.uid);
     await db.query("DELETE FROM email_verification_codes WHERE firebase_uid = $1", [user.uid]);
     return sendJson(res, 200, { verified: true });
   } catch (error) {
