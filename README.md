@@ -80,7 +80,7 @@ Do not enable live billing or invite real students until the remaining integrati
 
 The student library supports in-app PDF and EPUB viewing. PDF pages are rendered with PDF.js; password-protected PDFs prompt for a password supplied by the student. EPUB archives are rendered as paginated books, and embedded MP3/M4A/WAV/OGG assets are surfaced as audio references when present in the EPUB archive.
 
-Score recognition is an asynchronous worker integration, not a Vercel function: OMR processing needs a dedicated CPU/memory worker for page layout analysis, notation recognition and audio-to-score alignment. The Vercel API creates owner-scoped jobs and sends a short-lived private R2 URL to the worker. The worker must POST results to `/api/score-analysis/callback` with the `x-omr-callback-secret` header.
+Score recognition is an asynchronous worker integration, not a Vercel function: OMR processing needs a dedicated CPU/memory worker for page layout analysis, notation recognition and audio-to-score alignment. The Vercel API creates owner-scoped jobs and sends a short-lived private R2 URL to the worker. The worker must POST results to `/api/uploads?callback=1` with the `x-omr-callback-secret` header.
 
 Required server-only Vercel environment variables once the worker is deployed:
 - `OMR_SERVICE_URL`: private or authenticated HTTPS base URL for the worker API.
@@ -88,6 +88,6 @@ Required server-only Vercel environment variables once the worker is deployed:
 - `OMR_CALLBACK_SECRET`: shared secret used by the worker callback.
 - `PUBLIC_APP_URL`: production app origin used to build the callback URL.
 
-The worker's `POST /jobs` contract receives `jobId`, `sourceUrl` (15-minute signed read URL), `originalName`, `contentType`, `documentType` and `callbackUrl`. It should return 2xx promptly and process asynchronously. Callback payloads use `{ jobId, status, result, error }`. For completed or reviewable results, `result.measures` must contain normalised page-relative rectangles: `[{ id, page, x, y, width, height, kind, label }]`, with x/y/width/height between 0 and 1. The worker should also return structured MusicXML/timing and audio-reference alignment data where available. Low-confidence recognition must use `needs_review`, not fabricate measure positions.
+The worker's `POST /api/uploads (analysis request)` contract receives `jobId`, `sourceUrl` (15-minute signed read URL), `originalName`, `contentType`, `documentType` and `callbackUrl`. It should return 2xx promptly and process asynchronously. Callback payloads use `{ jobId, status, result, error }`. For completed or reviewable results, `result.measures` must contain normalised page-relative rectangles: `[{ id, page, x, y, width, height, kind, label }]`, with x/y/width/height between 0 and 1. The worker should also return structured MusicXML/timing and audio-reference alignment data where available. Low-confidence recognition must use `needs_review`, not fabricate measure positions.
 
 Apply `db/migrations/009_score_analysis_jobs.sql` and `db/migrations/010_practice_score_reference.sql` to Neon before enabling analysis and practice references. The OMR worker is not included or deployed by this frontend/API change; without its environment variables the app explicitly reports that score analysis is not connected.
