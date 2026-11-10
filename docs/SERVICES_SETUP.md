@@ -108,7 +108,7 @@ The current auth API uses Firebase Authentication for identity, Neon for short-l
 
 Verification codes, verification links and reset links expire after five minutes. Resending verification replaces both the previous code and link. Codes are stored as SHA-256 hashes, allow at most five guesses, and requests are throttled per account (one per minute, five per rolling hour). Password-reset requests use the same generic response whether or not the email belongs to an account. Reset links are random one-time tokens stored only as hashes; they are not Firebase action links, so the five-minute expiry is enforced by the application.
 
-Verification and reset links use `PUBLIC_APP_URL` if configured, otherwise they default to `https://pianocoach.cc.cd`. Set `PUBLIC_APP_URL` if the canonical production domain changes.
+Verification and reset links use `PUBLIC_APP_URL` if configured. Otherwise production uses `https://pianocoach.cc.cd`, while Vercel Preview deployments use their own `VERCEL_URL`. Set `PUBLIC_APP_URL` if the canonical production domain changes.
 
 Neon migrations:
 - `004_email_verification_codes.sql`
