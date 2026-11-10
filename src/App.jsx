@@ -7,7 +7,6 @@ const nav = [
   { id: "practice", label: "Practice", icon: "♫" },
   { id: "sheets", label: "Sheet Music", icon: "▤" },
   { id: "grade", label: "Grade Plan", icon: "▥" },
-  { id: "extras", label: "Extras", icon: "✳", pro: true },
 ];
 const pieces = [
   { title: "Clair de Lune", composer: "Claude Debussy", detail: "Performance piece · Grade 5", progress: 72, time: "12 min ago", tag: "Needs attention" },
@@ -45,6 +44,7 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
   const [practiceReference, setPracticeReference] = useState(null);
+  const [practiceType, setPracticeType] = useState("graded");
 
   useEffect(() => {
     let active = true;
@@ -71,12 +71,12 @@ export default function App() {
   const studentName = studentProfile?.preferred_name || studentProfile?.display_name || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Piano student";
   const studentInitials = studentName.split(/\s+/).map(part => part[0]).join("").slice(0,2).toUpperCase();
   const time = useMemo(() => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`, [seconds]);
-  const go = id => { setPage(id); setShowProfile(false); setShowAdmin(false); };
+  const go = id => { if (id === "practice") setPracticeType("graded"); setPage(id); setShowProfile(false); setShowAdmin(false); };
   const startPractice = async () => {
     if (!practiceSessionId) {
       try {
         const token = await auth.currentUser.getIdToken();
-        const response = await fetch("/api/practice/start", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "standard", referenceFileId: practiceReference?.file?.id || null }) });
+        const response = await fetch("/api/practice/start", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "standard", referenceFileId: practiceReference?.file?.id || null, practiceType }) });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Could not start practice.");
         setPracticeSessionId(body.session.id);
@@ -136,8 +136,7 @@ export default function App() {
         page === "home" ? <Dashboard go={go} streak={streak} setStreak={setStreak} toast={toast} studentName={studentName} studentProfile={studentProfile}/> :
         page === "practice" ? <Practice reference={practiceReference} running={practiceRunning} setRunning={setPracticeRunning} onStart={startPractice} onFinish={finishPractice} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
         page === "sheets" ? <SheetMusic reference={practiceReference} setReference={setPracticeReference} search={search} setSearch={setSearch} fileName={fileName} setFileName={setFileName} toast={toast}/> :
-        page === "grade" ? <GradePlan toast={toast}/> :
-        page === "extras" ? <Extras toast={toast}/> : null}
+        page === "grade" ? <GradePlan toast={toast} plan={studentProfile?.plan || "free"} onPracticePersonal={file=>{setPracticeReference({file,audioAvailable:false});setPracticeType("personal");setPage("practice");setShowProfile(false);}}/> : null}
       </div>
     </main>
     {notice && <div className="toast"><span>✓</span>{notice}</div>}
@@ -305,7 +304,7 @@ function SheetMusic({ reference, setReference, search, setSearch, fileName, setF
       </div>)}</div> : <div className="empty-state"><span>♫</span><h3>{search?"No matching files":"Your library is ready"}</h3><p>{search?"Try a different search.":"Import your first score or recording to see it here."}</p><button className="text-link" onClick={()=>document.getElementById("sheet-upload").click()}>＋ Add sheet music</button></div>}
   </>;
 }
-function GradePlan({ toast }) {
+function GradePlan({ toast, plan = "free", onPracticePersonal }) {
   const [board,setBoard] = useState("ABRSM");
   const [grade,setGrade] = useState("Grade 5");
   const [expanded,setExpanded] = useState("pieces");
@@ -319,11 +318,66 @@ function GradePlan({ toast }) {
     <PageHeading eyebrow="YOUR EXAM JOURNEY" title="Grade Plan" subtitle="Everything you need for your next piano milestone." action={<Button kind="outline" onClick={()=>toast("Grade plan settings opened.")}>⚙ Plan settings</Button>}/>
     <div className="grade-overview"><div><div className="eyebrow">CURRENT GOAL</div><h2>{grade} <span>{board}</span></h2><p>Target completion · 30 June 2027</p><div className="grade-progress"><Progress value={64}/><strong>64%</strong></div></div><div className="grade-ring"><div><strong>64%</strong><small>COMPLETE</small></div></div></div>
     <div className="grade-toolbar"><div><span>EXAM BOARD</span><select value={board} onChange={e=>setBoard(e.target.value)}><option>ABRSM</option><option>Trinity</option></select></div><div><span>GRADE</span><select value={grade} onChange={e=>setGrade(e.target.value)}>{["Initial","Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6","Grade 7","Grade 8"].map(x=><option key={x}>{x}</option>)}</select></div><button className="text-link" onClick={()=>toast("Your target date can be changed in Profile.")}>Edit target date ↗</button></div>
-    <div className="grade-sections">{groups.map(g=><section className="panel grade-group" key={g.id}><button className="grade-group-head" onClick={()=>setExpanded(expanded===g.id?"":g.id)}><span className="group-symbol">{g.id==="pieces"?"♫":g.id==="scales"?"♬":g.id==="exercises"?"⌁":"▤"}</span><span><strong>{g.name}</strong><small>{g.count}</small></span><span className="group-chevron">{expanded===g.id?"−":"+"}</span></button>{expanded===g.id&&<div className="grade-items">{g.items.map((item,i)=><div className="grade-item" key={item[0]}><span className="grade-item-index">{String(i+1).padStart(2,"0")}</span><div><strong>{item[0]}</strong><small>{item[1]}</small></div><span className="grade-item-progress">{item[2]}</span><button onClick={()=>toast(`Opening ${item[0]} in Practice.`)}>Practise →</button></div>)}</div>}</section>)}</div>
+    <div className="grade-sections">{groups.map(g=><section className="panel grade-group" key={g.id}><button className="grade-group-head" onClick={()=>setExpanded(expanded===g.id?"":g.id)}><span className="group-symbol">{g.id==="pieces"?"♫":g.id==="scales"?"♬":g.id==="exercises"?"⌁":"▤"}</span><span><strong>{g.name}</strong><small>{g.count}</small></span><span className="group-chevron">{expanded===g.id?"−":"+"}</span></button>{expanded===g.id&&<div className="grade-items">{g.items.map((item,i)=><div className="grade-item" key={item[0]}><span className="grade-item-index">{String(i+1).padStart(2,"0")}</span><div><strong>{item[0]}</strong><small>{item[1]}</small></div><span className="grade-item-progress">{item[2]}</span><button onClick={()=>toast(`Opening ${item[0]} in Practice.`)}>Practise →</button></div>)}</div>}{expanded===g.id&&g.id==="pieces"&&<PersonalPieces plan={plan} onPractice={onPracticePersonal} toast={toast}/>}</section>)}</div>
   </>;
 }
+
+function PersonalPieces({ plan, onPractice, toast }) {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  async function token() {
+    if (!auth.currentUser) throw new Error("Please sign in again.");
+    return auth.currentUser.getIdToken();
+  }
+  async function load() {
+    if (plan !== "pro") return;
+    setLoading(true);
+    try {
+      const response = await fetch("/api/uploads", { headers: { Authorization: "Bearer " + await token() } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Your personal pieces couldn't be loaded.");
+      setFiles((body.files || []).filter(file => file.metadata?.purpose === "personal_piece"));
+    } catch (e) { setError(e.message || "Your personal pieces couldn't be loaded."); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, [plan]);
+  async function upload(file) {
+    if (!file) return;
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (!["pdf", "epub", "xml", "musicxml"].includes(ext)) { setError("Choose a PDF, EPUB or MusicXML score."); return; }
+    if (file.size > 25 * 1024 * 1024) { setError("Files must be 25 MB or smaller."); return; }
+    setUploading(true); setError("");
+    try {
+      const bearer = await token();
+      const contentType = file.type || (ext === "pdf" ? "application/pdf" : ext === "epub" ? "application/epub+zip" : "application/xml");
+      const signedResponse = await fetch("/api/uploads/sign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer }, body: JSON.stringify({ filename: file.name, contentType, size: file.size, purpose: "personal_piece" }) });
+      const signed = await signedResponse.json();
+      if (!signedResponse.ok) throw new Error(signed.error || "Upload could not be prepared.");
+      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+      if (!put.ok) throw new Error("Cloudflare R2 rejected the upload. Check bucket CORS settings and try again.");
+      const completedResponse = await fetch("/api/uploads/complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer }, body: JSON.stringify({ fileId: signed.fileId }) });
+      const completed = await completedResponse.json();
+      if (!completedResponse.ok) throw new Error(completed.error || "The uploaded score couldn't be verified.");
+      setFiles(current => [completed.file, ...current.filter(item => item.id !== completed.file.id)]);
+      toast("Your piece has been added to Pro Extras.");
+    } catch (e) { setError(e.message || "The score upload failed."); }
+    finally { setUploading(false); }
+  }
+  return <section className="personal-pieces">
+    <div className="personal-pieces-heading"><div><span className="pro-pill">PRO EXTRAS</span><h3>Your own pieces</h3><p>Upload music outside your exam syllabus and practise it separately from your graded repertoire.</p></div>
+      {plan === "pro" && <label className="button primary personal-upload">{uploading ? "Uploading…" : "+ Upload a piece"}<input type="file" accept=".pdf,.epub,.xml,.musicxml,application/pdf,application/epub+zip,application/xml" disabled={uploading} onChange={e=>{upload(e.target.files[0]);e.target.value="";}}/></label>}
+    </div>
+    {plan !== "pro" ? <p className="personal-locked">Personal-piece uploads are included with Piano Coach Pro. Your graded exam pieces remain separate.</p> : <>
+      {error && <p className="library-error" role="alert">{error}</p>}
+      {loading ? <p className="personal-empty">Loading your pieces…</p> : files.length ? <div className="personal-piece-list">{files.map(file=><div className="personal-piece-row" key={file.id}><span>♫</span><div><strong>{file.original_name}</strong><small>Personal repertoire · uploaded by you</small></div><button onClick={()=>onPractice?.(file)}>Practise →</button></div>)}</div> : <p className="personal-empty">No personal pieces yet. Upload a score you own to start building your own repertoire.</p>}
+    </>}
+  </section>;
+}
+
 function Extras({ toast }) {
-  return <><PageHeading eyebrow="YOUR CREATIVE SPACE" title="Extras" subtitle="Explore music beyond your exam programme." action={<span className="pro-label">✦ PIANO COACH PRO</span>}/><div className="extras-hero"><div><div className="eyebrow">BEYOND THE SYLLABUS</div><h2>Your music.<br/><em>Your way.</em></h2><p>Upload the pieces you love, explore something new, and make the piano yours.</p><Button kind="cream" onClick={()=>toast("Choose a score to add to Extras.")}>＋ Add your own music</Button></div><div className="extras-illustration">♫<span>♪</span><i>♬</i></div></div><div className="extras-cards"><div className="panel"><span className="feature-icon">♬</span><h3>My own pieces</h3><p>Keep personal repertoire separate from your exam grade plan.</p><button className="text-link" onClick={()=>toast("Your personal repertoire will appear here.")}>Explore pieces →</button></div><div className="panel"><span className="feature-icon">✧</span><h3>Music Assistant</h3><p>Ask questions about your music, technique and practice routine.</p><button className="text-link" onClick={()=>toast("Music Assistant is being prepared.")}>Open assistant →</button></div></div></>;
+  return <><PageHeading eyebrow="YOUR CREATIVE SPACE" title="Extras" subtitle="Explore music beyond your exam programme." action={<span className="pro-label">✦ PIANO COACH PRO</span>}/><div className="extras-hero"><div><div className="eyebrow">BEYOND THE SYLLABUS</div><h2>Your music.<br/><em>Your way.</em></h2><p>Upload the pieces you love, explore something new, and make the piano yours.</p><Button kind="cream" onClick={()=>toast("Choose a score to add to Extras.")}>＋ Add your own music</Button></div><div className="extras-illustration">♫<span>♪</span><i>♬</i></div></div><div className="extras-cards"><div className="panel"><span className="feature-icon">♬</span><h3>My own pieces</h3><p>Keep personal repertoire separate from your exam grade plan.</p><button className="text-link" onClick={()=>toast("Your personal repertoire will appear here.")}>Explore pieces →</button></div></div></>;
 }
 function Profile({ theme,setTheme,notation,setNotation,reminders,setReminders,toast,profileTab,setProfileTab,studentProfile }) {
   const [billingBusy,setBillingBusy] = useState(false);
