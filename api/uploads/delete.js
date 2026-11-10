@@ -30,6 +30,10 @@ export default async function handler(req, res) {
       Key: found.rows[0].object_key,
     }));
     await database().query(
+      "UPDATE users SET exam_book_file_id = NULL, exam_book_skipped = true, updated_at = NOW() WHERE firebase_uid = $1 AND exam_book_file_id = $2",
+      [user.uid, fileId],
+    );
+    await database().query(
       "DELETE FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'ready'",
       [fileId, user.uid],
     );
