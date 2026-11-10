@@ -13,7 +13,7 @@ export function adminAuth() {
   return getAuth();
 }
 export async function requireUser(req, res) {
-  const match = (req.headers.authorization || "").match(/^Bearer\\s+(.+)$/i);
+  const match = (req.headers.authorization || "").match(/^Bearer\s+(.+)$/i);
   if (!match) { res.status(401).json({ error: "Sign in to continue." }); return null; }
   try {
     const token = await adminAuth().verifyIdToken(match[1], true);
