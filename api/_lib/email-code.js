@@ -5,6 +5,7 @@ import { sendEmail } from "./email.js";
 import { requireMethod, sendJson } from "./http.js";
 
 const digest = value => createHash("sha256").update(value).digest("hex");
+const appBaseUrl = () => (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\\/+$/, "");
 export default async function handler(req, res) {
   if (!requireMethod(req, res, "POST")) return;
   const user = await requireUser(req, res);
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
     }
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
     const linkToken = randomBytes(32).toString("base64url");
-    const link = (process.env.PUBLIC_APP_URL || "https://pianocoach.cc.cd") + "/?verifyToken=" + encodeURIComponent(linkToken);
+    const link = appBaseUrl() + "/?verifyToken=" + encodeURIComponent(linkToken);
     await db.query(
       "INSERT INTO email_verification_codes (firebase_uid,email,code_hash,link_token_hash,expires_at,requested_at,attempts,created_at) " +
       "VALUES ($1,$2,$3,$4,NOW()+INTERVAL '5 minutes',NOW(),0,NOW()) " +
