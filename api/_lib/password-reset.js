@@ -4,7 +4,7 @@ import { database } from "./db.js";
 import { sendEmail } from "./email.js";
 import { requireMethod, sendJson } from "./http.js";
 const digest = value => createHash("sha256").update(value).digest("hex");
-const appBaseUrl = () => (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\\/+$/, "");
+const appBaseUrl = () => (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\/+$/, "");
 const generic = { message: "If an account exists for that email, a reset link and code will be sent shortly." };
 export default async function handler(req, res) {
   if (!requireMethod(req, res, "POST")) return;
