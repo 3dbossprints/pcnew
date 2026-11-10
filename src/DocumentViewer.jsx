@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
-import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { unzipSync } from "fflate";
 import ePub from "epubjs";
 import "./DocumentViewer.css";
