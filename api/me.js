@@ -12,7 +12,7 @@ export default async function handler(req, res) {
       "INSERT INTO users (firebase_uid, email, display_name) VALUES ($1, $2, $3) " +
       "ON CONFLICT (firebase_uid) DO UPDATE SET email = EXCLUDED.email, " +
       "display_name = COALESCE(users.display_name, EXCLUDED.display_name), updated_at = NOW() " +
-      "RETURNING id, email, display_name, preferred_name, exam_board, grade, target_date, plan, " +
+      "RETURNING id, email, display_name, preferred_name, exam_board, grade, target_date, plan, pending_plan, pending_interval, " +
       "onboarding_completed, book_sources, demo_seconds_used, subscription_status, created_at",
       [user.uid, user.email, user.name],
     );
