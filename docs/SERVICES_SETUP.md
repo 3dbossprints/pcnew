@@ -115,3 +115,51 @@ Neon migrations:
 - `005_password_reset_codes.sql`
 
 These migrations have been applied to the `pianocoach.neondb` database. Do not put verification codes, reset tokens, or passwords in application logs.
+
+
+## Stripe subscriptions (test mode first)
+
+The subscription API uses Stripe Checkout Embedded, Stripe Billing Customer Portal, and signed webhooks. The app does not grant paid access from a browser success screen; the verified webhook updates the user's plan in Neon.
+
+Server-side environment variables:
+- `STRIPE_SECRET_KEY` — test secret key in Vercel Preview/Development while testing; live key only after an explicit production launch decision.
+- `STRIPE_WEBHOOK_SECRET` — signing secret for the matching test or live webhook endpoint.
+- `STRIPE_PRICE_BASIC_MONTHLY`
+- `STRIPE_PRICE_BASIC_ANNUAL`
+- `STRIPE_PRICE_PRO_MONTHLY`
+- `STRIPE_PRICE_PRO_ANNUAL`
+
+Client-side:
+- `VITE_STRIPE_PUBLISHABLE_KEY` — matching test publishable key for Preview/Development; live publishable key only in Production after approval.
+
+Create four recurring GBP prices in Stripe **test mode** before testing:
+- Basic monthly: £9.99, every month.
+- Basic annual: £109.89, every year.
+- Pro monthly: £19.99, every month.
+- Pro annual: £219.89, every year.
+
+Annual amounts are charged upfront and equal eleven monthly payments. Do not create or copy live-mode prices as part of test setup. Put the resulting four `price_...` IDs into the matching Vercel environment variables. Never expose the secret key or webhook signing secret in a `VITE_` variable.
+
+API:
+- `POST /api/billing/checkout` — authenticated embedded Checkout session for Basic or Pro, monthly or annual.
+- `POST /api/billing/portal` — authenticated Stripe Customer Portal session.
+- `POST /api/billing/webhook` — verifies Stripe's signature and processes subscription events.
+
+Configure the test-mode webhook endpoint to:
+`https://<your-preview-domain>/api/billing/webhook`
+
+Subscribe it to:
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
+The webhook uses the raw request body for signature verification and stores processed event IDs in `stripe_webhook_events` for idempotency. Neon migration: `006_stripe_subscriptions.sql`. Pending onboarding fields are in `007_pending_checkout.sql`.
+
+The Customer Portal must be activated/configured in Stripe Dashboard (test mode for testing) to permit subscription cancellation and payment-method updates. The intended cancellation behavior is cancel at period end; verify that option in the Portal configuration.
+
+Tax collection is not enabled in the application at this stage. Stripe Tax/threshold monitoring must be configured only after confirming the merchant's VAT registration and tax obligations.
+
+Important: the Stripe account currently connected to this ChatGPT session is visible as live mode only. No live Stripe products, prices, sessions or charges have been created. The code is ready to use test credentials supplied through Vercel, but test-mode Stripe calls cannot be made from this connected account until a test-mode account/context is available.
