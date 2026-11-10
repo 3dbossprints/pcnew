@@ -44,6 +44,7 @@ export default function App() {
   const [profileTab, setProfileTab] = useState("details");
   const [showAdmin, setShowAdmin] = useState(false);
   const [studentProfile, setStudentProfile] = useState(null);
+  const [practiceReference, setPracticeReference] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -190,7 +191,7 @@ function Practice({ reference, running, setRunning, onStart, onFinish, time, sec
     <PageHeading eyebrow="YOUR PRACTICE SPACE" title="Let's make some music." subtitle="Choose a focus, settle in, and enjoy the process." action={<span className="session-chip"><i/> SESSION READY</span>}/>
     <div className="practice-layout">
       <section className="panel practice-main">
-        <div className="practice-piece-head"><div><div className="eyebrow">CURRENTLY PRACTISING</div>{reference && <p className="practice-reference-chip">Using book/score reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio found" : ""}</p>}<h2>{selected.title}</h2><p>{selected.sub} · Grade 5 ABRSM</p></div><button className="text-link" onClick={() => toast("Piece selector opened from your Grade Plan.")}>Change piece ↗</button></div>
+        <div className="practice-piece-head"><div><div className="eyebrow">CURRENTLY PRACTISING</div>{reference && <p className="practice-reference-chip">Using book/score reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio found" : ""}</p>}{reference && <p className="practice-reference-chip">Using book/score reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio found" : ""}</p>}<h2>{selected.title}</h2><p>{selected.sub} · Grade 5 ABRSM</p></div><button className="text-link" onClick={() => toast("Piece selector opened from your Grade Plan.")}>Change piece ↗</button></div>
         <div className="practice-sheet"><div className="sheet-top"><span>CLAIR DE LUNE</span><span>Claude Debussy</span></div><div className="staff"><div className="clef">𝄞</div><div className="staff-lines"><div className="bar"><i className="note n1"/><i className="note n2"/><i className="note n3"/><i className="note n4"/></div><div className="bar"><i className="note n5"/><i className="note n6"/><i className="note n7"/></div><div className="bar"><i className="note n8"/><i className="note n9"/><i className="note n10"/></div></div></div><div className="staff second"><div className="clef bass">𝄢</div><div className="staff-lines"><div className="bar"><i className="note n2"/><i className="note n4"/><i className="note n6"/></div><div className="bar"><i className="note n1"/><i className="note n3"/><i className="note n8"/></div><div className="bar"><i className="note n5"/><i className="note n7"/></div></div></div><div className="sheet-page">1</div></div>
         <div className="sheet-caption"><span>Illustrative score preview</span><button onClick={() => toast("Full score view will open when a score is connected.")}>Open full sheet ↗</button></div>
         <div className="practice-controls"><div className="hand-select"><span>HANDS</span>{["right","both","left"].map(v=><button key={v} className={hand===v?"selected":""} onClick={()=>setHand(v)}>{v==="both"?"Both":v==="right"?"Right":"Left"}</button>)}</div><div className="tempo-control"><span>TEMPO <b>{tempo} BPM</b></span><input type="range" min="40" max="180" value={tempo} onChange={e=>setTempo(+e.target.value)}/></div></div>
@@ -213,7 +214,6 @@ function SheetMusic({ reference, setReference, search, setSearch, fileName, setF
   const [drag, setDrag] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [documentUrl, setDocumentUrl] = useState("");
-  const [practiceReference, setPracticeReference] = useState(null);
 
   async function token() {
     if (!auth.currentUser) throw new Error("Please sign in again.");
