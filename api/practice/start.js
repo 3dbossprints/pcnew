@@ -28,11 +28,17 @@ export default async function handler(req, res) {
       return sendJson(res, 403, { error: "Your free 60-minute demo has been used. Subscribe to continue practising." });
     }
     const id = randomUUID();
-    const result = await database().query(
-      "INSERT INTO practice_sessions (id, firebase_uid, task_id, reference_file_id, started_at, mode) " +
-      "VALUES ($1, $2, $3, $4, NOW(), $5) RETURNING id, started_at, mode, reference_file_id",
-      [id, user.uid, taskId, referenceFileId, mode],
-    );
+    const result = referenceFileId
+      ? await database().query(
+          "INSERT INTO practice_sessions (id, firebase_uid, task_id, reference_file_id, started_at, mode) " +
+          "VALUES ($1, $2, $3, $4, NOW(), $5) RETURNING id, started_at, mode, reference_file_id",
+          [id, user.uid, taskId, referenceFileId, mode],
+        )
+      : await database().query(
+          "INSERT INTO practice_sessions (id, firebase_uid, task_id, started_at, mode) " +
+          "VALUES ($1, $2, $3, NOW(), $4) RETURNING id, started_at, mode",
+          [id, user.uid, taskId, mode],
+        );
     return sendJson(res, 201, { session: result.rows[0] });
   } catch (error) {
     console.error("POST /api/practice/start failed:", error.message);
