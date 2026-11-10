@@ -25,12 +25,14 @@ export default async function handler(req, res) {
     const expected = Buffer.from(row.code_hash, "hex");
     const supplied = Buffer.from(digest(code), "hex");
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
-      await db.query("UPDATE email_verification_codes SET attempts = attempts + 1 WHERE firebase_uid = $1", [user.uid]);
+      const attempt = await db.query("UPDATE email_verification_codes SET attempts = attempts + 1 WHERE firebase_uid = $1 AND attempts < 5 RETURNING attempts", [user.uid]);
+      if (!attempt.rowCount) return sendJson(res, 429, { error: "Too many incorrect attempts. Request a new code." });
       return sendJson(res, 400, { error: "That code doesn't match. Check it and try again." });
     }
     if (row.email !== user.email) return sendJson(res, 409, { error: "Your account email has changed. Request a new code." });
+    const claimed = await db.query("DELETE FROM email_verification_codes WHERE firebase_uid = $1 AND code_hash = $2 AND expires_at > NOW() RETURNING firebase_uid", [user.uid, row.code_hash]);
+    if (!claimed.rowCount) return sendJson(res, 409, { error: "That code has already been used. Request a new one." });
     await adminAuth().updateUser(user.uid, { emailVerified: true });
-    await db.query("DELETE FROM email_verification_codes WHERE firebase_uid = $1", [user.uid]);
     return sendJson(res, 200, { verified: true });
   } catch (error) {
     console.error("POST /api/auth/verify-email-code failed:", error.message);
