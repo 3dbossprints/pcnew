@@ -153,6 +153,7 @@ export default function OnboardingGate({ children }) {
 
   async function finish() {
     setError("");
+    if (plan !== "free" && bookChoice === "own" && !examBookUploaded) { setError("Please upload your PDF or EPUB, or choose Skip for now."); return; }
     setSaving(true);
     try {
       const token = await auth.currentUser.getIdToken();
