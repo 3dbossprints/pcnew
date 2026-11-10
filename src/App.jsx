@@ -136,7 +136,7 @@ export default function App() {
         page === "home" ? <Dashboard go={go} streak={streak} setStreak={setStreak} toast={toast} studentName={studentName} studentProfile={studentProfile}/> :
         page === "practice" ? <Practice reference={practiceReference} running={practiceRunning} setRunning={setPracticeRunning} onStart={startPractice} onFinish={finishPractice} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
         page === "sheets" ? <SheetMusic reference={practiceReference} setReference={setPracticeReference} search={search} setSearch={setSearch} fileName={fileName} setFileName={setFileName} toast={toast}/> :
-        page === "grade" ? <GradePlan toast={toast} plan={studentProfile?.plan || "free"} onPracticePersonal={file=>{setPracticeReference({file,audioAvailable:false});setPracticeType("personal");setPage("practice");setShowProfile(false);}}/> : null}
+        page === "grade" ? <GradePlan toast={toast} plan={studentProfile?.plan || "free"} examBookFileId={studentProfile?.exam_book_file_id} onPracticePersonal={file=>{setPracticeReference({file,audioAvailable:false});setPracticeType("personal");setPage("practice");setShowProfile(false);}}/> : null}
       </div>
     </main>
     {notice && <div className="toast"><span>✓</span>{notice}</div>}
@@ -304,7 +304,10 @@ function SheetMusic({ reference, setReference, search, setSearch, fileName, setF
       </div>)}</div> : <div className="empty-state"><span>♫</span><h3>{search?"No matching files":"Your library is ready"}</h3><p>{search?"Try a different search.":"Import your first score or recording to see it here."}</p><button className="text-link" onClick={()=>document.getElementById("sheet-upload").click()}>＋ Add sheet music</button></div>}
   </>;
 }
-function GradePlan({ toast, plan = "free", onPracticePersonal }) {
+function GradePlan({ toast, plan = "free", examBookFileId, onPracticePersonal }) {
+  const [hasExamBook, setHasExamBook] = useState(Boolean(examBookFileId));
+  useEffect(() => setHasExamBook(Boolean(examBookFileId)), [examBookFileId]);
+  const gradedLocked = plan !== "free" && !hasExamBook;
   const [board,setBoard] = useState("ABRSM");
   const [grade,setGrade] = useState("Grade 5");
   const [expanded,setExpanded] = useState("pieces");
@@ -318,8 +321,37 @@ function GradePlan({ toast, plan = "free", onPracticePersonal }) {
     <PageHeading eyebrow="YOUR EXAM JOURNEY" title="Grade Plan" subtitle="Everything you need for your next piano milestone." action={<Button kind="outline" onClick={()=>toast("Grade plan settings opened.")}>⚙ Plan settings</Button>}/>
     <div className="grade-overview"><div><div className="eyebrow">CURRENT GOAL</div><h2>{grade} <span>{board}</span></h2><p>Target completion · 30 June 2027</p><div className="grade-progress"><Progress value={64}/><strong>64%</strong></div></div><div className="grade-ring"><div><strong>64%</strong><small>COMPLETE</small></div></div></div>
     <div className="grade-toolbar"><div><span>EXAM BOARD</span><select value={board} onChange={e=>setBoard(e.target.value)}><option>ABRSM</option><option>Trinity</option></select></div><div><span>GRADE</span><select value={grade} onChange={e=>setGrade(e.target.value)}>{["Initial","Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6","Grade 7","Grade 8"].map(x=><option key={x}>{x}</option>)}</select></div><button className="text-link" onClick={()=>toast("Your target date can be changed in Profile.")}>Edit target date ↗</button></div>
-    <div className="grade-sections">{groups.map(g=><section className="panel grade-group" key={g.id}><button className="grade-group-head" onClick={()=>setExpanded(expanded===g.id?"":g.id)}><span className="group-symbol">{g.id==="pieces"?"♫":g.id==="scales"?"♬":g.id==="exercises"?"⌁":"▤"}</span><span><strong>{g.name}</strong><small>{g.count}</small></span><span className="group-chevron">{expanded===g.id?"−":"+"}</span></button>{expanded===g.id&&<div className="grade-items">{g.items.map((item,i)=><div className="grade-item" key={item[0]}><span className="grade-item-index">{String(i+1).padStart(2,"0")}</span><div><strong>{item[0]}</strong><small>{item[1]}</small></div><span className="grade-item-progress">{item[2]}</span><button onClick={()=>toast(`Opening ${item[0]} in Practice.`)}>Practise →</button></div>)}</div>}{expanded===g.id&&g.id==="pieces"&&<PersonalPieces plan={plan} onPractice={onPracticePersonal} toast={toast}/>}</section>)}</div>
+    <div className="grade-sections">{groups.map(g=><section className="panel grade-group" key={g.id}><button className="grade-group-head" onClick={()=>setExpanded(expanded===g.id?"":g.id)}><span className="group-symbol">{g.id==="pieces"?"♫":g.id==="scales"?"♬":g.id==="exercises"?"⌁":"▤"}</span><span><strong>{g.name}</strong><small>{g.count}</small></span><span className="group-chevron">{expanded===g.id?"−":"+"}</span></button>{expanded===g.id&&gradedLocked&&<div className="grade-locked"><strong>Upload your exam-board ebook to unlock graded learning.</strong><p>Your official exam pieces, exercises and scales are separate from your own repertoire. Upload the PDF or EPUB you own to unlock this section. Pro Extras remains available below.</p><ExamBookUpload onUploaded={()=>setHasExamBook(true)} toast={toast}/></div>}{expanded===g.id&&!gradedLocked&&<div className="grade-items">{g.items.map((item,i)=><div className="grade-item" key={item[0]}><span className="grade-item-index">{String(i+1).padStart(2,"0")}</span><div><strong>{item[0]}</strong><small>{item[1]}</small></div><span className="grade-item-progress">{item[2]}</span><button onClick={()=>toast(`Opening ${item[0]} in Practice.`)}>Practise →</button></div>)}</div>}{expanded===g.id&&g.id==="pieces"&&<PersonalPieces plan={plan} onPractice={onPracticePersonal} toast={toast}/>}</section>)}</div>
   </>;
+}
+
+
+function ExamBookUpload({ onUploaded, toast }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function upload(file) {
+    if (!file) return;
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (!["pdf", "epub"].includes(ext)) { setError("Choose a PDF or EPUB exam-board ebook."); return; }
+    if (file.size > 25 * 1024 * 1024) { setError("The ebook must be 25 MB or smaller."); return; }
+    setBusy(true); setError("");
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const contentType = file.type || (ext === "pdf" ? "application/pdf" : "application/epub+zip");
+      const signedResponse = await fetch("/api/uploads/sign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ filename: file.name, contentType, size: file.size, purpose: "exam_book" }) });
+      const signed = await signedResponse.json();
+      if (!signedResponse.ok) throw new Error(signed.error || "Upload could not be prepared.");
+      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+      if (!put.ok) throw new Error("Cloudflare R2 rejected the upload. Check bucket CORS settings and try again.");
+      const completedResponse = await fetch("/api/uploads/complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ fileId: signed.fileId, purpose: "exam_book" }) });
+      const completed = await completedResponse.json();
+      if (!completedResponse.ok) throw new Error(completed.error || "The ebook couldn't be verified.");
+      onUploaded?.(completed.file);
+      toast("Exam-board ebook uploaded. Graded learning is now unlocked.");
+    } catch (e) { setError(e.message || "The ebook upload failed."); }
+    finally { setBusy(false); }
+  }
+  return <div className="exam-book-upload"><label className="button primary">{busy ? "Uploading ebook…" : "Upload exam ebook"}<input type="file" accept=".pdf,.epub,application/pdf,application/epub+zip" disabled={busy} onChange={e=>{upload(e.target.files[0]);e.target.value="";}}/></label>{error&&<p role="alert">{error}</p>}</div>;
 }
 
 function PersonalPieces({ plan, onPractice, toast }) {
@@ -413,5 +445,8 @@ function Profile({ theme,setTheme,notation,setNotation,reminders,setReminders,to
 }
 function Field({label,value}) { return <label className="field"><span>{label}</span><input defaultValue={value}/></label>; }
 function Admin({toast}) { const [codes,setCodes]=useState([]); const [code,setCode]=useState(""); const [discount,setDiscount]=useState("10"); return <><PageHeading eyebrow="PIANO COACH" title="Admin" subtitle="Manage the platform and promotional access."/><div className="admin-warning">Admin tools are a design preview. Access control and all actions must be enforced by the PocketBase backend before launch.</div><div className="stats-grid"><Stat label="REGISTERED STUDENTS" value="—" note="Awaiting backend connection" icon="♙"/><Stat label="ACTIVE SUBSCRIPTIONS" value="—" note="Stripe not connected" icon="↻"/><Stat label="DISCOUNT CODES" value={String(codes.length)} note="Created in this preview" icon="%"/><Stat label="SYSTEM STATUS" value="Preview" note="Backend setup pending" icon="⌁"/></div><div className="panel admin-panel"><h2>Discount code generator</h2><p>Create a code for a specific student or a wider promotion.</p><div className="admin-form"><Field label="Discount code" value={code}/><label className="field"><span>Discount</span><select value={discount} onChange={e=>setDiscount(e.target.value)}><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option><option value="25">25%</option><option value="50">50%</option></select></label><Button onClick={()=>{const v=code.trim()||`PIANO${Math.random().toString(36).slice(2,7).toUpperCase()}`;setCodes(a=>[...a,{code:v,discount}]);setCode("");toast("Preview discount code created.");}}>＋ Generate code</Button></div>{codes.map((c,i)=><div className="code-row" key={i}><strong>{c.code}</strong><span>{c.discount}% off</span><button onClick={()=>navigator.clipboard?.writeText(c.code).then(()=>toast("Code copied."))}>Copy</button></div>)}</div></>; }
+
+
+.grade-locked{padding:20px 22px 24px;background:#fbf3e9;border-top:1px solid #eee3d6}.grade-locked strong{font:600 17px "Playfair Display",serif;color:#594536}.grade-locked p{max-width:680px;font-size:11px;line-height:1.65;color:#88796b}.exam-book-upload input,.personal-upload input{display:none}.exam-book-upload>p{font-size:11px;color:#a14f43}.personal-pieces{padding:18px 20px 20px;border-top:1px solid #eee3d6;background:#fffaf3}.personal-pieces-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.personal-pieces-heading h3{font:600 19px "Playfair Display",serif;margin:8px 0 4px}.personal-pieces-heading p,.personal-locked,.personal-empty{font-size:11px;line-height:1.6;color:#8f8378;margin:4px 0 12px}.personal-piece-list{display:grid;gap:8px;margin-top:12px}.personal-piece-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:#fffdf9;border:1px solid #eee5dc;border-radius:9px}.personal-piece-row>span{font-size:20px;color:#9a704e}.personal-piece-row>div{display:grid;gap:3px;min-width:0;flex:1}.personal-piece-row strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.personal-piece-row small{font-size:9px;color:#9a8e82}.personal-piece-row button{border:0;background:transparent;color:#8c694b;font-size:10px;font-weight:700}.personal-upload{position:relative;white-space:nowrap}.personal-locked{padding:12px;background:#f8f0e7;border-radius:8px}.personal-empty{margin-top:12px}
 
 function FieldDummy() {}
