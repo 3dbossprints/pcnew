@@ -5,7 +5,7 @@ import { requireUser } from "../_lib/auth.js";
 import { database } from "../_lib/db.js";
 import { requireMethod, sendJson } from "../_lib/http.js";
 
-const allowed = new Set(["application/epub+zip", "application/pdf", "image/png", "image/jpeg", "application/vnd.recordare.musicxml+xml", "application/xml", "application/octet-stream", "audio/mpeg", "audio/mp4", "audio/webm", "audio/midi", "audio/x-midi", "audio/wav", "audio/x-wav"]);
+const allowed = new Set(["application/epub+zip", "application/zip", "application/pdf", "image/png", "image/jpeg", "application/vnd.recordare.musicxml+xml", "application/xml", "application/octet-stream", "audio/mpeg", "audio/mp4", "audio/webm", "audio/midi", "audio/x-midi", "audio/wav", "audio/x-wav"]);
 const extensions = new Set([".epub", ".pdf", ".png", ".jpg", ".jpeg", ".xml", ".musicxml", ".mid", ".midi", ".mp3", ".m4a", ".mp4", ".webm", ".wav"]);
 function kindFor(name) {
   const ext = name.toLowerCase().slice(name.lastIndexOf("."));
