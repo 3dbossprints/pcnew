@@ -72,19 +72,33 @@ async function confirm(req,res) {
   if (!user) return;
   if (!user.emailVerified) return sendJson(res,403,{error:"Verify your email before confirming payment."});
   const sessionId=String(req.body?.sessionId || "");
-  if (!/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId)) return sendJson(res,400,{error:"A valid Checkout Session is required."});
+  if (sessionId && !/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId)) return sendJson(res,400,{error:"A valid Checkout Session is required."});
   try {
     const stripeApi=stripe();
-    const session=await stripeApi.checkout.sessions.retrieve(sessionId,{expand:["subscription"]});
-    if (session.mode!=="subscription" || session.status!=="complete" ||
-        (session.payment_status!=="paid" && session.payment_status!=="no_payment_required")) {
-      return sendJson(res,202,{pending:true,message:"Stripe is still confirming your payment."});
+    let subscription=null;
+    let customerId=null;
+    if (sessionId) {
+      const session=await stripeApi.checkout.sessions.retrieve(sessionId,{expand:["subscription"]});
+      if (session.mode!=="subscription" || session.status!=="complete" ||
+          (session.payment_status!=="paid" && session.payment_status!=="no_payment_required")) {
+        return sendJson(res,202,{pending:true,message:"Stripe is still confirming your payment."});
+      }
+      const sessionUid=session.client_reference_id || session.metadata?.firebase_uid;
+      if (sessionUid!==user.uid) return sendJson(res,403,{error:"This checkout session does not belong to your account."});
+      subscription=typeof session.subscription==="string"
+        ? await stripeApi.subscriptions.retrieve(session.subscription)
+        : session.subscription;
+      customerId=typeof session.customer==="string"?session.customer:session.customer?.id || null;
+    } else {
+      const existing=await database().query("SELECT stripe_customer_id FROM users WHERE firebase_uid=$1",[user.uid]);
+      customerId=existing.rows[0]?.stripe_customer_id || null;
+      if (!customerId) return sendJson(res,404,{error:"No Stripe customer is linked to your account yet."});
+      const subscriptions=await stripeApi.subscriptions.list({customer:customerId,status:"all",limit:100});
+      subscription=subscriptions.data.find(item =>
+        item.metadata?.firebase_uid===user.uid && ["active","trialing","past_due"].includes(item.status)
+      ) || null;
+      if (!subscription) return sendJson(res,202,{pending:true,message:"No active subscription is visible in Stripe yet."});
     }
-    const sessionUid=session.client_reference_id || session.metadata?.firebase_uid;
-    if (sessionUid!==user.uid) return sendJson(res,403,{error:"This checkout session does not belong to your account."});
-    const subscription=typeof session.subscription==="string"
-      ? await stripeApi.subscriptions.retrieve(session.subscription)
-      : session.subscription;
     if (!subscription || subscription.metadata?.firebase_uid!==user.uid) {
       return sendJson(res,403,{error:"The subscription could not be matched securely to your account."});
     }
@@ -97,7 +111,6 @@ async function confirm(req,res) {
     const proPrices=[process.env.STRIPE_PRICE_PRO_MONTHLY,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean);
     const selectedPlan=subscription.metadata?.plan || (proPrices.includes(priceId) ? "pro" : "basic");
     const interval=subscription.metadata?.interval || ([process.env.STRIPE_PRICE_BASIC_ANNUAL,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean).includes(priceId) ? "annual" : "monthly");
-    const customerId=typeof session.customer==="string"?session.customer:session.customer?.id || null;
     const result=await database().query(
       "UPDATE users SET stripe_customer_id=COALESCE($2,stripe_customer_id),stripe_subscription_id=$3,stripe_price_id=$4,plan=$5,subscription_status=$6,subscription_current_period_end=$7,cancel_at_period_end=$8,subscription_interval=$9,onboarding_completed=TRUE,pending_plan=NULL,pending_interval=NULL,updated_at=NOW() WHERE firebase_uid=$1 RETURNING firebase_uid,onboarding_completed,plan,subscription_status",
       [user.uid,customerId,subscription.id,priceId,selectedPlan,subscription.status,periodEnd?new Date(periodEnd*1000):null,Boolean(subscription.cancel_at_period_end),interval],

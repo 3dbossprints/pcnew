@@ -77,7 +77,7 @@ export default function OnboardingGate({ children }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session_id");
-    if (params.get("checkout") !== "complete" || !sessionId || !profile || profile.onboarding_completed) return undefined;
+    if ((!sessionId && !profile?.pending_plan) || !profile || profile.onboarding_completed) return undefined;
     let active = true;
     setPaymentConfirming(true);
     async function confirmPayment() {
@@ -87,7 +87,7 @@ export default function OnboardingGate({ children }) {
           const confirmation = await fetch("/api/billing/confirm", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-            body: JSON.stringify({ sessionId }),
+            body: JSON.stringify(sessionId ? { sessionId } : {}),
           });
           const confirmationBody = await confirmation.json().catch(() => ({}));
           if (confirmation.ok) {
@@ -123,7 +123,7 @@ export default function OnboardingGate({ children }) {
     }
     confirmPayment();
     return () => { active = false; };
-  }, [profile?.onboarding_completed, Boolean(profile)]);
+  }, [profile?.onboarding_completed, profile?.pending_plan]);
 
   async function finish() {
     setError("");
