@@ -38,6 +38,13 @@ export default function OnboardingGate({ children }) {
         if (body.user.exam_board) setExamBoard(body.user.exam_board);
         if (body.user.grade) setGrade(body.user.grade);
         if (body.user.plan) setPlan(body.user.plan);
+        if (body.user.pending_plan) {
+          setPlan(body.user.pending_plan);
+          setBillingInterval(body.user.pending_interval || "monthly");
+          setStep(3);
+          const savedBook = Array.isArray(body.user.book_sources) ? body.user.book_sources[0] : null;
+          if (savedBook) { setBookTitle(savedBook.title || ""); setBookUrl(savedBook.url || ""); setBookCategory(savedBook.category || "repertoire"); }
+        }
         if (body.user.target_date) setTargetDate(String(body.user.target_date).slice(0,10));
       } catch (e) {
         if (active) setError(e.message || "We couldn't connect to your account.");
