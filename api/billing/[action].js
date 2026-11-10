@@ -82,7 +82,7 @@ async function portal(req,res) {
 }
 export default async function handler(req,res) {
   const action=req.query?.action;
-  if (action==="checkout" && requireMethod(req,res,"POST")) return checkout(req,res);
-  if (action==="portal" && requireMethod(req,res,"POST")) return portal(req,res);
+  if (action==="checkout") { if (!requireMethod(req,res,"POST")) return; return checkout(req,res); }
+  if (action==="portal") { if (!requireMethod(req,res,"POST")) return; return portal(req,res); }
   return sendJson(res,404,{error:"Billing action not found."});
 }
