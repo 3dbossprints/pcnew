@@ -91,3 +91,12 @@ Required server-only Vercel environment variables once the worker is deployed:
 The app starts a job with authenticated `POST /api/uploads?analysis=1` and polls it with authenticated `GET /api/uploads?analysisJob=<job-id>`. The worker's `POST /jobs` contract receives `jobId`, `sourceUrl` (15-minute signed read URL), `originalName`, `contentType`, `documentType` and `callbackUrl`. It should return 2xx promptly and process asynchronously. Callback payloads use `{ jobId, status, result, error }`. For completed or reviewable results, `result.measures` must contain normalised page-relative rectangles: `[{ id, page, x, y, width, height, kind, label }]`, with x/y/width/height between 0 and 1. The worker should also return structured MusicXML/timing and audio-reference alignment data where available. Low-confidence recognition must use `needs_review`, not fabricate measure positions.
 
 Apply `db/migrations/009_score_analysis_jobs.sql` and `db/migrations/010_practice_score_reference.sql` to Neon before enabling analysis and practice references. The OMR worker is not included or deployed by this frontend/API change; without its environment variables the app explicitly reports that score analysis is not connected.
+
+
+## Exam ebook access and Pro personal repertoire
+
+Paid onboarding now lets a student upload an exam-board PDF/EPUB they already own, choose an authorised retailer to buy it separately, or skip the ebook and add it later. Checkout explicitly states that the ebook is not included in the Piano Coach subscription. A skipped ebook keeps graded syllabus pieces, exercises and scales locked; the dashboard, Profile and subscription management remain accessible. Students can upload the ebook later from the locked grade sections.
+
+Pro Extras live inside the Pieces section. Pro students can upload personal PDF/EPUB/MusicXML scores there and practise them independently of the official graded syllabus. These uploads do not unlock graded content. The upload API and practice-start API enforce the plan and purpose checks server-side.
+
+Apply db/migrations/011_exam_book_access.sql to Neon before deploying this feature. It adds the separate exam-book reference and skipped-state fields. Existing score-analysis migrations 009 and 010 are also required for the book-analysis foundation.
