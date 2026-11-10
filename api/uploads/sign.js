@@ -38,9 +38,9 @@ export default async function handler(req, res) {
   try {
     if (purpose === "exam_book" && ![".pdf", ".epub"].includes(extension)) return sendJson(res, 415, { error: "Exam-board ebooks must be PDF or EPUB files." });
     if (purpose !== "library") {
-      const account = await database().query("SELECT plan, pending_plan FROM users WHERE firebase_uid = $1", [user.uid]);
+      const account = await database().query("SELECT plan, pending_plan, onboarding_completed FROM users WHERE firebase_uid = $1", [user.uid]);
       const effectivePlan = account.rows[0]?.plan === "pro" || account.rows[0]?.pending_plan === "pro" ? "pro" : account.rows[0]?.plan === "basic" || account.rows[0]?.pending_plan === "basic" ? "basic" : "free";
-      if (purpose === "exam_book" && effectivePlan === "free") return sendJson(res, 403, { error: "Exam-board ebooks are available with a paid plan." });
+      if (purpose === "exam_book" && effectivePlan === "free" && account.rows[0]?.onboarding_completed !== false) return sendJson(res, 403, { error: "Exam-board ebooks are available with a paid plan." });
       if (purpose === "personal_piece" && effectivePlan !== "pro") return sendJson(res, 403, { error: "Uploading personal pieces to Extras requires Piano Coach Pro." });
     }
     const key = "users/" + user.uid + "/" + randomUUID();
