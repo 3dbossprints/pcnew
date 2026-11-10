@@ -12,3 +12,5 @@ CREATE INDEX IF NOT EXISTS email_verification_codes_expiry_idx
 
 ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS hour_requests INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS hour_window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE email_verification_codes ADD COLUMN IF NOT EXISTS link_token_hash TEXT;
