@@ -16,7 +16,14 @@ function PdfPage({ pdf, pageNumber, measures }) {
   const host = useRef(null);
   const canvas = useRef(null);
   const [width, setWidth] = useState(760);
+  const [visible, setVisible] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    if (!host.current) return;
+    const observer = new IntersectionObserver(entries => { if (entries[0].isIntersecting) { setVisible(true); observer.disconnect(); } }, { rootMargin: "900px 0px" });
+    observer.observe(host.current);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (!host.current) return;
     const observer = new ResizeObserver(entries => setWidth(Math.max(280, Math.floor(entries[0].contentRect.width))));
@@ -24,6 +31,7 @@ function PdfPage({ pdf, pageNumber, measures }) {
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
+    if (!visible) return;
     let cancelled = false;
     let task;
     async function render() {
@@ -45,7 +53,7 @@ function PdfPage({ pdf, pageNumber, measures }) {
     }
     render().catch(error => { if (!cancelled) console.error("PDF render failed", error); });
     return () => { cancelled = true; task && task.cancel(); };
-  }, [pdf, pageNumber, width]);
+  }, [pdf, pageNumber, width, visible]);
   return <div className="document-pdf-page" ref={host}>
     <div className="document-pdf-canvas-wrap" style={{ width: size.width || "100%", height: size.height || "auto" }}>
       <canvas ref={canvas} aria-label={"PDF page " + pageNumber}/>
@@ -167,6 +175,23 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
     timeout = window.setTimeout(poll, 1200);
     return () => { cancelled = true; window.clearTimeout(timeout); };
   }, [analysis?.id, analysis?.status, getToken]);
+
+  useEffect(() => {
+    if (!analysis?.id || !["queued", "processing"].includes(analysis.status)) return;
+    let cancelled = false;
+    let timeout;
+    async function poll() {
+      try {
+        const response = await fetch("/api/score-analysis?id=" + encodeURIComponent(analysis.id), { headers: { Authorization: "Bearer " + await getToken() } });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Analysis status unavailable.");
+        if (!cancelled) setAnalysis(body.job);
+      } catch (pollError) { if (!cancelled) setError(pollError.message); }
+      if (!cancelled && ["queued", "processing"].includes(analysis.status)) timeout = window.setTimeout(poll, 2500);
+    }
+    timeout = window.setTimeout(poll, 1200);
+    return () => { cancelled = true; window.clearTimeout(timeout); };
+  }, [analysis?.id, analysis?.status]);
 
   const measures = analysis && analysis.result && analysis.result.measures ? analysis.result.measures : [];
   return <section className="document-viewer" aria-label={file.original_name}>
