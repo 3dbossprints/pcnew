@@ -102,12 +102,13 @@ The current auth API uses Firebase Authentication for identity, Neon for short-l
 
 - `POST /api/auth/email-code` — authenticated request for a six-digit email verification code.
 - `POST /api/auth/verify-email-code` — authenticated code confirmation; verifies the Firebase user.
+- `POST /api/auth/verify-email-link` — one-time link confirmation; does not require an existing sign-in.
 - `POST /api/auth/password-reset` — sends a generic-response password reset email with both a six-digit code and a one-time app link.
 - `POST /api/auth/password-reset-confirm` — accepts the code or the one-time app link token and updates the Firebase password.
 
-Verification codes and reset links expire after five minutes. Codes are stored as SHA-256 hashes, allow at most five guesses, and requests are throttled per account (one per minute, five per rolling hour). Password-reset requests use the same generic response whether or not the email belongs to an account. Reset links are random one-time tokens stored only as hashes; they are not Firebase action links, so the five-minute expiry is enforced by the application.
+Verification codes, verification links and reset links expire after five minutes. Resending verification replaces both the previous code and link. Codes are stored as SHA-256 hashes, allow at most five guesses, and requests are throttled per account (one per minute, five per rolling hour). Password-reset requests use the same generic response whether or not the email belongs to an account. Reset links are random one-time tokens stored only as hashes; they are not Firebase action links, so the five-minute expiry is enforced by the application.
 
-The reset link uses `PUBLIC_APP_URL` if configured, otherwise it defaults to `https://pianocoach.cc.cd`. Set `PUBLIC_APP_URL` if the canonical production domain changes.
+Verification and reset links use `PUBLIC_APP_URL` if configured, otherwise they default to `https://pianocoach.cc.cd`. Set `PUBLIC_APP_URL` if the canonical production domain changes.
 
 Neon migrations:
 - `004_email_verification_codes.sql`
