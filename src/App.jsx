@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { auth } from "./lib/firebase.js";
+import DocumentViewer from "./DocumentViewer.jsx";
 
 const nav = [
   { id: "home", label: "Dashboard", icon: "⌂" },
@@ -210,6 +211,9 @@ function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [drag, setDrag] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [documentUrl, setDocumentUrl] = useState("");
+  const [practiceReference, setPracticeReference] = useState(null);
 
   async function token() {
     if (!auth.currentUser) throw new Error("Please sign in again.");
@@ -256,10 +260,11 @@ function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
   }
   async function openFile(file) {
     try {
-      const response = await fetch("/api/uploads/download?id=" + encodeURIComponent(file.id), { headers: { Authorization: "Bearer " + await token() } });
+      const response = await fetch("/api/uploads/download?id=" + encodeURIComponent(file.id) + "&inline=1", { headers: { Authorization: "Bearer " + await token() } });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "This file couldn't be opened.");
-      window.open(body.url, "_blank", "noopener,noreferrer");
+      setDocumentUrl(body.url);
+      setSelectedDocument(file);
     } catch (e) { setError(e.message || "This file couldn't be opened."); }
   }
   async function deleteFile(file) {
@@ -281,14 +286,16 @@ function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
   const sizeFor = bytes => bytes < 1024 * 1024 ? Math.max(1, Math.round(bytes / 1024)) + " KB" : (bytes / (1024 * 1024)).toFixed(1) + " MB";
 
   return <>
+    {selectedDocument && <DocumentViewer file={selectedDocument} url={documentUrl} getToken={token} onClose={()=>{setSelectedDocument(null);setDocumentUrl("");}} onUseForPractice={(file,audio)=>{setPracticeReference({file,audio});toast("Book and available audio selected as your practice reference.");}}/>}
     <PageHeading eyebrow="YOUR MUSIC LIBRARY" title="Sheet Music" subtitle="Your scores and recordings, securely stored in your own library." action={<Button onClick={()=>document.getElementById("sheet-upload").click()} disabled={uploading}>{uploading?"Uploading…":"＋ Import sheet music"}</Button>}/>
     <div className="panel sheet-converter">
-      <div className="converter-copy"><div className="eyebrow">SHEET MUSIC CONVERTER</div><h2>Your music, ready to play.</h2><p>Upload a score or recording. Your files are saved privately to your Cloudflare library.</p><div className="format-list"><span>PDF</span><span>PNG / JPG</span><span>MusicXML</span><span>MIDI</span><span>MP3 / WAV</span></div></div>
+      <div className="converter-copy"><div className="eyebrow">SHEET MUSIC CONVERTER</div><h2>Your music, ready to play.</h2><p>Upload a score or recording. Your files are saved privately to your Cloudflare library.</p><div className="format-list"><span>PDF</span><span>EPUB</span><span>PNG / JPG</span><span>MusicXML</span><span>MIDI</span><span>MP3 / WAV</span></div></div>
       <label className={`upload-zone ${drag?"dragging":""} ${uploading?"uploading":""}`} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);onFile(e.dataTransfer.files[0]);}}>
-        <input id="sheet-upload" type="file" accept=".pdf,.png,.jpg,.jpeg,.xml,.musicxml,.mid,.midi,.mp3,.m4a,.mp4,.webm,.wav" disabled={uploading} onChange={e=>{onFile(e.target.files[0]);e.target.value="";}}/>
-        <span className="upload-icon">{uploading?"◌":"↑"}</span><strong>{uploading?"Saving to your library…":"Drop a score here, or browse files"}</strong><small>PDF, PNG, JPG, MusicXML, MIDI or audio · Maximum 25 MB</small><span className="upload-browse">{uploading?"Please wait":"Choose a file"}</span>
+        <input id="sheet-upload" type="file" accept=".pdf,.epub,.png,.jpg,.jpeg,.xml,.musicxml,.mid,.midi,.mp3,.m4a,.mp4,.webm,.wav" disabled={uploading} onChange={e=>{onFile(e.target.files[0]);e.target.value="";}}/>
+        <span className="upload-icon">{uploading?"◌":"↑"}</span><strong>{uploading?"Saving to your library…":"Drop a score here, or browse files"}</strong><small>PDF, EPUB, PNG, JPG, MusicXML, MIDI or audio · Maximum 25 MB</small><span className="upload-browse">{uploading?"Please wait":"Choose a file"}</span>
       </label>
     </div>
+    {practiceReference && <div className="library-error">Practice reference selected: {practiceReference.file.original_name}{practiceReference.audio ? " · embedded audio available" : ""}<button onClick={()=>setPracticeReference(null)}>Clear</button></div>}
     {error && <div className="library-error" role="alert">{error}<button onClick={()=>setError("")}>Dismiss</button></div>}
     <div className="tabs-row"><button className={tab==="my-sheets"?"active":""} onClick={()=>setTab("my-sheets")}>My library <span>{files.length}</span></button><button className={tab==="recent"?"active":""} onClick={()=>setTab("recent")}>Recently added</button><div className="search-box"><Icon>⌕</Icon><input placeholder="Search your music..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
     {loading ? <div className="empty-state"><span>◌</span><h3>Loading your library…</h3></div> :
