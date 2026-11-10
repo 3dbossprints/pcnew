@@ -4,9 +4,7 @@ import { auth } from "./lib/firebase.js";
 const nav = [
   { id: "home", label: "Dashboard", icon: "⌂" },
   { id: "practice", label: "Practice", icon: "♫" },
-  { id: "sheets", label: "Sheet Music", icon: "▤" },
-  { id: "grade", label: "Grade Plan", icon: "▥" },
-  { id: "extras", label: "Extras", icon: "✳", pro: true },
+  { id: "profile", label: "Profile", icon: "◉" },
 ];
 const pieces = [
   { title: "Clair de Lune", composer: "Claude Debussy", detail: "Performance piece · Grade 5", progress: 72, time: "12 min ago", tag: "Needs attention" },
@@ -107,7 +105,7 @@ export default function App() {
       <button className="collapse-button" onClick={() => setCollapsed(v => !v)} aria-label="Toggle sidebar"><Icon>☰</Icon></button>
       <div className="nav-caption">{!collapsed && "WORKSPACE"}</div>
       <nav className="main-nav">
-        {nav.map(item => <button key={item.id} className={`nav-item ${page === item.id && !showProfile ? "active" : ""}`} onClick={() => item.pro ? toast("Extras is available with Piano Coach Pro.") : go(item.id)} title={collapsed ? item.label : undefined}>
+        {nav.map(item => <button key={item.id} className={`nav-item ${(item.id === "profile" ? showProfile : page === item.id && !showProfile) ? "active" : ""}`} onClick={() => item.id === "profile" ? (setShowProfile(true), setShowAdmin(false)) : go(item.id)} title={collapsed ? item.label : undefined}>
           <Icon>{item.icon}</Icon>{!collapsed && <><span>{item.label}</span>{item.pro && <span className="pro-pill">PRO</span>}</>}
         </button>)}
       </nav>
@@ -117,8 +115,6 @@ export default function App() {
         {collapsed && <button className="mini-cta" onClick={() => go("practice")}>✧</button>}
       </div>
       <div className="sidebar-bottom">
-        <button className={`nav-item ${showProfile ? "active" : ""}`} onClick={() => {setShowProfile(true);setShowAdmin(false);}}><Icon>◉</Icon>{!collapsed && <span>Profile & settings</span>}</button>
-        <button className="nav-item" onClick={() => toast("Help centre is coming soon.")}><Icon>?</Icon>{!collapsed && <span>Help & support</span>}</button>
         <div className="user-chip"><div className="avatar">{studentInitials}</div>{!collapsed && <div className="user-meta"><strong>{studentName}</strong><small>{studentProfile?.grade || "Piano student"}{studentProfile?.exam_board ? " · " + studentProfile.exam_board : ""}</small></div>}{!collapsed && <span className="more">•••</span>}</div>
       </div>
     </aside>
