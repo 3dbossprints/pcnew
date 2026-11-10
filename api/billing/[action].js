@@ -50,7 +50,7 @@ async function checkout(req,res) {
     const session=await stripeApi.checkout.sessions.create({
       mode:"subscription",
       ui_mode:"embedded",
-      redirect_on_completion:"if_required",
+      redirect_on_completion:"always",
       return_url:appUrl()+"/?checkout=complete&session_id={CHECKOUT_SESSION_ID}",
       customer:customerId,
       client_reference_id:user.uid,
@@ -92,7 +92,12 @@ async function confirm(req,res) {
     } else {
       const existing=await database().query("SELECT stripe_customer_id FROM users WHERE firebase_uid=$1",[user.uid]);
       customerId=existing.rows[0]?.stripe_customer_id || null;
-      if (!customerId) return sendJson(res,404,{error:"No Stripe customer is linked to your account yet."});
+      if (!customerId) {
+        const customers=await stripeApi.customers.search({query:"metadata['firebase_uid']:'"+user.uid+"'",limit:10});
+        const ownedCustomer=customers.data.find(customer=>customer.metadata?.firebase_uid===user.uid);
+        customerId=ownedCustomer?.id || null;
+      }
+      if (!customerId) return sendJson(res,202,{pending:true,message:"We're still locating your Stripe customer record."});
       const subscriptions=await stripeApi.subscriptions.list({customer:customerId,status:"all",limit:100});
       subscription=subscriptions.data.find(item =>
         item.metadata?.firebase_uid===user.uid && ["active","trialing","past_due"].includes(item.status)
