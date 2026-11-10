@@ -16,8 +16,9 @@ export default async function handler(req, res) {
       await db.query("DELETE FROM email_verification_codes WHERE firebase_uid=$1",[row.firebase_uid]);
       return sendJson(res,400,{error:"This verification link has expired. Request a new one."});
     }
+    const claimed=await db.query("DELETE FROM email_verification_codes WHERE firebase_uid=$1 AND link_token_hash=$2 AND expires_at>NOW() RETURNING firebase_uid",[row.firebase_uid,digest(token)]);
+    if (!claimed.rowCount) return sendJson(res,400,{error:"This verification link has already been used."});
     await adminAuth().updateUser(row.firebase_uid,{emailVerified:true});
-    await db.query("DELETE FROM email_verification_codes WHERE firebase_uid=$1",[row.firebase_uid]);
     return sendJson(res,200,{verified:true});
   } catch(error) {
     console.error("POST /api/auth/verify-email-link failed:",error.message);
