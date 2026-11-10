@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   if (typeof fileId !== "string" || !/^[0-9a-f-]{36}$/i.test(fileId)) return sendJson(res, 400, { error: "Invalid upload reference." });
   try {
     const found = await database().query(
-      "SELECT id, object_key, size_bytes, content_type, kind, metadata FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'pending'",
+      "SELECT id, object_key, original_name, size_bytes, content_type, kind, metadata FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'pending'",
       [fileId, user.uid],
     );
     if (!found.rowCount) return sendJson(res, 404, { error: "This upload was not found or has already been completed." });
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     if (!updated.rowCount) return sendJson(res, 409, { error: "This upload has already been completed." });
     const uploadPurpose = expected.metadata?.purpose || purpose || "library";
     if (uploadPurpose === "exam_book") {
-      if (expected.kind !== "sheet" || !/\\.(pdf|epub)$/i.test(expected.object_key ? (expected.original_name || "") : "")) return sendJson(res, 415, { error: "Exam-board ebooks must be PDF or EPUB files." });
+      if (expected.kind !== "sheet" || !/\.(pdf|epub)$/i.test(expected.original_name || "")) return sendJson(res, 415, { error: "Exam-board ebooks must be PDF or EPUB files." });
       await database().query("UPDATE users SET exam_book_file_id = $2, exam_book_skipped = false, exam_book_uploaded_at = NOW(), updated_at = NOW() WHERE firebase_uid = $1", [user.uid, fileId]);
     }
     return sendJson(res, 200, { file: updated.rows[0], purpose: uploadPurpose });
