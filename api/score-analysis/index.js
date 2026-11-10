@@ -41,6 +41,7 @@ export default async function handler(req, res) {
   if (!process.env.OMR_SERVICE_URL || !process.env.OMR_SERVICE_TOKEN) {
     return sendJson(res, 503, { error: "The score-recognition service has not been connected yet. Your document is safe; analysis is not available until the OMR worker is deployed." });
   }
+  let jobId = null;
   try {
     const found = await database().query(
       "SELECT id, object_key, original_name, content_type, size_bytes FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'ready'",
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
       "INSERT INTO score_analysis_jobs (firebase_uid, file_id, status) VALUES ($1, $2, 'queued') RETURNING id",
       [user.uid, fileId],
     );
-    const jobId = inserted.rows[0].id;
+    jobId = inserted.rows[0].id;
     const sourceUrl = await getSignedUrl(storage(), new GetObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME, Key: file.object_key,
       ResponseContentDisposition: "inline; filename*=UTF-8''" + encodeURIComponent(file.original_name),
@@ -74,6 +75,11 @@ export default async function handler(req, res) {
     await database().query("UPDATE score_analysis_jobs SET status = 'processing', updated_at = NOW() WHERE id = $1", [jobId]);
     return sendJson(res, 202, { job: { id: jobId, status: "processing", message: "Your score has been queued for notation recognition." } });
   } catch (error) {
+    if (jobId) {
+      try {
+        await database().query("UPDATE score_analysis_jobs SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1", [jobId, "The recognition worker could not accept this document."]);
+      } catch { /* Preserve the original queue error. */ }
+    }
     console.error("POST /api/score-analysis failed:", error.message);
     return sendJson(res, 503, { error: "Score analysis could not be queued. Please try again later." });
   }
