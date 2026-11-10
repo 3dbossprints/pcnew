@@ -75,7 +75,7 @@ export default function App() {
     if (!practiceSessionId) {
       try {
         const token = await auth.currentUser.getIdToken();
-        const response = await fetch("/api/practice/start", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "standard" }) });
+        const response = await fetch("/api/practice/start", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "standard", referenceFileId: practiceReference?.file?.id || null }) });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Could not start practice.");
         setPracticeSessionId(body.session.id);
@@ -133,8 +133,8 @@ export default function App() {
         {showProfile ? <Profile theme={theme} setTheme={setTheme} notation={notation} setNotation={setNotation} reminders={reminders} setReminders={setReminders} toast={toast} profileTab={profileTab} setProfileTab={setProfileTab} studentProfile={studentProfile}/> :
         showAdmin ? <Admin toast={toast}/> :
         page === "home" ? <Dashboard go={go} streak={streak} setStreak={setStreak} toast={toast} studentName={studentName} studentProfile={studentProfile}/> :
-        page === "practice" ? <Practice running={practiceRunning} setRunning={setPracticeRunning} onStart={startPractice} onFinish={finishPractice} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
-        page === "sheets" ? <SheetMusic search={search} setSearch={setSearch} fileName={fileName} setFileName={setFileName} toast={toast}/> :
+        page === "practice" ? <Practice reference={practiceReference} running={practiceRunning} setRunning={setPracticeRunning} onStart={startPractice} onFinish={finishPractice} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
+        page === "sheets" ? <SheetMusic reference={practiceReference} setReference={setPracticeReference} search={search} setSearch={setSearch} fileName={fileName} setFileName={setFileName} toast={toast}/> :
         page === "grade" ? <GradePlan toast={toast}/> :
         page === "extras" ? <Extras toast={toast}/> : null}
       </div>
@@ -182,7 +182,7 @@ function Dashboard({ go, streak, setStreak, toast, studentName, studentProfile }
 }
 function Stat({ label, value, note, icon }) { return <div className="stat-card"><div className="stat-top"><span>{label}</span><i>{icon}</i></div><strong>{value}</strong><small>{note}</small></div>; }
 
-function Practice({ running, setRunning, onStart, onFinish, time, seconds, selected, setSelected, toast }) {
+function Practice({ reference, running, setRunning, onStart, onFinish, time, seconds, selected, setSelected, toast }) {
   const [hand, setHand] = useState("both");
   const [tempo, setTempo] = useState(72);
   const [finished, setFinished] = useState(false);
@@ -190,7 +190,7 @@ function Practice({ running, setRunning, onStart, onFinish, time, seconds, selec
     <PageHeading eyebrow="YOUR PRACTICE SPACE" title="Let's make some music." subtitle="Choose a focus, settle in, and enjoy the process." action={<span className="session-chip"><i/> SESSION READY</span>}/>
     <div className="practice-layout">
       <section className="panel practice-main">
-        <div className="practice-piece-head"><div><div className="eyebrow">CURRENTLY PRACTISING</div><h2>{selected.title}</h2><p>{selected.sub} · Grade 5 ABRSM</p></div><button className="text-link" onClick={() => toast("Piece selector opened from your Grade Plan.")}>Change piece ↗</button></div>
+        <div className="practice-piece-head"><div><div className="eyebrow">CURRENTLY PRACTISING</div>{reference && <p className="practice-reference-chip">Using book/score reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio found" : ""}</p>}<h2>{selected.title}</h2><p>{selected.sub} · Grade 5 ABRSM</p></div><button className="text-link" onClick={() => toast("Piece selector opened from your Grade Plan.")}>Change piece ↗</button></div>
         <div className="practice-sheet"><div className="sheet-top"><span>CLAIR DE LUNE</span><span>Claude Debussy</span></div><div className="staff"><div className="clef">𝄞</div><div className="staff-lines"><div className="bar"><i className="note n1"/><i className="note n2"/><i className="note n3"/><i className="note n4"/></div><div className="bar"><i className="note n5"/><i className="note n6"/><i className="note n7"/></div><div className="bar"><i className="note n8"/><i className="note n9"/><i className="note n10"/></div></div></div><div className="staff second"><div className="clef bass">𝄢</div><div className="staff-lines"><div className="bar"><i className="note n2"/><i className="note n4"/><i className="note n6"/></div><div className="bar"><i className="note n1"/><i className="note n3"/><i className="note n8"/></div><div className="bar"><i className="note n5"/><i className="note n7"/></div></div></div><div className="sheet-page">1</div></div>
         <div className="sheet-caption"><span>Illustrative score preview</span><button onClick={() => toast("Full score view will open when a score is connected.")}>Open full sheet ↗</button></div>
         <div className="practice-controls"><div className="hand-select"><span>HANDS</span>{["right","both","left"].map(v=><button key={v} className={hand===v?"selected":""} onClick={()=>setHand(v)}>{v==="both"?"Both":v==="right"?"Right":"Left"}</button>)}</div><div className="tempo-control"><span>TEMPO <b>{tempo} BPM</b></span><input type="range" min="40" max="180" value={tempo} onChange={e=>setTempo(+e.target.value)}/></div></div>
@@ -204,7 +204,7 @@ function Practice({ running, setRunning, onStart, onFinish, time, seconds, selec
   </>;
 }
 
-function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
+function SheetMusic({ reference, setReference, search, setSearch, fileName, setFileName, toast }) {
   const [tab, setTab] = useState("my-sheets");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -286,7 +286,7 @@ function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
   const sizeFor = bytes => bytes < 1024 * 1024 ? Math.max(1, Math.round(bytes / 1024)) + " KB" : (bytes / (1024 * 1024)).toFixed(1) + " MB";
 
   return <>
-    {selectedDocument && <DocumentViewer file={selectedDocument} url={documentUrl} getToken={token} onClose={()=>{setSelectedDocument(null);setDocumentUrl("");}} onUseForPractice={(file,audio)=>{setPracticeReference({file,audio});toast("Book and available audio selected as your practice reference.");}}/>}
+    {selectedDocument && <DocumentViewer file={selectedDocument} url={documentUrl} getToken={token} onClose={()=>{setSelectedDocument(null);setDocumentUrl("");}} onUseForPractice={(file,audio)=>{setReference({file,audioAvailable:!!audio});setSelectedDocument(null);setDocumentUrl("");toast("Book and available audio selected for practice.");}}/>}
     <PageHeading eyebrow="YOUR MUSIC LIBRARY" title="Sheet Music" subtitle="Your scores and recordings, securely stored in your own library." action={<Button onClick={()=>document.getElementById("sheet-upload").click()} disabled={uploading}>{uploading?"Uploading…":"＋ Import sheet music"}</Button>}/>
     <div className="panel sheet-converter">
       <div className="converter-copy"><div className="eyebrow">SHEET MUSIC CONVERTER</div><h2>Your music, ready to play.</h2><p>Upload a score or recording. Your files are saved privately to your Cloudflare library.</p><div className="format-list"><span>PDF</span><span>EPUB</span><span>PNG / JPG</span><span>MusicXML</span><span>MIDI</span><span>MP3 / WAV</span></div></div>
@@ -295,7 +295,7 @@ function SheetMusic({ search, setSearch, fileName, setFileName, toast }) {
         <span className="upload-icon">{uploading?"◌":"↑"}</span><strong>{uploading?"Saving to your library…":"Drop a score here, or browse files"}</strong><small>PDF, EPUB, PNG, JPG, MusicXML, MIDI or audio · Maximum 25 MB</small><span className="upload-browse">{uploading?"Please wait":"Choose a file"}</span>
       </label>
     </div>
-    {practiceReference && <div className="library-error">Practice reference selected: {practiceReference.file.original_name}{practiceReference.audio ? " · embedded audio available" : ""}<button onClick={()=>setPracticeReference(null)}>Clear</button></div>}
+    {reference && <div className="library-error">Selected practice reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio detected" : ""}<button onClick={()=>setReference(null)}>Clear</button></div>}
     {error && <div className="library-error" role="alert">{error}<button onClick={()=>setError("")}>Dismiss</button></div>}
     <div className="tabs-row"><button className={tab==="my-sheets"?"active":""} onClick={()=>setTab("my-sheets")}>My library <span>{files.length}</span></button><button className={tab==="recent"?"active":""} onClick={()=>setTab("recent")}>Recently added</button><div className="search-box"><Icon>⌕</Icon><input placeholder="Search your music..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
     {loading ? <div className="empty-state"><span>◌</span><h3>Loading your library…</h3></div> :
