@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { unzipSync } from "fflate";
 import ePub from "epubjs";
 import "./DocumentViewer.css";
@@ -149,6 +150,23 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
     setPassword("");
     setBusy(true);
   }
+
+  useEffect(() => {
+    if (!analysis?.id || !["queued", "processing"].includes(analysis.status)) return;
+    let cancelled = false;
+    let timeout;
+    async function poll() {
+      try {
+        const response = await fetch("/api/score-analysis?id=" + encodeURIComponent(analysis.id), { headers: { Authorization: "Bearer " + await getToken() } });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Analysis status unavailable.");
+        if (!cancelled) setAnalysis(body.job);
+      } catch (pollError) { if (!cancelled) setError(pollError.message); }
+      if (!cancelled && ["queued", "processing"].includes(analysis.status)) timeout = window.setTimeout(poll, 2500);
+    }
+    timeout = window.setTimeout(poll, 1200);
+    return () => { cancelled = true; window.clearTimeout(timeout); };
+  }, [analysis?.id, analysis?.status, getToken]);
 
   const measures = analysis && analysis.result && analysis.result.measures ? analysis.result.measures : [];
   return <section className="document-viewer" aria-label={file.original_name}>
