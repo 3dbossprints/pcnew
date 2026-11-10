@@ -76,29 +76,49 @@ export default function OnboardingGate({ children }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("checkout") !== "complete" || !profile || profile.onboarding_completed) return undefined;
+    const sessionId = params.get("session_id");
+    if (params.get("checkout") !== "complete" || !sessionId || !profile || profile.onboarding_completed) return undefined;
     let active = true;
     setPaymentConfirming(true);
     async function confirmPayment() {
       for (let attempt = 0; attempt < 12 && active; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
         try {
           const token = await auth.currentUser.getIdToken(true);
-          const response = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } });
-          const body = await response.json();
-          if (response.ok && body.user?.onboarding_completed) {
-            if (active) {
-              setProfile(body.user);
-              setPaymentConfirming(false);
-              window.history.replaceState({}, "", window.location.pathname);
+          const confirmation = await fetch("/api/billing/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+            body: JSON.stringify({ sessionId }),
+          });
+          const confirmationBody = await confirmation.json().catch(() => ({}));
+          if (confirmation.ok) {
+            const refreshed = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } });
+            const refreshedBody = await refreshed.json();
+            if (refreshed.ok && refreshedBody.user?.onboarding_completed) {
+              if (active) {
+                setProfile(refreshedBody.user);
+                setPaymentConfirming(false);
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete("checkout");
+                cleanUrl.searchParams.delete("session_id");
+                window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+              }
+              return;
             }
+          } else if (confirmation.status !== 202 && confirmation.status !== 503) {
+            throw new Error(confirmationBody.error || "We couldn't verify this checkout session.");
+          }
+        } catch (error) {
+          if (active && error.message && !error.message.includes("fetch")) {
+            setPaymentConfirming(false);
+            setError(error.message);
             return;
           }
-        } catch {}
+        }
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
       if (active) {
         setPaymentConfirming(false);
-        setError("Your payment is being confirmed by Stripe. Please refresh in a moment; your access will unlock automatically when confirmation arrives.");
+        setError("Your payment was submitted, but Stripe is taking longer than expected to confirm it. Your access will unlock as soon as confirmation completes. Please contact support if this continues.");
       }
     }
     confirmPayment();
