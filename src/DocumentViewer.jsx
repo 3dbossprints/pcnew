@@ -135,7 +135,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
   async function requestAnalysis() {
     setAnalysisBusy(true); setError("");
     try {
-      const response = await fetch("/api/score-analysis", {
+      const response = await fetch("/api/uploads?analysis=1", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + await getToken() },
         body: JSON.stringify({ fileId: file.id }),
@@ -164,7 +164,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
     let timeout;
     async function poll() {
       try {
-        const response = await fetch("/api/score-analysis?id=" + encodeURIComponent(analysis.id), { headers: { Authorization: "Bearer " + await getToken() } });
+        const response = await fetch("/api/uploads?analysisJob=" + encodeURIComponent(analysis.id), { headers: { Authorization: "Bearer " + await getToken() } });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Analysis status unavailable.");
         if (!cancelled) setAnalysis(body.job);
