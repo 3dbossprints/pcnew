@@ -64,7 +64,6 @@ function PdfPage({ pdf, pageNumber, measures }) {
 
 export default function DocumentViewer({ file, url, onClose, getToken, onUseForPractice }) {
   const [pdf, setPdf] = useState(null);
-  const [epubReady, setEpubReady] = useState(false);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [password, setPassword] = useState("");
@@ -79,7 +78,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
 
   useEffect(() => {
     let cancelled = false;
-    setBusy(true); setError(""); setPdf(null); setEpubReady(false); setAudioTracks([]);
+    setBusy(true); setError(""); setPdf(null); setAudioTracks([]);
     async function load() {
       try {
         if (pdfFile(file)) {
@@ -97,7 +96,6 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
           const view = book.renderTo(epubHost.current, { width: "100%", height: "100%", spread: "auto", flow: "paginated" });
           rendition.current = view;
           await view.display();
-          if (!cancelled) setEpubReady(true);
           try {
             const response = await fetch(url);
             if (!response.ok) throw new Error("EPUB archive unavailable.");
@@ -158,22 +156,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
     setBusy(true);
   }
 
-  useEffect(() => {
-    if (!analysis?.id || !["queued", "processing"].includes(analysis.status)) return;
-    let cancelled = false;
-    let timeout;
-    async function poll() {
-      try {
-        const response = await fetch("/api/score-analysis?id=" + encodeURIComponent(analysis.id), { headers: { Authorization: "Bearer " + await getToken() } });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Analysis status unavailable.");
-        if (!cancelled) setAnalysis(body.job);
-      } catch (pollError) { if (!cancelled) setError(pollError.message); }
-      if (!cancelled && ["queued", "processing"].includes(analysis.status)) timeout = window.setTimeout(poll, 2500);
-    }
-    timeout = window.setTimeout(poll, 1200);
-    return () => { cancelled = true; window.clearTimeout(timeout); };
-  }, [analysis?.id, analysis?.status, getToken]);
+
 
   useEffect(() => {
     if (!analysis?.id || !["queued", "processing"].includes(analysis.status)) return;
@@ -211,7 +194,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
       <button type="submit" disabled={!password.trim()}>Unlock PDF</button>
     </form>}
     {pdf && <div className="document-pdf-scroll">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} measures={measures}/>)}</div>}
-    {epubFile(file) && <div className="document-epub-host" ref={epubHost} hidden={!epubReady}/>}
+    {epubFile(file) && <div className="document-epub-host" ref={epubHost}/>}
     {audioTracks.length > 0 && <div className="document-audio-tracks"><strong>Audio included with this book</strong>{audioTracks.map(track => <div key={track.url}><span>{track.name}</span><audio controls preload="metadata" src={track.url}/></div>)}</div>}
   </section>;
 }
