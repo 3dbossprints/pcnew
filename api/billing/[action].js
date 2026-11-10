@@ -50,7 +50,7 @@ async function checkout(req,res) {
     const session=await stripeApi.checkout.sessions.create({
       mode:"subscription",
       ui_mode:"embedded",
-      redirect_on_completion:"if_required",
+      redirect_on_completion:"always",
       return_url:appUrl()+"/?checkout=complete&session_id={CHECKOUT_SESSION_ID}",
       customer:customerId,
       client_reference_id:user.uid,
