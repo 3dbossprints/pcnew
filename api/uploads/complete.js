@@ -28,7 +28,7 @@ export default async function handler(req, res) {
       return sendJson(res, 400, { error: "The uploaded file did not match its expected size and type." });
     }
     const updated = await database().query(
-      "UPDATE user_files SET status = 'ready', updated_at = NOW() WHERE id = $1 AND firebase_uid = $2 AND status = 'pending' RETURNING id, original_name, content_type, size_bytes, kind, status, created_at",
+      "UPDATE user_files SET status = 'ready', updated_at = NOW() WHERE id = $1 AND firebase_uid = $2 AND status = 'pending' RETURNING id, original_name, content_type, size_bytes, kind, metadata, status, created_at",
       [fileId, user.uid],
     );
     if (!updated.rowCount) return sendJson(res, 409, { error: "This upload has already been completed." });
