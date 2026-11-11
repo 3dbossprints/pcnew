@@ -35,7 +35,7 @@ function formatDuration(seconds) {
   const minutes = Math.floor((value % 3600) / 60);
   return hours ? hours + "h " + minutes + "m" : minutes + "m";
 }
-function formatDate(value) {
+function currentWeekDateKeys() {\n  const monday = new Date();\n  monday.setHours(0,0,0,0);\n  monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));\n  return Array.from({length:7},(_,index)=>{const day=new Date(monday);day.setDate(monday.getDate()+index);return day.getFullYear()+"-"+String(day.getMonth()+1).padStart(2,"0")+"-"+String(day.getDate()).padStart(2,"0");});\n}\nfunction formatDate(value) {
   if (!value) return "Not set";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -149,7 +149,7 @@ export default function App() {
       png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", mp3: "audio/mpeg",
       m4a: "audio/mp4", mp4: "audio/mp4", webm: "audio/webm", wav: "audio/wav",
     };
-    const contentType = file.type || contentTypes[ext];
+    const contentType = contentTypes[ext] || file.type;
     const signed = await api("/api/uploads/sign", { method: "POST", body: { filename: file.name, contentType, size: file.size, purpose, category } });
     const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
     if (!put.ok) throw new Error("Secure storage rejected the upload. Please check the connection and try again.");
@@ -251,7 +251,7 @@ export default function App() {
     {showLibrary && <LibraryModal files={files} busy={documentBusy} onClose={() => setShowLibrary(false)} onOpen={openFile} onUpload={uploadFile} onRefresh={refresh} toast={toast} plan={plan}/>}
     {openedDocument && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
       {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={openedDocument.xml} title={openedDocument.file.original_name}/></div> :
-        <DocumentViewer file={document.file} url={openedDocument.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setOpenedDocument(null)} onUseForPractice={(file) => { setOpenedDocument(null); beginPractice(null,"full","standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
+        <DocumentViewer file={openedDocument.file} url={openedDocument.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setOpenedDocument(null)} onUseForPractice={(file) => { setOpenedDocument(null); beginPractice(null,"full","standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
     </Suspense>}
     {notice && <div className={"pc-toast " + noticeType} role="status"><span>{noticeType === "error" ? "!" : "✓"}</span>{notice}</div>}
   </div>;
@@ -266,7 +266,7 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const todaySeconds = Number(summary.todaySeconds || 0);
   const remaining = Math.max(0, 900 - todaySeconds);
   const demoRemaining = Math.max(0, 3600 - Number(user.demo_seconds_used || 0));
-  const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));
+  const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));\n  const weekDates = currentWeekDateKeys();\n  const practiced = new Set(summary.practiceDays || []);
   const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, data.attempts || []), 0) / tasks.length) : null;
   return <div className="pc-dashboard">
     <div className="pc-welcome-row"><div><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}<em>.</em></h1><p>Make a little space for music today.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Your sheet music <span>↗</span></button></div>
@@ -296,7 +296,7 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
     </div>
     {user.plan === "pro" && <section className="pc-extras-strip"><div><span className="pc-eyebrow">PIANO COACH PRO</span><h3>Your music, beyond the syllabus.</h3><p>Bring in a piece you love and keep it separate from your graded learning.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open your music collection ↗</button></section>}
     <section className="pc-lower-grid">
-      <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">A STEADY RHYTHM</span><h3>Your practice this week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{WEEKDAYS.slice(1).concat(WEEKDAYS[0]).map((day,index) => { const complete = (summary.practiceDaysThisWeek || 0) > index && index < 7; return <div key={day} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise for at least 15 minutes in a day to keep your streak going.</p></div>
+      <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">A STEADY RHYTHM</span><h3>Your practice this week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{weekDates.map((date,index) => { const complete = practiced.has(date); const day = WEEKDAYS[(index+1)%7]; return <div key={date} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise for at least 15 minutes in a day to keep your streak going.</p></div>
       <div className="pc-panel pc-materials-panel"><div><span className="pc-eyebrow">YOUR MATERIALS</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") + " in your collection." : "Keep scores and recordings together in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection ↗</button></div>
     </section>
   </div>;
@@ -771,7 +771,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   async function startCheckout(){
     try{
       const selected=checkoutPlan;
-      const saved=await api("/api/profile",{method:"PATCH",body:{examBoard:user.exam_board,grade:user.grade,plan:selected,interval:"monthly",targetDate,bookSources:Array.isArray(user.book_sources)?user.book_sources:[],examBookSkipped:!user.exam_book_file_id}});
+      await api("/api/profile",{method:"PATCH",body:{examBoard:user.exam_board,grade:user.grade,plan:selected,interval:"monthly",targetDate,bookSources:Array.isArray(user.book_sources)?user.book_sources:[],examBookSkipped:!user.exam_book_file_id}});
       const checkout=await api("/api/billing/checkout",{method:"POST",body:{plan:selected,interval:"monthly"}});
       setCheckoutSecret(checkout.clientSecret);
     }catch(error){setAccountMessage(error.message||"Checkout could not be opened.");}
@@ -815,6 +815,28 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
       <div className="pc-profile-save"><button className="pc-button dark" disabled={saving}>{saving?"Saving…":"Save profile and preferences"}</button></div>
     </form>
   </div>;
+}
+
+
+function CheckoutModal({clientSecret,onClose}){
+  const mountRef=useRef(null);
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    let active=true,checkout=null;
+    async function mount(){
+      try{
+        const {loadStripe}=await import("@stripe/stripe-js");
+        const stripe=await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+        if(!stripe)throw new Error("Stripe could not be loaded. Check the publishable key.");
+        checkout=await stripe.initEmbeddedCheckout({clientSecret});
+        if(active&&mountRef.current){checkout.mount(mountRef.current);setLoading(false);}
+      }catch(reason){if(active){setError(reason.message||"Secure checkout could not be opened.");setLoading(false);}}
+    }
+    mount();
+    return()=>{active=false;try{checkout?.destroy();}catch{}};
+  },[clientSecret]);
+  return <div className="pc-overlay pc-checkout-overlay"><section className="pc-modal pc-checkout-modal"><button className="pc-modal-close" onClick={onClose}>×</button><span className="pc-eyebrow">SECURE CHECKOUT</span><h2>Complete your subscription.</h2>{loading&&<p>Preparing secure checkout…</p>}{error&&<p className="pc-form-error">{error}</p>}<div ref={mountRef}/></section></div>;
 }
 
 function Toggle({value,onChange}){return <button type="button" role="switch" aria-checked={value} className={"pc-toggle "+(value?"on":"")} onClick={()=>onChange(!value)}><i/></button>;}
