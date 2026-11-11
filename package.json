@@ -22,7 +22,8 @@
     "@stripe/stripe-js": "^7.9.0",
     "pdfjs-dist": "^4.10.38",
     "epubjs": "^0.3.93",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "tone": "15.1.22"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
