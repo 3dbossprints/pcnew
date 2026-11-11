@@ -569,7 +569,8 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   async function saveRecording(blob) {
     if(!blob||blob.size<1024)return null;
     const extension=blob.type.includes("mp4")?"m4a":"webm";
-    const recordingType=extension==="m4a"?"audio/mp4":"audio/webm";\n    const file=new File([blob],"practice-recording-"+new Date().toISOString().replace(/[:.]/g,"-")+"."+extension,{type:recordingType});
+    const recordingType=extension==="m4a"?"audio/mp4":"audio/webm";
+    const file=new File([blob],"practice-recording-"+new Date().toISOString().replace(/[:.]/g,"-")+"."+extension,{type:recordingType});
     try{
       const signed=await api("/api/uploads/sign",{method:"POST",body:{filename:file.name,contentType:file.type||"audio/webm",size:file.size,purpose:"library",category:"recordings"}});
       const put=await fetch(signed.uploadUrl,{method:"PUT",headers:{"Content-Type":file.type||"audio/webm"},body:file});
@@ -731,7 +732,8 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [accountMessage,setAccountMessage]=useState("");
   const [interfaceOpen,setInterfaceOpen]=useState(false);
   const [scheduleEnabled,setScheduleEnabled]=useState(false);
-  const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");\n  const [checkoutSecret,setCheckoutSecret]=useState("");
+  const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");
+  const [checkoutSecret,setCheckoutSecret]=useState("");
   const plan=user.plan||"free";
   const connected=(auth.currentUser?.providerData||[]).map(provider=>provider.providerId);
   async function saveProfile(event){
