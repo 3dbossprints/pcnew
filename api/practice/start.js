@@ -8,44 +8,47 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
   if (!user.emailVerified) return sendJson(res, 403, { error: "Verify your email address before practising." });
-  const { mode = "standard", taskId = null, referenceFileId = null, practiceType = "graded" } = req.body || {};
+  const { mode = "standard", taskId = null, referenceFileId = null, practiceType = "graded", sectionKey = "full" } = req.body || {};
   if (!["graded", "personal"].includes(practiceType)) return sendJson(res, 400, { error: "Choose a valid practice type." });
   if (!["assisted", "standard"].includes(mode)) return sendJson(res, 400, { error: "Choose a valid practice mode." });
-  if (taskId !== null && (typeof taskId !== "string" || !/^[0-9a-f-]{36}$/i.test(taskId))) {
-    return sendJson(res, 400, { error: "Invalid practice task." });
-  }
+  if (taskId !== null && (typeof taskId !== "string" || !/^[0-9a-f-]{36}$/i.test(taskId))) return sendJson(res, 400, { error: "Invalid practice task." });
   if (referenceFileId !== null && (typeof referenceFileId !== "string" || !/^[0-9a-f-]{36}$/i.test(referenceFileId))) return sendJson(res, 400, { error: "Invalid sheet music reference." });
+  if (typeof sectionKey !== "string" || sectionKey.length > 40 || !/^(full|section-[1-9]\d{0,2})$/.test(sectionKey)) return sendJson(res, 400, { error: "Choose a valid practice section." });
   try {
+    if (taskId) {
+      const task = await database().query("SELECT id FROM practice_tasks WHERE id=$1 AND firebase_uid=$2 AND is_archived=false", [taskId,user.uid]);
+      if (!task.rowCount) return sendJson(res, 404, { error: "This learning task is not available in your Grade Plan." });
+    }
     if (referenceFileId) {
-      const reference = await database().query("SELECT id FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'ready' AND kind = 'sheet' AND ($3 = 'graded' OR metadata->>'purpose' = 'personal_piece')", [referenceFileId, user.uid, practiceType]);
+      const reference = await database().query("SELECT id FROM user_files WHERE id=$1 AND firebase_uid=$2 AND status='ready' AND kind='sheet' AND ($3='graded' OR metadata->>'purpose'='personal_piece')", [referenceFileId,user.uid,practiceType]);
       if (!reference.rowCount) return sendJson(res, 404, { error: "The selected book or score is not available in your library." });
     }
-    const account = await database().query(
-      "SELECT plan, demo_seconds_used, exam_book_file_id FROM users WHERE firebase_uid = $1",
-      [user.uid],
-    );
-    if (!account.rowCount) return sendJson(res, 404, { error: "Complete your account setup first." });
-    if (practiceType === "graded" && account.rows[0].plan !== "free" && !account.rows[0].exam_book_file_id) return sendJson(res, 403, { error: "Upload your exam-board ebook to unlock graded learning. You can still practise your own pieces in Pro Extras." });
-    if (practiceType === "personal" && account.rows[0].plan !== "pro") return sendJson(res, 403, { error: "Personal-piece practice in Extras requires Piano Coach Pro." });
-    if (practiceType === "personal" && !referenceFileId) return sendJson(res, 400, { error: "Choose one of your uploaded personal pieces first." });
-    if (account.rows[0].plan === "free" && account.rows[0].demo_seconds_used >= 3600) {
-      return sendJson(res, 403, { error: "Your free 60-minute demo has been used. Subscribe to continue practising." });
+    const account = await database().query("SELECT plan,demo_seconds_used,exam_book_file_id FROM users WHERE firebase_uid=$1",[user.uid]);
+    if (!account.rowCount) return sendJson(res,404,{error:"Complete your account setup first."});
+    if (practiceType==="graded" && account.rows[0].plan!=="free" && !account.rows[0].exam_book_file_id) return sendJson(res,403,{error:"Upload your exam-board ebook to unlock graded learning. You can still practise your own pieces in Pro Extras."});
+    if (practiceType==="personal" && account.rows[0].plan!=="pro") return sendJson(res,403,{error:"Personal-piece practice in Extras requires Piano Coach Pro."});
+    if (practiceType==="personal" && !referenceFileId) return sendJson(res,400,{error:"Choose one of your uploaded personal pieces first."});
+    if (account.rows[0].plan==="free" && account.rows[0].demo_seconds_used>=3600) return sendJson(res,403,{error:"Your free 60-minute demo has been used. Subscribe to continue practising."});
+    const id=randomUUID();
+    let result;
+    try {
+      result = await database().query(
+        "INSERT INTO practice_sessions(id,firebase_uid,task_id,section_key,reference_file_id,started_at,mode) " +
+        "VALUES($1,$2,$3,$4,$5,NOW(),$6) RETURNING id,started_at,mode,task_id,section_key,reference_file_id",
+        [id,user.uid,taskId,sectionKey,referenceFileId,mode],
+      );
+    } catch (schemaError) {
+      if (!["42P01", "42703"].includes(schemaError.code) || taskId || sectionKey !== "full") throw schemaError;
+      result = await database().query(
+        referenceFileId
+          ? "INSERT INTO practice_sessions(id,firebase_uid,task_id,reference_file_id,started_at,mode) VALUES($1,$2,$3,$4,NOW(),$5) RETURNING id,started_at,mode,reference_file_id"
+          : "INSERT INTO practice_sessions(id,firebase_uid,task_id,started_at,mode) VALUES($1,$2,$3,NOW(),$4) RETURNING id,started_at,mode",
+        referenceFileId ? [id,user.uid,taskId,referenceFileId,mode] : [id,user.uid,taskId,mode],
+      );
     }
-    const id = randomUUID();
-    const result = referenceFileId
-      ? await database().query(
-          "INSERT INTO practice_sessions (id, firebase_uid, task_id, reference_file_id, started_at, mode) " +
-          "VALUES ($1, $2, $3, $4, NOW(), $5) RETURNING id, started_at, mode, reference_file_id",
-          [id, user.uid, taskId, referenceFileId, mode],
-        )
-      : await database().query(
-          "INSERT INTO practice_sessions (id, firebase_uid, task_id, started_at, mode) " +
-          "VALUES ($1, $2, $3, NOW(), $4) RETURNING id, started_at, mode",
-          [id, user.uid, taskId, mode],
-        );
-    return sendJson(res, 201, { session: result.rows[0] });
-  } catch (error) {
-    console.error("POST /api/practice/start failed:", error.message);
-    return sendJson(res, 503, { error: "Your practice session couldn't be started." });
+    return sendJson(res,201,{session:result.rows[0]});
+  } catch(error) {
+    console.error("POST /api/practice/start failed:",error.message);
+    return sendJson(res,503,{error:"Your practice session couldn't be started."});
   }
 }

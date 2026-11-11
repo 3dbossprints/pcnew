@@ -1,490 +1,1048 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { auth } from "./lib/firebase.js";
-const DocumentViewer = lazy(() => import("./DocumentViewer.jsx"));
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, updateProfile } from "firebase/auth";
+import { auth, googleProvider } from "./lib/firebase.js";
+import { buildKeystoneTimeline, parseKeystoneMusicXML } from "./keystone-engine.js";
+import "./PianoCoachApp.css";
 
-const nav = [
-  { id: "home", label: "Dashboard", icon: "⌂" },
-  { id: "practice", label: "Practice", icon: "♫" },
-  { id: "profile", label: "Profile", icon: "◉" },
+const DocumentViewer = lazy(() => import("./DocumentViewer.jsx"));
+const KeystoneLearnEngine = lazy(() => import("./KeystoneLearnEngine.jsx"));
+const MusicXMLViewer = lazy(() => import("./MusicXMLViewer.jsx"));
+
+const CATEGORIES = [
+  { id: "pieces", title: "Pieces", detail: "Repertoire and performance pieces", icon: "♫" },
+  { id: "exercises", title: "Exercises", detail: "Technique, control and coordination", icon: "⌁" },
+  { id: "scales", title: "Scales", detail: "Scales, arpeggios and requirements", icon: "♬" },
 ];
-const pieces = [
-  { title: "Clair de Lune", composer: "Claude Debussy", detail: "Performance piece · Grade 5", progress: 72, time: "12 min ago", tag: "Needs attention" },
-  { title: "Sonatina in C, Op. 36 No. 1", composer: "Muzio Clementi", detail: "Performance piece · Grade 5", progress: 46, time: "Yesterday", tag: "In progress" },
-  { title: "The Swing", composer: "Traditional", detail: "Study · Grade 5", progress: 88, time: "2 days ago", tag: "Nearly ready" },
-];
-const tasks = [
-  { title: "Clair de Lune", sub: "Performance piece", duration: "15 min", type: "piece" },
-  { title: "A minor harmonic", sub: "Scale · hands together", duration: "5 min", type: "scale" },
-  { title: "Sight-reading exercise 4", sub: "Sight-reading", duration: "5 min", type: "exercise" },
-];
-function Icon({ children, className = "" }) { return <span aria-hidden="true" className={`icon ${className}`}>{children}</span>; }
-function Button({ children, kind = "primary", onClick, className = "", ...props }) {
-  return <button className={`button ${kind} ${className}`} onClick={onClick} {...props}>{children}</button>;
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const blankTask = { id: "", category: "pieces", title: "", composer: "", notes: "", sourceFileId: "", sectionCount: 1 };
+
+async function api(path, options = {}) {
+  const user = auth?.currentUser;
+  if (!user) throw new Error("Your session has expired. Please sign in again.");
+  const token = await user.getIdToken();
+  const response = await fetch(path, {
+    method: options.method || "GET",
+    headers: { Authorization: "Bearer " + token, ...(options.body ? { "Content-Type": "application/json" } : {}) },
+    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "Piano Coach could not complete that request.");
+  return body;
 }
-function Progress({ value, small = false }) {
-  return <div className={`progress ${small ? "small" : ""}`}><span style={{ width: `${value}%` }} /></div>;
+
+function formatDuration(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  return hours ? hours + "h " + minutes + "m" : minutes + "m";
 }
+function currentWeekDateKeys() {
+  const monday = new Date();
+  monday.setHours(0,0,0,0);
+  monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));
+  return Array.from({length:7},(_,index)=>{const day=new Date(monday);day.setDate(monday.getDate()+index);return day.getFullYear()+"-"+String(day.getMonth()+1).padStart(2,"0")+"-"+String(day.getDate()).padStart(2,"0");});
+}
+function formatDate(value) {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+function fileExt(file) { return String(file?.original_name || "").split(".").pop().toLowerCase(); }
+function isMusicXml(file) { return ["xml", "musicxml"].includes(fileExt(file)); }
+function isPdf(file) { return fileExt(file) === "pdf"; }
+function isEpub(file) { return fileExt(file) === "epub"; }
+function isAudio(file) { return file?.kind === "audio" || ["mp3", "m4a", "mp4", "webm", "wav", "mid", "midi"].includes(fileExt(file)); }
+function getTaskAttempts(task, attempts) {
+  return (attempts || []).filter(item => item.task_id === task.id).sort((a, b) => new Date(b.attempted_at) - new Date(a.attempted_at));
+}
+function sectionScore(task, attempts, index) {
+  const key = "section-" + index;
+  const direct = getTaskAttempts(task, attempts).filter(item => item.section_key === key && item.score !== null);
+  const full = getTaskAttempts(task, attempts).filter(item => item.section_key === "full" && item.score !== null);
+  const chosen = (direct.length ? direct : full).slice(0, 5);
+  if (!chosen.length) return null;
+  return chosen.reduce((sum, item) => sum + Number(item.score), 0) / chosen.length;
+}
+function taskProgress(task, attempts) {
+  const scores = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => sectionScore(task, attempts, index + 1));
+  return Math.round(scores.reduce((sum, value) => sum + (value || 0), 0) / scores.length);
+}
+function taskHasProgress(task, attempts) {
+  return getTaskAttempts(task, attempts).some(item => item.score !== null);
+}
+function getTaskFile(task, files) {
+  return files.find(file => file.id === task.source_file_id) || null;
+}
+function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }
+
 export default function App() {
   const [page, setPage] = useState("home");
-  const [collapsed, setCollapsed] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
+  const [data, setData] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
-  const [streak, setStreak] = useState(12);
-  const [practiceRunning, setPracticeRunning] = useState(false);
-  const [practiceSessionId, setPracticeSessionId] = useState(null);
-  const [seconds, setSeconds] = useState(0);
-  const [theme, setTheme] = useState("light");
-  const [notation, setNotation] = useState("standard");
-  const [reminders, setReminders] = useState(true);
-  const [selectedTask, setSelectedTask] = useState(tasks[0]);
-  const [search, setSearch] = useState("");
-  const [fileName, setFileName] = useState("");
-  const [profileTab, setProfileTab] = useState("details");
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [studentProfile, setStudentProfile] = useState(null);
-  const [practiceReference, setPracticeReference] = useState(null);
-  const [practiceType, setPracticeType] = useState("graded");
+  const [noticeType, setNoticeType] = useState("success");
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [openedDocument, setOpenedDocument] = useState(null);
+  const [documentBusy, setDocumentBusy] = useState(false);
+  const [taskEditor, setTaskEditor] = useState(null);
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [practiceConfig, setPracticeConfig] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+
+  const refresh = useCallback(async () => {
+    const [account, library] = await Promise.all([api("/api/me"), api("/api/uploads")]);
+    setData(account);
+    setFiles(library.files || []);
+    return account;
+  }, []);
 
   useEffect(() => {
     let active = true;
-    async function loadProfile() {
+    async function load() {
+      setLoading(true);
+      setLoadError("");
       try {
-        const current = auth.currentUser;
-        if (!current) return;
-        const token = await current.getIdToken();
-        const response = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } });
-        if (response.ok) { const body = await response.json(); if (active) setStudentProfile({ ...body.user, practiceSummary: body.practiceSummary || null }); }
-      } catch { /* Keep the app usable while profile data reconnects. */ }
+        const [account, library] = await Promise.all([api("/api/me"), api("/api/uploads")]);
+        if (!active) return;
+        setData(account);
+        setFiles(library.files || []);
+      } catch (error) {
+        if (active) setLoadError(error.message || "Your Piano Coach account could not be loaded.");
+      } finally { if (active) setLoading(false); }
     }
-    loadProfile();
+    load();
     return () => { active = false; };
   }, []);
+
+  const toast = useCallback((message, type = "success") => {
+    setNotice(message);
+    setNoticeType(type);
+    window.clearTimeout(toast.timer);
+    toast.timer = window.setTimeout(() => setNotice(""), 3600);
+  }, []);
+
+  const user = data?.user || {};
+  const summary = data?.practiceSummary || {};
+  const tasks = data?.tasks || [];
+  const attempts = data?.attempts || [];
+  const plan = user.plan || "free";
+  const displayName = user.preferred_name || user.display_name || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Piano student";
+  const initials = displayName.split(/\s+/).map(part => part[0]).join("").slice(0, 2).toUpperCase();
+  const todaySeconds = Number(summary.todaySeconds || 0);
+  const demoRemaining = Math.max(0, 3600 - Number(user.demo_seconds_used || 0));
+  const hasExamBook = Boolean(user.exam_book_file_id);
+  const freeLocked = plan === "free" && demoRemaining <= 0;
+
   useEffect(() => {
-    if (!practiceRunning) return;
-    const id = window.setInterval(() => setSeconds(s => s + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [practiceRunning]);
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-  const studentName = studentProfile?.preferred_name || studentProfile?.display_name || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Piano student";
-  const studentInitials = studentName.split(/\s+/).map(part => part[0]).join("").slice(0,2).toUpperCase();
-  const time = useMemo(() => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`, [seconds]);
-  const go = id => { if (id === "practice") setPracticeType("graded"); setPage(id); setShowProfile(false); setShowAdmin(false); };
-  const startPractice = async () => {
-    if (!practiceSessionId) {
-      try {
-        const token = await auth.currentUser.getIdToken();
-        const response = await fetch("/api/practice/start", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "standard", referenceFileId: practiceReference?.file?.id || null, practiceType }) });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Could not start practice.");
-        setPracticeSessionId(body.session.id);
-        setSeconds(0);
-      } catch (error) { toast(error.message || "Could not start practice."); return; }
+    document.documentElement.dataset.theme = data?.preferences?.theme || "light";
+    document.documentElement.dataset.fontSize = data?.preferences?.font_size || "normal";
+    return () => { document.documentElement.dataset.theme = "light"; document.documentElement.dataset.fontSize = "normal"; };
+  }, [data?.preferences]);
+
+  async function uploadFile(file, { purpose = "library", category = "other" } = {}) {
+    if (!file) return null;
+    const ext = file.name.toLowerCase().split(".").pop();
+    const allowed = ["pdf", "epub", "xml", "musicxml", "mid", "midi", "png", "jpg", "jpeg", "mp3", "m4a", "mp4", "webm", "wav"];
+    if (!allowed.includes(ext)) throw new Error("Choose a PDF, EPUB, MusicXML, MIDI, image or audio file.");
+    if (file.size > 25 * 1024 * 1024) throw new Error("Files must be 25 MB or smaller.");
+    const contentTypes = {
+      pdf: "application/pdf", epub: "application/epub+zip", xml: "application/xml",
+      musicxml: "application/vnd.recordare.musicxml+xml", mid: "audio/midi", midi: "audio/midi",
+      png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", mp3: "audio/mpeg",
+      m4a: "audio/mp4", mp4: "audio/mp4", webm: "audio/webm", wav: "audio/wav",
+    };
+    const contentType = contentTypes[ext] || file.type;
+    const signed = await api("/api/uploads/sign", { method: "POST", body: { filename: file.name, contentType, size: file.size, purpose, category } });
+    const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+    if (!put.ok) throw new Error("Secure storage rejected the upload. Please check the connection and try again.");
+    const completed = await api("/api/uploads/complete", { method: "POST", body: { fileId: signed.fileId, purpose } });
+    await refresh();
+    return completed.file;
+  }
+
+  async function openFile(file) {
+    setDocumentBusy(true);
+    try {
+      const result = await api("/api/uploads/download?id=" + encodeURIComponent(file.id) + "&inline=1");
+      setOpenedDocument({ file, url: result.url, xml: null });
+      if (isMusicXml(file)) {
+        const response = await fetch(result.url);
+        if (!response.ok) throw new Error("The MusicXML file could not be downloaded.");
+        const xml = await response.text();
+        setOpenedDocument({ file, url: result.url, xml });
+      }
+    } catch (error) { toast(error.message || "The document could not be opened.", "error"); }
+    finally { setDocumentBusy(false); }
+  }
+
+  async function saveTask(draft) {
+    if (!data?.learningPlanAvailable) {
+      toast("The Grade Plan database migration needs to be reviewed and applied before tasks can be saved.", "error");
+      return;
     }
-    setPracticeRunning(true);
-  };
-  const finishPractice = async () => {
-    setPracticeRunning(false);
-    if (practiceSessionId) {
-      try {
-        const token = await auth.currentUser.getIdToken();
-        const response = await fetch("/api/practice/finish", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ sessionId: practiceSessionId, durationSeconds: seconds }) });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Could not save practice.");
-        setPracticeSessionId(null);
-        toast("Practice saved · " + Math.floor(body.session.duration_seconds / 60) + " minutes recorded.");
-      } catch (error) { toast(error.message || "Could not save practice."); }
-    } else toast("Start a session first to record your practice.");
-  };
-  const toast = message => { setNotice(message); window.setTimeout(() => setNotice(""), 2800); };
+    setProfileBusy(true);
+    try {
+      await api("/api/profile", { method: "PATCH", body: { taskAction: {
+        action: "save", id: draft.id || undefined, category: draft.category, title: draft.title,
+        composer: draft.composer, notes: draft.notes, sourceFileId: draft.sourceFileId || null,
+        sectionCount: Number(draft.sectionCount) || 1,
+      } } });
+      await refresh();
+      setTaskEditor(null);
+      toast(draft.id ? "Your learning task has been updated." : "Added to your Grade Plan.");
+    } catch (error) { toast(error.message, "error"); }
+    finally { setProfileBusy(false); }
+  }
 
-  return <div className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
-    <aside className="sidebar">
-      <div className="brand-lockup">
-        <div className="brand-mark"><span>𝄞</span></div>
-        {!collapsed && <div className="brand-name">Piano <em>Coach</em><small>YOUR MUSICAL JOURNEY</small></div>}
-      </div>
-      <button className="collapse-button" onClick={() => setCollapsed(v => !v)} aria-label="Toggle sidebar"><Icon>☰</Icon></button>
-      <div className="nav-caption">{!collapsed && "WORKSPACE"}</div>
-      <nav className="main-nav">
-        {nav.map(item => <button key={item.id} className={`nav-item ${(item.id === "profile" ? showProfile : page === item.id && !showProfile) ? "active" : ""}`} onClick={() => item.id === "profile" ? (setShowProfile(true), setShowAdmin(false)) : go(item.id)} title={collapsed ? item.label : undefined}>
-          <Icon>{item.icon}</Icon>{!collapsed && <><span>{item.label}</span>{item.pro && <span className="pro-pill">PRO</span>}</>}
-        </button>)}
+  async function deleteTask(task) {
+    if (!window.confirm("Remove " + task.title + " from your Grade Plan? Its recorded practice history will also be removed.")) return;
+    try {
+      await api("/api/profile", { method: "PATCH", body: { taskAction: { action: "delete", id: task.id } } });
+      setSelectedTask(null);
+      await refresh();
+      toast("Task removed from your Grade Plan.");
+    } catch (error) { toast(error.message, "error"); }
+  }
+
+  function beginPractice(task, sectionKey = "full", practiceMode = "standard", practiceType = "graded", referenceFile = null) {
+    if (freeLocked) { setPage("profile"); toast("Your 60-minute demo has been used. Choose a subscription to continue.", "error"); return; }
+    const actualFile = referenceFile || (task ? getTaskFile(task, files) : null);
+    const actualPracticeType = actualFile?.metadata?.purpose === "personal_piece" ? "personal" : practiceType;
+    if (actualPracticeType === "graded" && plan !== "free" && !hasExamBook) { setPage("home"); toast("Upload your exam-board ebook to unlock graded learning.", "error"); return; }
+    if (practiceMode === "assisted" && (!actualFile || !isMusicXml(actualFile))) {
+      toast("Assisted Practice needs a MusicXML score so the notes and timing can be checked. Choose Standard for this document.", "error");
+      return;
+    }
+    setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType: actualPracticeType, referenceFile: actualFile, demoRemainingSeconds: plan === "free" ? demoRemaining : null });
+    setFeedback(null);
+    setPage("practice");
+  }
+
+  if (loading) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><div className="pc-loading-copy">Preparing your musical space</div><div className="pc-loading-track"><i /></div></div>;
+  if (loadError) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><h1>Your account needs attention.</h1><p>{loadError}</p><button className="pc-button primary" onClick={() => window.location.reload()}>Try again</button></div>;
+
+  return <div className="pc-app">
+    <aside className="pc-sidebar">
+      <div className="pc-brand"><span className="pc-brand-mark">𝄞</span><div><strong>Piano <em>Coach</em></strong><small>YOUR MUSICAL JOURNEY</small></div></div>
+      <div className="pc-sidebar-label">YOUR SPACE</div>
+      <nav className="pc-nav" aria-label="Main navigation">
+        <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Home</span></button>
+        <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
       </nav>
-      <div className="sidebar-spacer" />
-      <div className="sidebar-card">
-        {!collapsed && <><div className="sidebar-card-icon">✧</div><strong>A little progress<br/>every day.</strong><p>Your next great performance starts with today's practice.</p><Button kind="light" onClick={() => go("practice")}>Start practising <span>↗</span></Button></>}
-        {collapsed && <button className="mini-cta" onClick={() => go("practice")}>✧</button>}
-      </div>
-      <div className="sidebar-bottom">
-        <div className="user-chip"><div className="avatar">{studentInitials}</div>{!collapsed && <div className="user-meta"><strong>{studentName}</strong><small>{studentProfile?.grade || "Piano student"}{studentProfile?.exam_board ? " · " + studentProfile.exam_board : ""}</small></div>}{!collapsed && <span className="more">•••</span>}</div>
-      </div>
+      <div className="pc-sidebar-spacer" />
+      <div className="pc-sidebar-encouragement"><span>✧</span><strong>Small steps.<br/>Beautiful music.</strong><p>A little thoughtful practice adds up.</p><button onClick={() => { setPage("practice"); setPracticeConfig(null); }}>Begin a session <b>↗</b></button></div>
+      <button className="pc-sidebar-profile" onClick={() => setPage("profile")}><span className="pc-avatar">{initials}</span><span><strong>{displayName}</strong><small>{user.grade || "Piano student"}{user.exam_board ? " · " + user.exam_board : ""}</small></span><b>•••</b></button>
     </aside>
-
-    <main className="main-area">
-      <header className="topbar">
-        <div className="breadcrumbs"><span>Workspace</span><b>/</b><strong>{showProfile ? "Profile" : showAdmin ? "Admin" : nav.find(n => n.id === page)?.label || (page === "grade" ? "Grade Plan" : page === "sheets" ? "Sheet Music" : "")}</strong></div>
-        <div className="top-actions"><button className="icon-button" onClick={() => toast("You're all caught up.")} aria-label="Notifications">♧<i /></button><div className="top-divider" /><button className="top-user" onClick={() => setShowProfile(true)}><div className="avatar small-avatar">{studentInitials}</div><span>{studentName}</span><span className="chevron">⌄</span></button></div>
+    <main className="pc-main">
+      <header className="pc-topbar">
+        <div className="pc-breadcrumb"><span>PIANO COACH</span><i>/</i><strong>{page === "profile" ? "Profile" : page === "practice" ? (feedback ? "Practice feedback" : "Practice") : selectedTask ? selectedTask.title : "Home"}</strong></div>
+        <div className="pc-topbar-actions">
+          <span className={"pc-plan-tag " + plan}>{plan === "free" ? "FREE DEMO" : plan.toUpperCase()}</span>
+          <button className="pc-profile-trigger" onClick={() => { setSelectedTask(null); setPage("profile"); }}><span className="pc-avatar mini">{initials}</span><span>{displayName}</span><b>⌄</b></button>
+        </div>
       </header>
-      <div className="page-content">
-        {showProfile ? <Profile theme={theme} setTheme={setTheme} notation={notation} setNotation={setNotation} reminders={reminders} setReminders={setReminders} toast={toast} profileTab={profileTab} setProfileTab={setProfileTab} studentProfile={studentProfile}/> :
-        showAdmin ? <Admin toast={toast}/> :
-        page === "home" ? <Dashboard go={go} streak={streak} setStreak={setStreak} toast={toast} studentName={studentName} studentProfile={studentProfile}/> :
-        page === "practice" ? <Practice reference={practiceReference} practiceType={practiceType} running={practiceRunning} setRunning={setPracticeRunning} onStart={startPractice} onFinish={finishPractice} time={time} seconds={seconds} selected={selectedTask} setSelected={setSelectedTask} toast={toast}/> :
-        page === "sheets" ? <SheetMusic reference={practiceReference} setReference={setPracticeReference} search={search} setSearch={setSearch} fileName={fileName} setFileName={setFileName} toast={toast}/> :
-        page === "grade" ? <GradePlan toast={toast} plan={studentProfile?.plan || "free"} examBookFileId={studentProfile?.exam_book_file_id} onPracticePersonal={file=>{setPracticeReference({file,audioAvailable:false});setPracticeType("personal");setPage("practice");setShowProfile(false);}}/> : null}
+      <div className="pc-content">
+        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onPractice={beginPractice} freeLocked={freeLocked} onRefresh={refresh}/>}
+        {page === "home" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
+        {page === "practice" && <PracticeHub tasks={tasks} files={files} attempts={attempts} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked} config={practiceConfig} onStart={beginPractice} onOpenFile={openFile} onReturn={() => { setPracticeConfig(null); setFeedback(null); setPage("home"); }} feedback={feedback} setFeedback={setFeedback} toast={toast} refresh={refresh}/>}
+        {page === "profile" && <ProfilePage data={data} onSaved={async () => { await refresh(); toast("Your profile has been saved."); }} toast={toast} onRefresh={refresh}/>}
       </div>
     </main>
-    {notice && <div className="toast"><span>✓</span>{notice}</div>}
+
+    {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => file.kind === "sheet" && !isEpub(file))} busy={profileBusy} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
+    {showLibrary && <LibraryModal files={files} busy={documentBusy} onClose={() => setShowLibrary(false)} onOpen={openFile} onUpload={uploadFile} onRefresh={refresh} toast={toast} plan={plan}/>}
+    {openedDocument && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
+      {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={openedDocument.xml} title={openedDocument.file.original_name}/></div> :
+        <DocumentViewer file={openedDocument.file} url={openedDocument.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setOpenedDocument(null)} onUseForPractice={(file) => { setOpenedDocument(null); beginPractice(null,"full","standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
+    </Suspense>}
+    {notice && <div className={"pc-toast " + noticeType} role="status"><span>{noticeType === "error" ? "!" : "✓"}</span>{notice}</div>}
   </div>;
 }
 
-function PageHeading({ eyebrow, title, subtitle, action }) {
-  return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>{action}</div>;
-}
-function Dashboard({ go, toast, studentName, studentProfile }) {
-  const summary = studentProfile?.practiceSummary;
-  const weeklySeconds = Number(summary?.weeklySeconds || 0);
-  const hours = Math.floor(weeklySeconds / 3600);
-  const minutes = Math.floor((weeklySeconds % 3600) / 60);
-  const demoRemaining = Math.max(0, 3600 - Number(studentProfile?.demo_seconds_used || 0));
-  const hasExamBook = Boolean(studentProfile?.exam_book_file_id);
-  const plan = studentProfile?.plan || "free";
-  const dateLabel = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const categories = [
-    { id: "pieces", title: "Pieces", description: "Your repertoire and performance pieces.", symbol: "♫" },
-    { id: "exercises", title: "Exercises", description: "Technical exercises for control and confidence.", symbol: "⌁" },
-    { id: "scales", title: "Scales", description: "Scales, arpeggios and technical requirements.", symbol: "♬" },
-  ];
-  return <>
-    <PageHeading eyebrow={dateLabel.toUpperCase()} title={<>{greeting}, {studentName}<span className="heading-period">.</span></>} subtitle="Your practice history and learning materials, all in one place." action={<Button kind="outline" onClick={() => go("practice")}>Open Practice ↗</Button>} />
-    <section className="stats-grid">
-      <Stat label="THIS WEEK" value={summary ? (hours ? hours + "h " : "") + minutes + "m" : "—"} note={summary ? "Recorded practice time" : "Practice history unavailable"} icon="◷" />
-      <Stat label="SESSIONS THIS WEEK" value={summary ? String(summary.sessionsThisWeek) : "—"} note="Completed sessions" icon="♫" />
-      <Stat label="DAILY STREAK" value={summary ? String(summary.streakDays) + (summary.streakDays === 1 ? " day" : " days") : "—"} note="Days with at least 15 minutes" icon="✧" />
-      <Stat label={plan === "free" ? "DEMO TIME LEFT" : "TOTAL PRACTICE"} value={plan === "free" ? Math.floor(demoRemaining / 60) + " min" : summary ? Math.floor(Number(summary.lifetimeSeconds || 0) / 3600) + "h" : "—"} note={plan === "free" ? "Your lifetime 60-minute allowance" : "Recorded across your account"} icon="⌁" />
+function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onPractice, freeLocked, onRefresh }) {
+  const user = data?.user || {};
+  const summary = data?.practiceSummary || {};
+  const now = new Date();
+  const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
+  const today = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const todaySeconds = Number(summary.todaySeconds || 0);
+  const remaining = Math.max(0, 900 - todaySeconds);
+  const demoRemaining = Math.max(0, 3600 - Number(user.demo_seconds_used || 0));
+  const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));
+  const weekDates = currentWeekDateKeys();
+  const practiced = new Set(summary.practiceDays || []);
+  const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, data.attempts || []), 0) / tasks.length) : null;
+  return <div className="pc-dashboard">
+    <div className="pc-welcome-row"><div><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}<em>.</em></h1><p>Make a little space for music today.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Your sheet music <span>↗</span></button></div>
+    <section className="pc-hero-panel">
+      <div className="pc-hero-copy"><span className="pc-eyebrow">YOUR MUSICAL JOURNEY</span><h2>{user.grade ? user.grade + " piano" : "Your piano journey"}<br/><i>{user.exam_board ? user.exam_board + " board" : "starts here"}.</i></h2>
+        <p>{user.target_date ? "Working towards " + formatDate(user.target_date) + ". Keep your practice steady and focused." : "A good practice session is more valuable than a perfect plan. Choose what you would like to work on."}</p>
+        <div className="pc-hero-actions"><button className="pc-button dark" onClick={() => onPractice(null)}>Start practising <span>↗</span></button><span>{tasks.length ? tasks.length + " learning " + (tasks.length === 1 ? "task" : "tasks") : "Build your learning plan"}</span></div>
+      </div>
+      <div className="pc-hero-art" aria-hidden="true"><div className="pc-orbit orbit-one"/><div className="pc-orbit orbit-two"/><div className="pc-note note-one">♪</div><div className="pc-note note-two">♫</div><div className="pc-note note-three">♩</div><div className="pc-art-disc">𝄞</div></div>
     </section>
-    <section className="dashboard-categories">
-      {categories.map(category => <article className="panel dashboard-category" key={category.id}>
-        <div className="dashboard-category-symbol">{category.symbol}</div>
-        <div className="eyebrow">YOUR LEARNING PLAN</div>
-        <h2>{category.title}</h2>
-        <p>{category.description}</p>
-        {!hasExamBook && plan !== "free" ? <div className="dashboard-lock">Upload your exam-board ebook to unlock official syllabus content.</div>
-          : !hasExamBook ? <div className="dashboard-lock">Your free demo learning materials will appear here when demo repertoire is available.</div>
-          : <div className="dashboard-lock">Your exam book is connected. Its syllabus content is not yet available in your learning plan.</div>}
-        <button className="text-link" onClick={() => go("grade")}>{category.id === "pieces" && plan === "pro" ? "Open Pieces & Pro Extras →" : "Open learning plan →"}</button>
-      </article>)}
+    <section className="pc-stat-row">
+      <StatCard label="THIS WEEK" value={formatDuration(summary.weeklySeconds)} note="Recorded practice" icon="◷"/>
+      <StatCard label="SESSIONS" value={String(summary.sessionsThisWeek || 0)} note="This week" icon="♫"/>
+      <StatCard label="DAILY STREAK" value={String(summary.streakDays || 0) + " days"} note={remaining ? formatDuration(remaining) + " to today's 15-minute goal" : "15-minute goal reached today"} icon="✧"/>
+      <StatCard label={user.plan === "free" ? "DEMO REMAINING" : "LEARNING PROGRESS"} value={user.plan === "free" ? formatDuration(demoRemaining) : avg === null ? "—" : avg + "%"} note={user.plan === "free" ? "Lifetime allowance" : "Across your saved tasks"} icon="◎"/>
     </section>
-    <div className="bottom-tip">
-      <span className="tip-icon">✦</span>
-      <div><strong>Your progress is based on completed sessions</strong><p>Practice days count towards your streak when you record at least 15 minutes in a day. Paused or unfinished sessions do not count.</p></div>
-      <button onClick={() => go("practice")}>Open Practice →</button>
+    {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Your progress and account remain here. Choose a plan from Profile to continue learning.</span></div>}
+    {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Your graded syllabus is waiting for its ebook.</strong><span>Upload your own exam-board PDF or EPUB in Grade Plan. Your account and own repertoire remain available.</span></div>}
+    <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>What would you like to work on?</h2></div><span className="pc-section-side">You choose the next step.</span></div>
+    <div className="pc-learning-grid">
+      {categories.map(category => <section className="pc-learning-card" key={category.id}>
+        <header><span className="pc-category-icon">{category.icon}</span><div><h3>{category.title}</h3><p>{category.tasks.length ? category.tasks.length + " saved " + (category.tasks.length === 1 ? "task" : "tasks") : category.detail}</p></div><button aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
+        {category.tasks.length ? <div className="pc-task-list">{category.tasks.slice(0,4).map(task => <TaskRow key={task.id} task={task} attempts={attempts} onClick={() => onOpenTask(task)}/>)}
+          {category.tasks.length > 4 && <button className="pc-text-link" onClick={() => onOpenTask(category.tasks[4])}>View all {category.tasks.length} tasks →</button>}
+        </div> : <div className="pc-empty-category"><span>＋</span><p>No {category.title.toLowerCase()} added yet.</p><button onClick={() => onAddTask(category.id)}>Add your first {category.title.slice(0,-1).toLowerCase()}</button></div>}
+      </section>)}
     </div>
-  </>;
+    {user.plan === "pro" && <section className="pc-extras-strip"><div><span className="pc-eyebrow">PIANO COACH PRO</span><h3>Your music, beyond the syllabus.</h3><p>Bring in a piece you love and keep it separate from your graded learning.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open your music collection ↗</button></section>}
+    <section className="pc-lower-grid">
+      <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">A STEADY RHYTHM</span><h3>Your practice this week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{weekDates.map((date,index) => { const complete = practiced.has(date); const day = WEEKDAYS[(index+1)%7]; return <div key={date} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise for at least 15 minutes in a day to keep your streak going.</p></div>
+      <div className="pc-panel pc-materials-panel"><div><span className="pc-eyebrow">YOUR MATERIALS</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") + " in your collection." : "Keep scores and recordings together in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection ↗</button></div>
+    </section>
+  </div>;
 }
-function Stat({ label, value, note, icon }) { return <div className="stat-card"><div className="stat-top"><span>{label}</span><i>{icon}</i></div><strong>{value}</strong><small>{note}</small></div>; }
 
-function Practice({ reference, practiceType, running, setRunning, onStart, onFinish, time, seconds, selected, setSelected, toast }) {
-  const [hand, setHand] = useState("both");
-  const [tempo, setTempo] = useState(72);
-  const [finished, setFinished] = useState(false);
-  return <>
-    <PageHeading eyebrow="YOUR PRACTICE SPACE" title="Let's make some music." subtitle="Choose a focus, settle in, and enjoy the process." action={<span className="session-chip"><i/> SESSION READY</span>}/>
-    <div className="practice-layout">
-      <section className="panel practice-main">
-        <div className="practice-piece-head"><div><div className="eyebrow">CURRENTLY PRACTISING</div>{reference && <p className="practice-reference-chip">Using book/score reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio found" : ""}</p>}{reference && <p className="practice-reference-chip">Using book/score reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio found" : ""}</p>}<h2>{practiceType === "personal" && reference ? reference.file.original_name : selected.title}</h2><p>{practiceType === "personal" ? "Your personal repertoire · Pro Extras" : selected.sub + " · Grade 5 ABRSM"}</p></div><button className="text-link" onClick={() => toast("Piece selector opened from your Grade Plan.")}>Change piece ↗</button></div>
-        <div className="practice-sheet"><div className="sheet-top"><span>CLAIR DE LUNE</span><span>Claude Debussy</span></div><div className="staff"><div className="clef">𝄞</div><div className="staff-lines"><div className="bar"><i className="note n1"/><i className="note n2"/><i className="note n3"/><i className="note n4"/></div><div className="bar"><i className="note n5"/><i className="note n6"/><i className="note n7"/></div><div className="bar"><i className="note n8"/><i className="note n9"/><i className="note n10"/></div></div></div><div className="staff second"><div className="clef bass">𝄢</div><div className="staff-lines"><div className="bar"><i className="note n2"/><i className="note n4"/><i className="note n6"/></div><div className="bar"><i className="note n1"/><i className="note n3"/><i className="note n8"/></div><div className="bar"><i className="note n5"/><i className="note n7"/></div></div></div><div className="sheet-page">1</div></div>
-        <div className="sheet-caption"><span>Illustrative score preview</span><button onClick={() => toast("Full score view will open when a score is connected.")}>Open full sheet ↗</button></div>
-        <div className="practice-controls"><div className="hand-select"><span>HANDS</span>{["right","both","left"].map(v=><button key={v} className={hand===v?"selected":""} onClick={()=>setHand(v)}>{v==="both"?"Both":v==="right"?"Right":"Left"}</button>)}</div><div className="tempo-control"><span>TEMPO <b>{tempo} BPM</b></span><input type="range" min="40" max="180" value={tempo} onChange={e=>setTempo(+e.target.value)}/></div></div>
+function StatCard({ label, value, note, icon }) {
+  return <div className="pc-stat-card"><div><span>{label}</span><b>{value}</b><small>{note}</small></div><i>{icon}</i></div>;
+}
+function TaskRow({ task, attempts, onClick }) {
+  const progress = taskProgress(task, attempts);
+  const hasProgress = taskHasProgress(task, attempts);
+  return <button className="pc-task-row" onClick={onClick}><span className="pc-task-dot"/><span className="pc-task-name"><strong>{task.title}</strong><small>{task.composer || (task.section_count > 1 ? task.section_count + " sections" : "Learning task")}</small></span><span className="pc-task-score">{hasProgress ? progress + "%" : "—"}</span><span className="pc-row-arrow">↗</span></button>;
+}
+
+function TaskDetails({ task, attempts, files, onBack, onPractice, onEdit, onDelete, onOpenFile }) {
+  const related = getTaskAttempts(task, attempts);
+  const scored = related.filter(item => item.score !== null).slice(0, 30).reverse();
+  const file = getTaskFile(task, files);
+  const progress = taskProgress(task, attempts);
+  const [scoreXml, setScoreXml] = useState("");
+  const [scoreLoadError, setScoreLoadError] = useState("");
+  const [activeMistake, setActiveMistake] = useState(0);
+  const mistakeBars = Array.from(new Set(related.flatMap(item =>
+    Array.isArray(item.feedback?.trouble) ? item.feedback.trouble.map(area => Number(area.bar)) : []
+  ))).filter(bar => Number.isInteger(bar) && bar > 0).sort((a, b) => a - b);
+
+  useEffect(() => {
+    let active = true;
+    setScoreXml("");
+    setScoreLoadError("");
+    if (!file || !isMusicXml(file)) return () => { active = false; };
+    async function loadScore() {
+      try {
+        const link = await api("/api/uploads/download?id=" + encodeURIComponent(file.id) + "&inline=1");
+        const response = await fetch(link.url);
+        if (!response.ok) throw new Error("The score could not be opened from your collection.");
+        const xml = await response.text();
+        if (active) setScoreXml(xml);
+      } catch (error) {
+        if (active) setScoreLoadError(error.message || "The score could not be loaded.");
+      }
+    }
+    loadScore();
+    return () => { active = false; };
+  }, [file?.id]);
+
+  useEffect(() => { setActiveMistake(0); }, [task.id]);
+  const areas = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => {
+    const score = sectionScore(task, attempts, index + 1);
+    return { key: "section-" + (index + 1), label: "Section " + (index + 1), score };
+  }).filter(item => item.score !== null && item.score < 80).sort((a,b) => a.score-b.score);
+  return <div className="pc-task-detail">
+    <button className="pc-back-link" onClick={onBack}>← Back to Home</button>
+    <div className="pc-detail-title-row"><div><span className="pc-eyebrow">{task.category.toUpperCase()} · YOUR GRADE PLAN</span><h1>{task.title}</h1><p>{task.composer || task.notes || "Your personal learning task."}</p></div><div className="pc-detail-actions"><button className="pc-button outline" onClick={onEdit}>Edit task</button><button className="pc-button dark" onClick={() => onPractice(task)}>Practice this task ↗</button></div></div>
+    {file && <div className="pc-linked-score"><span className="pc-file-icon">{isMusicXml(file) ? "♫" : isPdf(file) ? "▤" : "♪"}</span><div><strong>{file.original_name}</strong><small>Linked score in your sheet music collection</small></div></div>}
+    <div className="pc-detail-stats"><div><span>OVERALL ACHIEVEMENT</span><strong>{related.length ? progress + "%" : "Not assessed"}</strong><small>Recent performance across sections</small></div><div><span>PRACTICE SESSIONS</span><strong>{related.length}</strong><small>Recorded attempts</small></div><div><span>SECTIONS</span><strong>{task.section_count}</strong><small>Tracked independently</small></div></div>
+    <div className="pc-detail-grid">
+      <section className="pc-panel pc-history-panel"><span className="pc-eyebrow">PROGRESS HISTORY</span><h2>Your improvement over time</h2>
+        {scored.length ? <ProgressChart values={scored.map(item => Number(item.score))}/> : <div className="pc-empty-chart"><span>⌁</span><p>Your progress graph will appear after your first scored practice session.</p></div>}
+        {scored.length > 0 && <div className="pc-history-footer"><span>{formatDate(scored[0].attempted_at)}</span><span>{formatDate(scored[scored.length-1].attempted_at)}</span></div>}
       </section>
-      <aside className="practice-side">
-        <div className="panel timer-panel"><div className="eyebrow">SESSION TIMER</div><div className="timer">{time}</div><div className="timer-sub">{running ? "You're in the zone." : "Ready when you are."}</div><Button onClick={()=>running?setRunning(false):onStart?.()}>{running?"Ⅱ Pause session":"▶ Start session"}</Button><button className="finish-button" onClick={()=>{setFinished(true);onFinish?.();}}>Finish practice</button>{finished&&<div className="saved-note">✓ Session marked complete</div>}</div>
-        <div className="panel focus-panel"><div className="section-heading"><h3>Session focus</h3><span className="soft-badge">TODAY</span></div><div className="focus-item"><span className="focus-number">01</span><div><strong>Shape the melody</strong><small>Bring out the top line gently.</small></div></div><div className="focus-item"><span className="focus-number">02</span><div><strong>Even left hand</strong><small>Keep the accompaniment flowing.</small></div></div><div className="focus-item"><span className="focus-number">03</span><div><strong>Slow, then steady</strong><small>Build confidence before tempo.</small></div></div></div>
-        <div className="practice-quote">“Music is the movement of sound to reach the soul.”<small>— Plato</small></div>
-      </aside>
+      <section className="pc-panel pc-improve-panel"><span className="pc-eyebrow">AREAS TO IMPROVE</span><h2>Where to focus next</h2>
+        {areas.length ? areas.map(item => <div className="pc-improve-item" key={item.key}><span>↗</span><div><strong>{item.label}</strong><small>Recent average: {Math.round(item.score)}%</small></div><button onClick={() => onPractice(task,item.key)}>Practise</button></div>) : <div className="pc-improve-empty"><span>✧</span><p>{related.length ? "No consistently low-scoring sections have been identified yet." : "As you practise, we'll build a picture of what needs attention."}</p></div>}
+      </section>
     </div>
-  </>;
-}
-
-function SheetMusic({ reference, setReference, search, setSearch, fileName, setFileName, toast }) {
-  const [tab, setTab] = useState("my-sheets");
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  const [drag, setDrag] = useState(false);
-  const [selectedDocument, setSelectedDocument] = useState(null);
-  const [documentUrl, setDocumentUrl] = useState("");
-
-  async function token() {
-    if (!auth.currentUser) throw new Error("Please sign in again.");
-    return auth.currentUser.getIdToken();
-  }
-  async function loadFiles() {
-    setLoading(true); setError("");
-    try {
-      const response = await fetch("/api/uploads", { headers: { Authorization: "Bearer " + await token() } });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Your library couldn't be loaded.");
-      setFiles(body.files || []);
-    } catch (e) { setError(e.message || "Your library couldn't be loaded."); }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { loadFiles(); }, []);
-
-  async function onFile(file) {
-    if (!file) return;
-    setFileName(file.name);
-    if (file.size > 25 * 1024 * 1024) { setError("Files must be 25 MB or smaller."); return; }
-    setUploading(true); setError("");
-    try {
-      const bearer = await token();
-      const signResponse = await fetch("/api/uploads/sign", {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer },
-        body: JSON.stringify({ filename: file.name, contentType: file.type || "application/octet-stream", size: file.size }),
-      });
-      const signed = await signResponse.json();
-      if (!signResponse.ok) throw new Error(signed.error || "Upload could not be prepared.");
-      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
-      if (!put.ok) throw new Error("Cloudflare R2 rejected the upload. Check the bucket CORS settings and try again.");
-      const completeResponse = await fetch("/api/uploads/complete", {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer },
-        body: JSON.stringify({ fileId: signed.fileId }),
-      });
-      const completed = await completeResponse.json();
-      if (!completeResponse.ok) throw new Error(completed.error || "The uploaded file couldn't be verified.");
-      setFiles(current => [completed.file, ...current.filter(item => item.id !== completed.file.id)]);
-      setTab("my-sheets");
-      toast("Saved to your sheet music library.");
-    } catch (e) { setError(e.message || "Upload failed. Please try again."); }
-    finally { setUploading(false); setFileName(""); }
-  }
-  async function openFile(file) {
-    try {
-      const response = await fetch("/api/uploads/download?id=" + encodeURIComponent(file.id) + "&inline=1", { headers: { Authorization: "Bearer " + await token() } });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "This file couldn't be opened.");
-      setDocumentUrl(body.url);
-      setSelectedDocument(file);
-    } catch (e) { setError(e.message || "This file couldn't be opened."); }
-  }
-  async function deleteFile(file) {
-    if (!window.confirm(`Delete "${file.original_name}" from your library? This permanently removes the stored file.`)) return;
-    try {
-      const response = await fetch("/api/uploads/delete?id=" + encodeURIComponent(file.id), {
-        method: "DELETE",
-        headers: { Authorization: "Bearer " + await token() },
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "This file couldn't be deleted.");
-      setFiles(current => current.filter(item => item.id !== file.id));
-      toast("File deleted from your library.");
-    } catch (e) { setError(e.message || "This file couldn't be deleted."); }
-  }
-  const visible = files.filter(file => file.original_name.toLowerCase().includes(search.toLowerCase()));
-  const iconFor = file => file.kind === "audio" ? "◖" : file.kind === "image" ? "▧" : "♫";
-  const formatFor = file => (file.original_name.split(".").pop() || "FILE").toUpperCase();
-  const sizeFor = bytes => bytes < 1024 * 1024 ? Math.max(1, Math.round(bytes / 1024)) + " KB" : (bytes / (1024 * 1024)).toFixed(1) + " MB";
-
-  return <>
-    {selectedDocument && <Suspense fallback={<div className="document-loading">Loading document reader…</div>}><DocumentViewer file={selectedDocument} url={documentUrl} getToken={token} onClose={()=>{setSelectedDocument(null);setDocumentUrl("");}} onUseForPractice={(file,audio)=>{setReference({file,audioAvailable:!!audio});setSelectedDocument(null);setDocumentUrl("");toast("Book and available audio selected for practice.");}}/></Suspense>}
-    <PageHeading eyebrow="YOUR MUSIC LIBRARY" title="Sheet Music" subtitle="Your scores and recordings, securely stored in your own library." action={<Button onClick={()=>document.getElementById("sheet-upload").click()} disabled={uploading}>{uploading?"Uploading…":"＋ Import sheet music"}</Button>}/>
-    <div className="panel sheet-converter">
-      <div className="converter-copy"><div className="eyebrow">SHEET MUSIC CONVERTER</div><h2>Your music, ready to play.</h2><p>Upload a score or recording. Your files are saved privately to your Cloudflare library.</p><div className="format-list"><span>PDF</span><span>EPUB</span><span>PNG / JPG</span><span>MusicXML</span><span>MIDI</span><span>MP3 / WAV</span></div></div>
-      <label className={`upload-zone ${drag?"dragging":""} ${uploading?"uploading":""}`} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);onFile(e.dataTransfer.files[0]);}}>
-        <input id="sheet-upload" type="file" accept=".pdf,.epub,.png,.jpg,.jpeg,.xml,.musicxml,.mid,.midi,.mp3,.m4a,.mp4,.webm,.wav" disabled={uploading} onChange={e=>{onFile(e.target.files[0]);e.target.value="";}}/>
-        <span className="upload-icon">{uploading?"◌":"↑"}</span><strong>{uploading?"Saving to your library…":"Drop a score here, or browse files"}</strong><small>PDF, EPUB, PNG, JPG, MusicXML, MIDI or audio · Maximum 25 MB</small><span className="upload-browse">{uploading?"Please wait":"Choose a file"}</span>
-      </label>
-    </div>
-    {reference && <div className="library-error">Selected practice reference: {reference.file.original_name}{reference.audioAvailable ? " · embedded audio detected" : ""}<button onClick={()=>setReference(null)}>Clear</button></div>}
-    {error && <div className="library-error" role="alert">{error}<button onClick={()=>setError("")}>Dismiss</button></div>}
-    <div className="tabs-row"><button className={tab==="my-sheets"?"active":""} onClick={()=>setTab("my-sheets")}>My library <span>{files.length}</span></button><button className={tab==="recent"?"active":""} onClick={()=>setTab("recent")}>Recently added</button><div className="search-box"><Icon>⌕</Icon><input placeholder="Search your music..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
-    {loading ? <div className="empty-state"><span>◌</span><h3>Loading your library…</h3></div> :
-      visible.length ? <div className="library-grid">{visible.map(file=><div className="library-card" key={file.id}>
-        <div className={`library-thumb ${file.kind==="audio"?"audio":file.kind==="image"?"image":"score"}`}>{iconFor(file)}<span>{formatFor(file)}</span></div>
-        <div className="library-info"><strong title={file.original_name}>{file.original_name}</strong><small>{sizeFor(Number(file.size_bytes))} · {new Date(file.created_at).toLocaleDateString()}</small><div className="library-actions"><span>Saved</span><button onClick={()=>openFile(file)}>Open ↗</button><button className="library-delete" onClick={()=>deleteFile(file)} aria-label={`Delete ${file.original_name}`}>Delete</button></div></div>
-      </div>)}</div> : <div className="empty-state"><span>♫</span><h3>{search?"No matching files":"Your library is ready"}</h3><p>{search?"Try a different search.":"Import your first score or recording to see it here."}</p><button className="text-link" onClick={()=>document.getElementById("sheet-upload").click()}>＋ Add sheet music</button></div>}
-  </>;
-}
-function GradePlan({ toast, plan = "free", examBookFileId, onPracticePersonal }) {
-  const [hasExamBook, setHasExamBook] = useState(Boolean(examBookFileId));
-  useEffect(() => setHasExamBook(Boolean(examBookFileId)), [examBookFileId]);
-  const gradedLocked = plan !== "free" && !hasExamBook;
-  const [board,setBoard] = useState("ABRSM");
-  const [grade,setGrade] = useState("Grade 5");
-  const [expanded,setExpanded] = useState("pieces");
-  const groups = [
-    {id:"pieces",name:"Performance pieces",count:"3 pieces",items:[["Clair de Lune","Claude Debussy","72%"],["Sonatina in C, Op. 36 No. 1","Muzio Clementi","46%"],["The Swing","Traditional","88%"]]},
-    {id:"scales",name:"Scales & arpeggios",count:"18 requirements",items:[["A minor harmonic","Hands together · 2 octaves","In progress"],["E-flat major","Hands together · 2 octaves","To learn"],["D minor contrary motion","Hands together","To learn"]]},
-    {id:"exercises",name:"Technical exercises",count:"4 exercises",items:[["Finger independence","Exercise 2","In progress"],["Wrist rotation","Exercise 4","To learn"]]},
-    {id:"sight",name:"Sight-reading",count:"12 exercises",items:[["Sight-reading exercise 4","Level 5","To learn"],["Sight-reading exercise 5","Level 5","To learn"]]},
-  ];
-  return <>
-    <PageHeading eyebrow="YOUR EXAM JOURNEY" title="Grade Plan" subtitle="Everything you need for your next piano milestone." action={<Button kind="outline" onClick={()=>toast("Grade plan settings opened.")}>⚙ Plan settings</Button>}/>
-    <div className="grade-overview"><div><div className="eyebrow">CURRENT GOAL</div><h2>{grade} <span>{board}</span></h2><p>Target completion · 30 June 2027</p><div className="grade-progress"><Progress value={64}/><strong>64%</strong></div></div><div className="grade-ring"><div><strong>64%</strong><small>COMPLETE</small></div></div></div>
-    <div className="grade-toolbar"><div><span>EXAM BOARD</span><select value={board} onChange={e=>setBoard(e.target.value)}><option>ABRSM</option><option>Trinity</option></select></div><div><span>GRADE</span><select value={grade} onChange={e=>setGrade(e.target.value)}>{["Initial","Grade 1","Grade 2","Grade 3","Grade 4","Grade 5","Grade 6","Grade 7","Grade 8"].map(x=><option key={x}>{x}</option>)}</select></div><button className="text-link" onClick={()=>toast("Your target date can be changed in Profile.")}>Edit target date ↗</button></div>
-    <div className="grade-sections">
-      {groups.map(g => (
-        <section className="panel grade-group" key={g.id}>
-          <button className="grade-group-head" onClick={() => setExpanded(expanded === g.id ? "" : g.id)}>
-            <span className="group-symbol">{g.id === "pieces" ? "♫" : g.id === "scales" ? "♬" : g.id === "exercises" ? "⌁" : "▤"}</span>
-            <span><strong>{g.name}</strong><small>{g.count}</small></span>
-            <span className="group-chevron">{expanded === g.id ? "−" : "+"}</span>
-          </button>
-          {expanded === g.id && gradedLocked && <GradeLockNotice groupId={g.id} onUploaded={() => setHasExamBook(true)} toast={toast} />}
-          {expanded === g.id && !gradedLocked && (
-            <div className="grade-items">
-              {g.items.map((item, i) => (
-                <div className="grade-item" key={item[0]}>
-                  <span className="grade-item-index">{String(i + 1).padStart(2, "0")}</span>
-                  <div><strong>{item[0]}</strong><small>{item[1]}</small></div>
-                  <span className="grade-item-progress">{item[2]}</span>
-                  <button onClick={() => toast(`Opening ${item[0]} in Practice.`)}>Practise →</button>
-                </div>
-              ))}
-            </div>
-          )}
-          {expanded === g.id && g.id === "pieces" && <PersonalPieces plan={plan} onPractice={onPracticePersonal} toast={toast} />}
-        </section>
-      ))}
-    </div>
-  </>;
-}
-
-
-
-function GradeLockNotice({ groupId, onUploaded, toast }) {
-  return <div className="grade-locked">
-    <strong>Upload your exam-board ebook to unlock graded learning.</strong>
-    <p>Your official exam pieces, exercises and scales are separate from your own repertoire. Upload the PDF or EPUB you own to unlock this section. Pro Extras remains available in Pieces.</p>
-    {groupId === "pieces" && <ExamBookUpload onUploaded={onUploaded} toast={toast} />}
-    {groupId !== "pieces" && <p>Open the Pieces section to upload your exam-board ebook.</p>}
+    {task.category === "pieces" && file && <section className="pc-panel pc-piece-score-preview">
+      <div className="pc-panel-heading">
+        <div><span className="pc-eyebrow">YOUR REPERTOIRE</span><h2>Piece score</h2></div>
+        {mistakeBars.length > 0 && <div className="pc-mistake-nav">
+          <button type="button" onClick={() => setActiveMistake(index => Math.max(0, index - 1))} disabled={activeMistake === 0} aria-label="Previous mistake">←</button>
+          <span>{activeMistake + 1} / {mistakeBars.length}</span>
+          <button type="button" onClick={() => setActiveMistake(index => Math.min(mistakeBars.length - 1, index + 1))} disabled={activeMistake >= mistakeBars.length - 1} aria-label="Next mistake">→</button>
+        </div>}
+      </div>
+      {isMusicXml(file) && (scoreXml
+        ? <MusicXMLViewer xml={scoreXml} title={file.original_name} highlightMeasures={mistakeBars} focusMeasure={mistakeBars[activeMistake]}/>
+        : <div className="pc-inline-status">{scoreLoadError || "Loading your score…"}</div>)}
+      {!isMusicXml(file) && <div className="pc-linked-score"><span className="pc-file-icon">▤</span><div><strong>{file.original_name}</strong><small>Open the original score to read it. Bar highlights are available for supported MusicXML scores.</small></div><button className="pc-button outline" onClick={() => onOpenFile(file)}>Open sheet ↗</button></div>}
+      {isMusicXml(file) && mistakeBars.length > 0 && <p className="pc-muted-small">Orange markers show recorded mistake areas. Use the arrows to move between them, or scroll through the score yourself.</p>}
+    </section>}
+    <section className="pc-panel pc-sections-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">CHOOSE YOUR FOCUS</span><h2>Practice a section</h2></div><button className="pc-button outline" onClick={() => onPractice(task)}>Practice whole task</button></div>
+      <div className="pc-section-list">{Array.from({ length: Number(task.section_count) || 1 }, (_, index) => { const score = sectionScore(task, attempts, index+1); return <div className="pc-section-row" key={index}><span className="pc-section-number">{String(index+1).padStart(2,"0")}</span><div><strong>Section {index+1}</strong><small>{score === null ? "Not practised yet" : "Recent average · " + Math.round(score) + "%"}</small></div><div className="pc-section-meter"><i style={{width:(score === null ? 0 : score)+"%"}}/></div><button onClick={() => onPractice(task,"section-"+(index+1))}>Practice section ↗</button></div>; })}</div>
+    </section>
+    <button className="pc-danger-text" onClick={() => onDelete(task)}>Remove this learning task</button>
   </div>;
 }
 
-function ExamBookUpload({ onUploaded, toast }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function upload(file) {
-    if (!file) return;
-    const ext = file.name.toLowerCase().split(".").pop();
-    if (!["pdf", "epub"].includes(ext)) { setError("Choose a PDF or EPUB exam-board ebook."); return; }
-    if (file.size > 25 * 1024 * 1024) { setError("The ebook must be 25 MB or smaller."); return; }
-    setBusy(true); setError("");
-    try {
-      const token = await auth.currentUser.getIdToken();
-      const contentType = file.type || (ext === "pdf" ? "application/pdf" : "application/epub+zip");
-      const signedResponse = await fetch("/api/uploads/sign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ filename: file.name, contentType, size: file.size, purpose: "exam_book" }) });
-      const signed = await signedResponse.json();
-      if (!signedResponse.ok) throw new Error(signed.error || "Upload could not be prepared.");
-      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
-      if (!put.ok) throw new Error("Cloudflare R2 rejected the upload. Check bucket CORS settings and try again.");
-      const completedResponse = await fetch("/api/uploads/complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ fileId: signed.fileId, purpose: "exam_book" }) });
-      const completed = await completedResponse.json();
-      if (!completedResponse.ok) throw new Error(completed.error || "The ebook couldn't be verified.");
-      onUploaded?.(completed.file);
-      toast("Exam-board ebook uploaded. Graded learning is now unlocked.");
-    } catch (e) { setError(e.message || "The ebook upload failed."); }
-    finally { setBusy(false); }
-  }
-  return <div className="exam-book-upload"><label className="button primary">{busy ? "Uploading ebook…" : "Upload exam ebook"}<input type="file" accept=".pdf,.epub,application/pdf,application/epub+zip" disabled={busy} onChange={e=>{upload(e.target.files[0]);e.target.value="";}}/></label>{error&&<p role="alert">{error}</p>}</div>;
+function ProgressChart({ values }) {
+  const width=640,height=220,pad=20;
+  const points=values.map((value,index)=>({x:pad+(values.length===1?(width-pad*2)/2:index/(values.length-1)*(width-pad*2)),y:height-pad-(value/100)*(height-pad*2)}));
+  const d=points.map((point,index)=>(index?"L":"M")+point.x+" "+point.y).join(" ");
+  return <svg className="pc-progress-chart" viewBox={"0 0 "+width+" "+height} role="img" aria-label="Practice score history">
+    {[0,25,50,75,100].map(value=>{const y=height-pad-(value/100)*(height-pad*2);return <g key={value}><line x1={pad} x2={width-pad} y1={y} y2={y} className="pc-chart-grid"/><text x="0" y={y+4} className="pc-chart-label">{value}</text></g>;})}
+    <path d={d} className="pc-chart-path"/>{points.map((point,index)=><circle key={index} cx={point.x} cy={point.y} r="4.5" className="pc-chart-point"/> )}
+  </svg>;
 }
 
-function PersonalPieces({ plan, onPractice, toast }) {
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  async function token() {
-    if (!auth.currentUser) throw new Error("Please sign in again.");
-    return auth.currentUser.getIdToken();
+function TaskEditor({ draft, files, busy, onClose, onSave }) {
+  const [value,setValue] = useState(draft);
+  const [error,setError] = useState("");
+  const update=(key,next)=>setValue(current=>({...current,[key]:next}));
+  function submit(event) {
+    event.preventDefault();
+    if (!value.title.trim()) { setError("Give this task a title."); return; }
+    onSave(value);
   }
-  async function load() {
-    if (plan !== "pro") return;
-    setLoading(true);
-    try {
-      const response = await fetch("/api/uploads", { headers: { Authorization: "Bearer " + await token() } });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Your personal pieces couldn't be loaded.");
-      setFiles((body.files || []).filter(file => file.metadata?.purpose === "personal_piece"));
-    } catch (e) { setError(e.message || "Your personal pieces couldn't be loaded."); }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, [plan]);
+  return <div className="pc-overlay" role="presentation"><form className="pc-modal pc-task-editor" onSubmit={submit}>
+    <button type="button" className="pc-modal-close" onClick={onClose}>×</button><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>{value.id ? "Edit learning task" : "Add to your learning plan"}</h2><p>Choose what you want to work towards. You can change it at any time.</p>
+    <label>Type<select value={value.category} onChange={e=>update("category",e.target.value)}><option value="pieces">Piece</option><option value="exercises">Exercise</option><option value="scales">Scale</option></select></label>
+    <label>Title<input value={value.title} maxLength={180} onChange={e=>update("title",e.target.value)} placeholder="e.g. Sonatina in C, first movement" required/></label>
+    <label>Composer or short description<input value={value.composer || ""} maxLength={160} onChange={e=>update("composer",e.target.value)} placeholder="Optional"/></label>
+    <label>Notes<textarea rows="3" value={value.notes || ""} onChange={e=>update("notes",e.target.value)} placeholder="What would you like to focus on?"/></label>
+    <label>Linked sheet music<select value={value.sourceFileId || ""} onChange={e=>update("sourceFileId",e.target.value)}><option value="">No uploaded score</option>{files.map(file=><option key={file.id} value={file.id}>{file.original_name}</option>)}</select></label>
+    <label>Number of practice sections<input type="number" min="1" max="100" value={value.sectionCount} onChange={e=>update("sectionCount",Math.max(1,Math.min(100,Number(e.target.value)||1)))}/><small>Use 1 if you want to practise the whole task as a single section.</small></label>
+    {error&&<p className="pc-form-error">{error}</p>}
+    <div className="pc-modal-actions"><button type="button" className="pc-button outline" onClick={onClose}>Cancel</button><button className="pc-button dark" disabled={busy}>{busy?"Saving…":"Save task"}</button></div>
+  </form></div>;
+}
+
+function LibraryModal({ files, busy, onClose, onOpen, onUpload, onRefresh, toast, plan }) {
+  const [uploading,setUploading]=useState(false);
+  const [category,setCategory]=useState("pieces");
+  const [purpose,setPurpose]=useState("library");
+  const [error,setError]=useState("");
+  const groups=[
+    {id:"pieces",label:"Sheet music",filter:file=>file.kind==="sheet"&&file.metadata?.purpose!=="exam_book"},
+    {id:"recordings",label:"Recordings",filter:file=>file.kind==="audio"},
+    {id:"images",label:"Images",filter:file=>file.kind==="image"},
+    {id:"books",label:"Exam ebook",filter:file=>file.metadata?.purpose==="exam_book"},
+  ];
   async function upload(file) {
-    if (!file) return;
-    const ext = file.name.toLowerCase().split(".").pop();
-    if (!["pdf", "epub", "xml", "musicxml"].includes(ext)) { setError("Choose a PDF, EPUB or MusicXML score."); return; }
-    if (file.size > 25 * 1024 * 1024) { setError("Files must be 25 MB or smaller."); return; }
-    setUploading(true); setError("");
+    if(!file)return;
+    setUploading(true);setError("");
     try {
-      const bearer = await token();
-      const contentType = ext === "pdf" ? "application/pdf" : ext === "epub" ? "application/epub+zip" : "application/vnd.recordare.musicxml+xml";
-      const signedResponse = await fetch("/api/uploads/sign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer }, body: JSON.stringify({ filename: file.name, contentType, size: file.size, purpose: "personal_piece" }) });
-      const signed = await signedResponse.json();
-      if (!signedResponse.ok) throw new Error(signed.error || "Upload could not be prepared.");
-      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
-      if (!put.ok) throw new Error("Cloudflare R2 rejected the upload. Check bucket CORS settings and try again.");
-      const completedResponse = await fetch("/api/uploads/complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + bearer }, body: JSON.stringify({ fileId: signed.fileId }) });
-      const completed = await completedResponse.json();
-      if (!completedResponse.ok) throw new Error(completed.error || "The uploaded score couldn't be verified.");
-      setFiles(current => [completed.file, ...current.filter(item => item.id !== completed.file.id)]);
-      toast("Your piece has been added to Pro Extras.");
-    } catch (e) { setError(e.message || "The score upload failed."); }
-    finally { setUploading(false); }
+      const result=await onUpload(file,{purpose,category});
+      toast(result?.original_name+" saved to your sheet music collection.");
+      await onRefresh();
+    } catch(e){setError(e.message||"Upload failed.");}
+    finally{setUploading(false);}
   }
-  return <section className="personal-pieces">
-    <div className="personal-pieces-heading"><div><span className="pro-pill">PRO EXTRAS</span><h3>Your own pieces</h3><p>Upload music outside your exam syllabus and practise it separately from your graded repertoire.</p></div>
-      {plan === "pro" && <label className="button primary personal-upload">{uploading ? "Uploading…" : "+ Upload a piece"}<input type="file" accept=".pdf,.epub,.xml,.musicxml,application/pdf,application/epub+zip,application/xml" disabled={uploading} onChange={e=>{upload(e.target.files[0]);e.target.value="";}}/></label>}
+  async function remove(file) {
+    if(!window.confirm("Delete "+file.original_name+" from your collection?"))return;
+    try{await api("/api/uploads/delete?id="+encodeURIComponent(file.id),{method:"DELETE"});await onRefresh();toast("File deleted.");}
+    catch(e){setError(e.message||"The file could not be deleted.");}
+  }
+  return <div className="pc-overlay"><section className="pc-modal pc-library-modal" role="dialog" aria-modal="true" aria-label="Sheet music collection">
+    <button className="pc-modal-close" onClick={onClose}>×</button><span className="pc-eyebrow">YOUR MUSIC</span><h2>Sheet music collection</h2><p>Your scores, books and recordings, together in one place.</p>
+    <div className="pc-library-upload-row"><label className="pc-select-label"><span>Save under</span><select value={category} onChange={e=>setCategory(e.target.value)}><option value="pieces">Pieces</option><option value="exercises">Exercises</option><option value="scales">Scales</option><option value="recordings">Recordings</option><option value="other">Other</option></select></label>
+      <label className="pc-select-label"><span>Collection</span><select value={purpose} onChange={e=>setPurpose(e.target.value)}><option value="library">My library</option>{plan==="pro"&&<option value="personal_piece">Pro Extras</option>}</select></label>
+      <label className="pc-button dark pc-upload-button">{uploading?"Uploading…":"＋ Add a file"}<input type="file" accept=".pdf,.epub,.xml,.musicxml,.mid,.midi,.png,.jpg,.jpeg,.mp3,.m4a,.mp4,.webm,.wav" disabled={uploading} onChange={e=>{upload(e.target.files[0]);e.target.value="";}}/></label>
     </div>
-    {plan !== "pro" ? <p className="personal-locked">Personal-piece uploads are included with Piano Coach Pro. Your graded exam pieces remain separate.</p> : <>
-      {error && <p className="library-error" role="alert">{error}</p>}
-      {loading ? <p className="personal-empty">Loading your pieces…</p> : files.length ? <div className="personal-piece-list">{files.map(file=><div className="personal-piece-row" key={file.id}><span>♫</span><div><strong>{file.original_name}</strong><small>Personal repertoire · uploaded by you</small></div><button onClick={()=>onPractice?.(file)}>Practise →</button></div>)}</div> : <p className="personal-empty">No personal pieces yet. Upload a score you own to start building your own repertoire.</p>}
-    </>}
-  </section>;
+    {error&&<p className="pc-form-error" role="alert">{error}</p>}
+    <div className="pc-library-groups">{groups.map(group=>{const list=files.filter(group.filter);return <section key={group.id}><header><strong>{group.label}</strong><small>{list.length}</small></header>{list.length ? list.map(file=><div className="pc-file-row" key={file.id}><span className={"pc-file-icon "+(file.kind||"")}>{file.kind==="audio"?"◉":file.kind==="image"?"▧":isEpub(file)?"▤":"♫"}</span><button className="pc-file-info" onClick={()=>onOpen(file)}><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras · ":""}{Math.max(1,Math.round(Number(file.size_bytes||0)/1024))} KB</small></button><button className="pc-file-open" onClick={()=>onOpen(file)}>Open ↗</button><button className="pc-file-delete" onClick={()=>remove(file)} aria-label={"Delete "+file.original_name}>×</button></div>):<p className="pc-file-empty">Nothing saved here yet.</p>}</section>;})}</div>
+    <div className="pc-modal-actions"><button className="pc-button outline" onClick={onClose} disabled={busy}>Done</button></div>
+  </section></div>;
 }
 
-function Extras({ toast }) {
-  return <><PageHeading eyebrow="YOUR CREATIVE SPACE" title="Extras" subtitle="Explore music beyond your exam programme." action={<span className="pro-label">✦ PIANO COACH PRO</span>}/><div className="extras-hero"><div><div className="eyebrow">BEYOND THE SYLLABUS</div><h2>Your music.<br/><em>Your way.</em></h2><p>Upload the pieces you love, explore something new, and make the piano yours.</p><Button kind="cream" onClick={()=>toast("Choose a score to add to Extras.")}>＋ Add your own music</Button></div><div className="extras-illustration">♫<span>♪</span><i>♬</i></div></div><div className="extras-cards"><div className="panel"><span className="feature-icon">♬</span><h3>My own pieces</h3><p>Keep personal repertoire separate from your exam grade plan.</p><button className="text-link" onClick={()=>toast("Your personal repertoire will appear here.")}>Explore pieces →</button></div></div></>;
+function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, config, onStart, onOpenFile, onReturn, feedback, setFeedback, toast, refresh }) {
+  const [chosenTask,setChosenTask]=useState("");
+  const [chosenSection,setChosenSection]=useState("full");
+  const [mode,setMode]=useState("standard");
+  const [chosenFile,setChosenFile]=useState("");
+  if (feedback) return <FeedbackPage feedback={feedback} onBack={onReturn} onAgain={() => {setFeedback(null);toast("Choose another practice session.");}} onOpenFile={onOpenFile}/>;
+  if (config) return <PracticeSession key={config.task?.id+":"+config.sectionKey+":"+config.mode+":"+(config.referenceFile?.id||"none")} config={config} files={files} onComplete={result=>{setFeedback(result);refresh().catch(()=>{});}} onExit={onReturn}/>;
+  const selected=tasks.find(task=>task.id===chosenTask)||null;
+  const availableFiles=files.filter(file=>file.kind==="sheet"&&file.metadata?.purpose!=="exam_book");
+  const reference=availableFiles.find(file=>file.id===chosenFile)||getTaskFile(selected,files);
+  const locked=freeLocked || (plan!=="free"&&!hasExamBook);
+  return <div className="pc-practice-hub">
+    <div className="pc-welcome-row"><div><span className="pc-eyebrow">MAKE MUSIC TODAY</span><h1>Practice, with purpose<em>.</em></h1><p>Choose a task, decide how you would like to practise, and take it at your own pace.</p></div></div>
+    <section className="pc-practice-chooser">
+      <div className="pc-practice-step"><span>01</span><div><h2>What would you like to practise?</h2><p>Choose one of your saved learning tasks, or work from a score in your collection.</p></div></div>
+      <div className="pc-chooser-fields">
+        <label>Learning task<select value={chosenTask} onChange={e=>{setChosenTask(e.target.value);setChosenFile("");setChosenSection("full");}}><option value="">No task · free practice</option>{tasks.map(task=><option key={task.id} value={task.id}>{task.category.slice(0,-1)} · {task.title}</option>)}</select></label>
+        <label>Sheet music<select value={chosenFile} onChange={e=>setChosenFile(e.target.value)}><option value="">Use linked score or no score</option>{availableFiles.map(file=><option value={file.id} key={file.id}>{file.original_name}</option>)}</select></label>
+        {selected&&<label>Practice focus<select value={chosenSection} onChange={e=>setChosenSection(e.target.value)}><option value="full">Whole task</option>{Array.from({length:selected.section_count},(_,i)=><option key={i} value={"section-"+(i+1)}>Section {i+1}</option>)}</select></label>}
+      </div>
+      {selected&&<div className="pc-selected-task-info"><strong>{selected.title}</strong><span>{taskHasProgress(selected,attempts)?taskProgress(selected,attempts)+"% recent achievement":"Not assessed yet"}</span></div>}
+      <div className="pc-practice-step second"><span>02</span><div><h2>Choose your practice mode</h2><p>Switch between guided learning and a more independent run-through.</p></div></div>
+      <div className="pc-mode-grid">
+        <button type="button" className={mode==="assisted"?"selected":""} onClick={()=>setMode("assisted")}><span className="pc-mode-icon">♫</span><strong>Assisted Practice</strong><p>Falling notes, an adaptive keyboard and live note checking for a MusicXML score.</p><small>Best for learning a passage</small></button>
+        <button type="button" className={mode==="standard"?"selected":""} onClick={()=>setMode("standard")}><span className="pc-mode-icon">𝄞</span><strong>Standard Practice</strong><p>Use your sheet music and play through the piece independently while your session is recorded.</p><small>Best for run-throughs</small></button>
+      </div>
+      {locked&&<div className="pc-inline-warning">{freeLocked?"Your lifetime free hour has been used.":"Upload your exam-board ebook to unlock graded learning."} Your account and profile remain available.</div>}
+      {mode==="assisted"&&(!reference||!isMusicXml(reference))&&<div className="pc-inline-warning">Assisted Practice currently needs a MusicXML file with playable note data. Choose a MusicXML score or switch to Standard Practice. PDF score recognition needs the separate OMR worker, which is not connected yet.</div>}
+      <div className="pc-practice-start-row"><button className="pc-button dark" disabled={locked||(mode==="assisted"&&(!reference||!isMusicXml(reference)))} onClick={()=>onStart(selected,chosenSection,mode,reference?.metadata?.purpose==="personal_piece"?"personal":"graded",reference)}>Begin session ↗</button><span>Recording begins when your session starts. Microphone permission is requested then.</span></div>
+    </section>
+    <section className="pc-recent-practice"><div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LIBRARY</span><h2>Scores ready to practise</h2></div></div>
+      {availableFiles.length ? <div className="pc-practice-file-grid">{availableFiles.slice(0,6).map(file=><button key={file.id} onClick={()=>onOpenFile(file)}><span className="pc-file-icon">{isMusicXml(file)?"♫":isPdf(file)?"▤":"♪"}</span><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras":"Your collection"}</small><b>Open ↗</b></button>)}</div> : <div className="pc-empty-library"><p>No scores in your collection yet.</p><small>Upload MusicXML for Assisted Practice, or PDF/EPUB for reading during Standard Practice.</small></div>}
+    </section>
+  </div>;
 }
-function Profile({ theme,setTheme,notation,setNotation,reminders,setReminders,toast,profileTab,setProfileTab,studentProfile }) {
-  const [billingBusy,setBillingBusy] = useState(false);
-  const [billingError,setBillingError] = useState("");
-  const displayName = studentProfile?.preferred_name || studentProfile?.display_name || auth.currentUser?.displayName || "Piano student";
-  const email = studentProfile?.email || auth.currentUser?.email || "";
-  const gradeBoard = [studentProfile?.grade, studentProfile?.exam_board].filter(Boolean).join(" · ") || "Not set";
-  const plan = studentProfile?.plan || "free";
-  const annual = studentProfile?.subscription_interval === "annual";
-  const planLabel = plan === "pro" ? "Pro" : plan === "basic" ? "Basic" : "Free demo";
-  const planPrice = plan === "pro" ? (annual ? "£219.89 / year" : "£19.99 / month") : plan === "basic" ? (annual ? "£109.89 / year" : "£9.99 / month") : "£0";
-  const status = studentProfile?.subscription_status || (plan === "free" ? "demo" : "pending");
-  const periodEnd = studentProfile?.subscription_current_period_end ? new Date(studentProfile.subscription_current_period_end).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}) : "";
-  async function openBillingPortal() {
-    setBillingBusy(true); setBillingError("");
+
+function PracticeSession({ config, files, onComplete, onExit }) {
+  const [session,setSession]=useState(null);
+  const [elapsed,setElapsed]=useState(0);
+  const [busy,setBusy]=useState(false);
+  const [captureMessage,setCaptureMessage]=useState("Microphone is not connected.");
+  const [captureLevel,setCaptureLevel]=useState(0);
+  const [xml,setXml]=useState("");
+  const [scoreLoadError,setScoreLoadError]=useState("");
+  const [summary,setSummary]=useState(null);
+  const [currentBar,setCurrentBar]=useState(null);
+  const [captureAvailable,setCaptureAvailable]=useState(false);
+  const standardEvents=useMemo(()=>{
+    if(config.mode!=="standard"||!xml)return [];
+    try{return buildKeystoneTimeline(parseKeystoneMusicXML(xml));}catch{return [];}
+  },[config.mode,xml]);
+  const standardCursorRef=useRef(0);
+  const micInputRef=useRef(null);
+  const captureRef=useRef(null);
+  const engineControlRef=useRef(null);
+  const endingRef=useRef(false);
+  const sessionStartRef=useRef(0);
+  const configRef=useRef(config);
+  configRef.current=config;
+  const token=()=>auth.currentUser.getIdToken();
+
+  useEffect(()=>{
+    let cancelled=false;
+    async function loadXml(){
+      const file=config.referenceFile;
+      if(!file||!isMusicXml(file))return;
+      try{
+        const link=await api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1");
+        const response=await fetch(link.url);
+        if(!response.ok)throw new Error("The MusicXML score could not be retrieved from secure storage.");
+        const text=await response.text();
+        if(!cancelled)setXml(text);
+      }catch(error){if(!cancelled)setScoreLoadError(error.message||"The score could not be loaded.");}
+    }
+    loadXml();
+    return()=>{cancelled=true;};
+  },[config.referenceFile?.id]);
+
+  useEffect(()=>{
+    if(!session)return;
+    const timer=window.setInterval(()=>setElapsed(Math.floor((Date.now()-sessionStartRef.current)/1000)),500);
+    return()=>window.clearInterval(timer);
+  },[session?.id]);
+
+  useEffect(()=>{
+    if(session && config.demoRemainingSeconds !== null && config.demoRemainingSeconds !== undefined && elapsed >= config.demoRemainingSeconds) finishSession(null);
+  },[elapsed,session?.id,config.demoRemainingSeconds]);
+
+  async function beginCapture(assisted) {
     try {
-      const token = await auth.currentUser.getIdToken();
-      const response = await fetch("/api/billing/portal",{method:"POST",headers:{Authorization:"Bearer "+token}});
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Billing management couldn't be opened.");
-      window.location.assign(body.url);
-    } catch(error) { setBillingError(error.message || "Billing management couldn't be opened."); setBillingBusy(false); }
+      if(!navigator.mediaDevices?.getUserMedia)throw new Error("This browser does not support microphone input.");
+      const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+      const chunks=[];
+      let recorder=null;
+      if(window.MediaRecorder){
+        const mime=["audio/webm;codecs=opus","audio/webm","audio/mp4"].find(type=>MediaRecorder.isTypeSupported?.(type));
+        recorder=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream);
+        recorder.ondataavailable=event=>{if(event.data?.size)chunks.push(event.data);};
+        recorder.start(1000);
+      }
+      const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+      const context=AudioContextClass?new AudioContextClass():null;
+      const analyser=context?context.createAnalyser():null;
+      const source=context?context.createMediaStreamSource(stream):null;
+      const buffer=analyser?new Float32Array(analyser.fftSize):null;
+      if(analyser){analyser.fftSize=4096;analyser.smoothingTimeConstant=0.15;source.connect(analyser);}
+      const state={stream,recorder,chunks,context,analyser,buffer,raf:0,currentMidi:null,lastDetection:0,assisted,startedAt:performance.now()};
+      captureRef.current=state;
+      setCaptureAvailable(Boolean(recorder));
+      setCaptureMessage(recorder?"Recording this practice session. Microphone audio stays in this browser until the session ends.":"Microphone listening is on, but this browser cannot record audio.");
+      if(analyser){
+        const sample=()=>{
+          if(captureRef.current!==state)return;
+          analyser.getFloatTimeDomainData(buffer);
+          let energy=0;for(let i=0;i<buffer.length;i++)energy+=buffer[i]*buffer[i];
+          const rms=Math.sqrt(energy/buffer.length);
+          setCaptureLevel(Math.min(100,Math.round(rms*450)));
+          const frequency=rms>0.006?estimateFrequency(buffer,context.sampleRate):null;
+          const now=performance.now();
+          if(frequency&&frequency>65&&frequency<1400){
+            const midi=Math.round(69+12*Math.log2(frequency/440));
+            if(midi>=21&&midi<=108&&now-state.lastDetection>90){
+              state.lastDetection=now;
+              if(state.currentMidi!==midi){
+                if(assisted){
+                  if(state.currentMidi!==null)micInputRef.current?.noteUp?.(state.currentMidi);
+                  state.currentMidi=midi;
+                  micInputRef.current?.noteDown?.(midi);
+                }else{
+                  state.currentMidi=midi;
+                  const cursor=standardCursorRef.current;
+                  const limit=Math.min(standardEvents.length,cursor+18);
+                  let match=-1;
+                  for(let index=cursor;index<limit;index+=1){
+                    if(standardEvents[index].midi===midi){match=index;break;}
+                  }
+                  if(match>=0){
+                    standardCursorRef.current=match+1;
+                    setCurrentBar(standardEvents[match].measure);
+                  }
+                }
+              }
+            }
+          }else if(state.currentMidi!==null&&now-state.lastDetection>220){
+            if(assisted)micInputRef.current?.noteUp?.(state.currentMidi);
+            state.currentMidi=null;
+          }
+          state.raf=requestAnimationFrame(sample);
+        };
+        state.raf=requestAnimationFrame(sample);
+        setCaptureMessage(assisted
+        ? "Microphone is listening locally for individual pitches. MIDI is recommended for chords."
+        : standardEvents.length
+          ? "Listening locally for pitches and following recognised notes through your score. Chords may need a MIDI keyboard."
+          : "Recording this session. This score has no MusicXML note timeline for bar following.");
+      }
+      return true;
+    }catch(error){
+      setCaptureAvailable(false);
+      setCaptureMessage(error.message||"Microphone permission was not granted. You can still use an attached MIDI keyboard or computer keys.");
+      return false;
+    }
   }
-  return <><PageHeading eyebrow="YOUR ACCOUNT" title="Profile" subtitle="A few details to make Piano Coach feel like yours."/><div className="profile-tabs"><button className={profileTab==="details"?"active":""} onClick={()=>setProfileTab("details")}>Personal details</button><button className={profileTab==="preferences"?"active":""} onClick={()=>setProfileTab("preferences")}>Preferences</button><button className={profileTab==="account"?"active":""} onClick={()=>setProfileTab("account")}>Account & billing</button></div>
-    {profileTab==="details"&&<div className="panel profile-panel"><div className="profile-section"><div className="profile-avatar">{displayName.split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase()}</div><div><h2>{displayName}</h2><p>{gradeBoard}</p></div><Button kind="outline" onClick={()=>toast("Profile editing will be connected to your account.")}>Edit profile</Button></div><div className="form-grid"><Field label="Name" value={studentProfile?.display_name || displayName}/><Field label="Preferred name" value={studentProfile?.preferred_name || ""}/><Field label="Email address" value={email}/><Field label="Grade and exam board" value={gradeBoard}/><Field label="Target completion date" value={studentProfile?.target_date ? String(studentProfile.target_date).slice(0,10) : ""}/></div><div className="profile-section compact"><div><h3>Connected services</h3><p>Google · Not connected &nbsp; Microsoft · Not connected</p></div><button className="text-link" onClick={()=>toast("Connected account settings opened.")}>Manage ↗</button></div></div>}
-    {profileTab==="preferences"&&<div className="panel profile-panel"><h2>Practice preferences</h2><div className="setting-row"><div><strong>Reminders</strong><p>Receive practice reminders by email and browser notification.</p></div><button className={`toggle ${reminders?"on":""}`} onClick={()=>setReminders(v=>!v)}><i/></button></div><div className="setting-row"><div><strong>Notation style</strong><p>Choose how your sheet music is displayed.</p></div><select value={notation} onChange={e=>setNotation(e.target.value)}><option value="standard">Standard</option><option value="closer">Closer together</option><option value="larger">Larger noteheads</option><option value="inverted">Inverted</option></select></div><div className="notation-preview"><div className="eyebrow">PREVIEW</div><div className={`mini-staff ${notation}`}>𝄞　♩　♪　♫　♬　♩</div></div><h2 className="settings-title">Interface settings</h2><div className="theme-options">{["light","dark","contrast"].map(t=><button className={theme===t?"selected":""} onClick={()=>setTheme(t)} key={t}><span className={`theme-swatch ${t}`}/>{t==="contrast"?"High contrast":t[0].toUpperCase()+t.slice(1)}</button>)}</div><div className="setting-row"><div><strong>Interface font size</strong><p>Adjust text size across Piano Coach.</p></div><select onChange={()=>toast("Font size preference saved.")} defaultValue="normal"><option value="normal">Standard</option><option>Large</option><option>Extra large</option></select></div></div>}
-    {profileTab==="account"&&<div className="panel profile-panel"><h2>Account & billing</h2><div className="billing-card"><div><span className="eyebrow">CURRENT PLAN</span><h3>{planLabel} <span>{planPrice}</span></h3><p>{status==="active"?"Subscription active":status==="past_due"?"Payment needs attention":status==="canceled"?"Subscription cancelled":status==="incomplete"?"Payment pending":"Free lifetime demo"}{periodEnd ? studentProfile?.cancel_at_period_end ? " · Access ends "+periodEnd : " · Renews "+periodEnd : ""}</p></div><span className="soft-badge">{String(status).replace("_"," ").toUpperCase()}</span></div>
-      {billingError&&<p className="auth-message" role="alert">{billingError}</p>}
-      <div className="setting-row"><div><strong>Subscription management</strong><p>{studentProfile?.stripe_customer_id ? "Update your payment method, view invoices or cancel at the end of your billing period." : "No paid subscription is linked to this account yet."}</p></div><Button kind="outline" disabled={!studentProfile?.stripe_customer_id||billingBusy} onClick={openBillingPortal}>{billingBusy?"Opening…":"Manage billing ↗"}</Button></div>
-      <div className="setting-row"><div><strong>Change password</strong><p>Update the password used to sign in.</p></div><Button kind="outline" onClick={()=>toast("Password change flow will be connected.")}>Change password</Button></div>
-      <div className="danger-zone"><div><strong>Delete account</strong><p>Account deletion includes a 15-day cancellation period before permanent removal.</p></div><Button kind="danger" onClick={()=>toast("Identity confirmation is required before account deletion.")}>Delete account</Button></div></div>}
-  </>;
+
+  async function stopCapture() {
+    const state=captureRef.current;
+    if(!state)return null;
+    captureRef.current=null;
+    if(state.raf)cancelAnimationFrame(state.raf);
+    if(state.currentMidi!==null)micInputRef.current?.noteUp?.(state.currentMidi);
+    let blob=null;
+    if(state.recorder&&state.recorder.state!=="inactive"){
+      blob=await new Promise(resolve=>{
+        state.recorder.addEventListener("stop",()=>resolve(state.chunks.length?new Blob(state.chunks,{type:state.recorder.mimeType||"audio/webm"}):null),{once:true});
+        state.recorder.stop();
+      });
+    }else if(state.chunks.length)blob=new Blob(state.chunks,{type:state.recorder?.mimeType||"audio/webm"});
+    state.stream.getTracks().forEach(track=>track.stop());
+    try{await state.context?.close();}catch{}
+    setCaptureLevel(0);
+    return blob;
+  }
+
+  async function saveRecording(blob) {
+    if(!blob||blob.size<1024)return null;
+    const extension=blob.type.includes("mp4")?"m4a":"webm";
+    const recordingType=extension==="m4a"?"audio/mp4":"audio/webm";
+    const file=new File([blob],"practice-recording-"+new Date().toISOString().replace(/[:.]/g,"-")+"."+extension,{type:recordingType});
+    try{
+      const signed=await api("/api/uploads/sign",{method:"POST",body:{filename:file.name,contentType:file.type||"audio/webm",size:file.size,purpose:"library",category:"recordings"}});
+      const put=await fetch(signed.uploadUrl,{method:"PUT",headers:{"Content-Type":file.type||"audio/webm"},body:file});
+      if(!put.ok)throw new Error("Recording upload failed.");
+      const completed=await api("/api/uploads/complete",{method:"POST",body:{fileId:signed.fileId,purpose:"library"}});
+      return completed.file?.id||null;
+    }catch(error){setCaptureMessage("The session was saved, but its recording could not be added to your library: "+error.message);return null;}
+  }
+
+  function encodeAudioRangeAsWav(audioBuffer,startSeconds,endSeconds) {
+    const sampleRate=audioBuffer.sampleRate;
+    const first=Math.max(0,Math.floor(startSeconds*sampleRate));
+    const last=Math.min(audioBuffer.length,Math.floor(endSeconds*sampleRate));
+    const frameCount=Math.max(0,last-first);
+    const channels=audioBuffer.numberOfChannels;
+    if(frameCount<1||channels<1)return null;
+    const bytesPerSample=2,blockAlign=channels*bytesPerSample,dataBytes=frameCount*blockAlign;
+    const output=new ArrayBuffer(44+dataBytes),view=new DataView(output);
+    const writeText=(offset,value)=>{for(let i=0;i<value.length;i+=1)view.setUint8(offset+i,value.charCodeAt(i));};
+    writeText(0,"RIFF");view.setUint32(4,36+dataBytes,true);writeText(8,"WAVE");
+    writeText(12,"fmt ");view.setUint32(16,16,true);view.setUint16(20,1,true);
+    view.setUint16(22,channels,true);view.setUint32(24,sampleRate,true);
+    view.setUint32(28,sampleRate*blockAlign,true);view.setUint16(32,blockAlign,true);
+    view.setUint16(34,16,true);writeText(36,"data");view.setUint32(40,dataBytes,true);
+    let offset=44;
+    const channelData=Array.from({length:channels},(_,channel)=>audioBuffer.getChannelData(channel));
+    for(let frame=first;frame<last;frame+=1){
+      for(let channel=0;channel<channels;channel+=1){
+        const sample=Math.max(-1,Math.min(1,channelData[channel][frame]));
+        view.setInt16(offset,sample<0?sample*0x8000:sample*0x7fff,true);offset+=2;
+      }
+    }
+    return new Blob([output],{type:"audio/wav"});
+  }
+
+  async function saveMistakeClips(blob,trouble) {
+    if(!blob||!Array.isArray(trouble)||!trouble.length)return [];
+    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+    if(!AudioContextClass)return [];
+    const decoder=new AudioContextClass();
+    let decoded;
+    try{
+      decoded=await decoder.decodeAudioData(await blob.arrayBuffer());
+    }catch(error){
+      setCaptureMessage("The full recording was saved, but this browser could not create separate mistake clips: "+error.message);
+      return [];
+    }finally{try{await decoder.close();}catch{}}
+    const areas=trouble.filter(item=>Number.isFinite(Number(item.timeSeconds))&&Number(item.bar)>0);
+    const results=await Promise.all(areas.map(async item=>{
+      const moment=Number(item.timeSeconds);
+      const start=Math.max(0,moment-0.9),end=Math.min(decoded.duration,moment+1.8);
+      if(end-start<0.45)return null;
+      const clip=encodeAudioRangeAsWav(decoded,start,end);
+      if(!clip||clip.size<1200)return null;
+      const filename="mistake-bar-"+item.bar+"-"+Date.now()+".wav";
+      try{
+        const signed=await api("/api/uploads/sign",{method:"POST",body:{filename,contentType:"audio/wav",size:clip.size,purpose:"library",category:"recordings"}});
+        const put=await fetch(signed.uploadUrl,{method:"PUT",headers:{"Content-Type":"audio/wav"},body:clip});
+        if(!put.ok)throw new Error("The clip upload was rejected.");
+        const completed=await api("/api/uploads/complete",{method:"POST",body:{fileId:signed.fileId,purpose:"library"}});
+        return completed.file?.id?{bar:Number(item.bar),fileId:completed.file.id}:null;
+      }catch(error){
+        setCaptureMessage("The full recording was saved, but one mistake clip could not be uploaded: "+error.message);
+        return null;
+      }
+    }));
+    return results.filter(Boolean);
+  }
+
+  async function startSession(){
+    if(session||busy)return;
+    setBusy(true);setScoreLoadError("");standardCursorRef.current=0;setCurrentBar(null);
+    try{
+      const body=await api("/api/practice/start",{method:"POST",body:{
+        mode:config.mode,taskId:config.task?.id||null,sectionKey:config.sectionKey,
+        referenceFileId:config.referenceFile?.id||null,practiceType:config.practiceType,
+      }});
+      setSession(body.session);
+      sessionStartRef.current=Date.now();
+      setElapsed(0);
+      await beginCapture(config.mode==="assisted");
+    }catch(error){setScoreLoadError(error.message||"The practice session could not be started.");}
+    finally{setBusy(false);}
+  }
+
+  async function finishSession(engineSummary=null){
+    if(endingRef.current||!session)return;
+    endingRef.current=true;setBusy(true);
+    try{
+      const durationSeconds=Math.min(14400,Math.max(elapsed,Math.floor((Date.now()-sessionStartRef.current)/1000)));
+      const blob=await stopCapture();
+      const recordingFileId=await saveRecording(blob);
+      const mistakeClips=engineSummary?.trouble?.length?await saveMistakeClips(blob,engineSummary.trouble):[];
+      const score=engineSummary&&Number.isFinite(engineSummary.score)?engineSummary.score:null;
+      const feedbackPayload=engineSummary?{
+        source:"assisted-engine",
+        score:engineSummary.score,
+        hits:engineSummary.hits,
+        total:engineSummary.total,
+        perfect:engineSummary.perfect,
+        good:engineSummary.good,
+        almost:engineSummary.almost,
+        wrong:engineSummary.wrong,
+        maxCombo:engineSummary.maxCombo,
+        hands:engineSummary.hands,
+        tempo:engineSummary.tempo,
+        trouble:engineSummary.trouble||[],
+        mistakeClips,
+      }:null;
+      const saved=await api("/api/practice/finish",{method:"PATCH",body:{sessionId:session.id,durationSeconds,score,feedback:feedbackPayload,recordingFileId}});
+      const result={
+        session:saved.session,summary:engineSummary,durationSeconds:Number(saved.session?.duration_seconds ?? durationSeconds),recordingFileId,
+        task:config.task,sectionKey:config.sectionKey,mode:config.mode,referenceFile:config.referenceFile||null,
+        recordingSaved:Boolean(recordingFileId),mistakeClips,
+      };
+      onComplete(result);
+    }catch(error){
+      setScoreLoadError(error.message||"We couldn't save this practice session.");
+      setBusy(false);endingRef.current=false;
+    }
+  }
+
+  useEffect(()=>()=>{stopCapture().catch(()=>{});},[]);
+  const file=config.referenceFile;
+  const xmlReady=Boolean(xml);
+  const isXml=file&&isMusicXml(file);
+  
+  const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0");
+
+  return <div className="pc-live-session">
+    <header className="pc-session-top"><div><button className="pc-back-link" onClick={onExit} disabled={Boolean(session)}>← Back</button><span className="pc-eyebrow">{config.mode==="assisted"?"ASSISTED PRACTICE":"STANDARD PRACTICE"}</span><h1>{config.task?.title||file?.original_name||"Free practice"}</h1><p>{config.sectionKey==="full"?"Whole task":config.sectionKey.replace("section-","Section ")}</p></div><div className="pc-session-top-right"><span className="pc-session-clock">{elapsedLabel}</span>{session&&<button className="pc-button dark" onClick={()=>{if(config.mode==="assisted"&&engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}} disabled={busy}>{busy?"Saving session…":"Stop Session ■"}</button>}</div></header>
+    {!session ? <section className="pc-session-ready"><span className="pc-session-ready-icon">♫</span><h2>Take a moment to settle in.</h2><p>Your session will be recorded when you begin. Microphone input is optional, and you can connect a MIDI piano for more accurate note detection.</p>
+      {config.mode==="assisted"&&<div className="pc-inline-warning">Assisted mode will use the score's note timings. Use an external MIDI keyboard for accurate chords; microphone pitch detection is monophonic.</div>}
+      {scoreLoadError&&<p className="pc-form-error">{scoreLoadError}</p>}
+      <button className="pc-button dark" onClick={startSession} disabled={busy||(config.mode==="assisted"&&!xmlReady)}>{busy?"Starting…":"Start session ↗"}</button>
+      {config.mode==="assisted"&&!xmlReady&&<small>{scoreLoadError||"Preparing the MusicXML score…"}</small>}
+    </section> : <div className="pc-session-stage">
+      <div className="pc-session-status"><span className="pc-recording-dot"/><span>Session in progress · {captureMessage}{currentBar?" · Bar "+currentBar:""}</span><span className="pc-input-level"><i style={{width:captureLevel+"%"}}/></span></div>
+      {config.mode==="assisted"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Preparing your falling-note lesson…</div>}>
+        <KeystoneLearnEngine xml={xml} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} recordingStartedAt={captureRef.current?.startedAt||null} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
+      </Suspense> : config.mode==="standard"&&file&&isPdf(file) ? <PracticePdf file={file} /> :
+      config.mode==="standard"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Rendering the score…</div>}><MusicXMLViewer xml={xml} title={file.original_name} currentMeasure={currentBar}/></Suspense> :
+      <div className="pc-practice-no-score"><span>𝄞</span><h2>Practise at your own pace.</h2><p>{scoreLoadError||"Use your own sheet music or upload a score to see it alongside your session."}</p></div>}
+      {config.mode==="standard"&&<div className="pc-standard-note"><strong>Standard Practice</strong><span>{standardEvents.length?"The microphone follows matching pitches through the score where possible. A MIDI keyboard or full score-alignment service is more reliable for chords.":"The session is recording, but this file has no structured note timeline for a live bar cursor."}</span></div>}
+      {scoreLoadError&&<p className="pc-form-error">{scoreLoadError}</p>}
+    </div>}
+    <footer className="pc-session-footer"><span>{config.mode==="assisted"?"Follow the falling notes and play without rushing.":"Play through the music at a comfortable pace."}</span><span>15 minutes of practice earns today's streak.</span></footer>
+  </div>;
 }
-function Field({label,value}) { return <label className="field"><span>{label}</span><input defaultValue={value}/></label>; }
-function Admin({toast}) { const [codes,setCodes]=useState([]); const [code,setCode]=useState(""); const [discount,setDiscount]=useState("10"); return <><PageHeading eyebrow="PIANO COACH" title="Admin" subtitle="Manage the platform and promotional access."/><div className="admin-warning">Admin tools are a design preview. Access control and all actions must be enforced by the PocketBase backend before launch.</div><div className="stats-grid"><Stat label="REGISTERED STUDENTS" value="—" note="Awaiting backend connection" icon="♙"/><Stat label="ACTIVE SUBSCRIPTIONS" value="—" note="Stripe not connected" icon="↻"/><Stat label="DISCOUNT CODES" value={String(codes.length)} note="Created in this preview" icon="%"/><Stat label="SYSTEM STATUS" value="Preview" note="Backend setup pending" icon="⌁"/></div><div className="panel admin-panel"><h2>Discount code generator</h2><p>Create a code for a specific student or a wider promotion.</p><div className="admin-form"><Field label="Discount code" value={code}/><label className="field"><span>Discount</span><select value={discount} onChange={e=>setDiscount(e.target.value)}><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option><option value="25">25%</option><option value="50">50%</option></select></label><Button onClick={()=>{const v=code.trim()||`PIANO${Math.random().toString(36).slice(2,7).toUpperCase()}`;setCodes(a=>[...a,{code:v,discount}]);setCode("");toast("Preview discount code created.");}}>＋ Generate code</Button></div>{codes.map((c,i)=><div className="code-row" key={i}><strong>{c.code}</strong><span>{c.discount}% off</span><button onClick={()=>navigator.clipboard?.writeText(c.code).then(()=>toast("Code copied."))}>Copy</button></div>)}</div></>; }
+
+function estimateFrequency(buffer,sampleRate){
+  const size=buffer.length;
+  let mean=0;for(let i=0;i<size;i++)mean+=buffer[i];mean/=size;
+  let rms=0;for(let i=0;i<size;i++){const value=buffer[i]-mean;rms+=value*value;}
+  rms=Math.sqrt(rms/size);if(rms<0.005)return null;
+  const minLag=Math.max(2,Math.floor(sampleRate/1400));
+  const maxLag=Math.min(size/2,Math.floor(sampleRate/65));
+  let bestLag=-1,best=-Infinity;
+  for(let lag=minLag;lag<=maxLag;lag++){
+    let correlation=0;
+    for(let i=0;i<size-maxLag;i++)correlation+=(buffer[i]-mean)*(buffer[i+lag]-mean);
+    if(correlation>best){best=correlation;bestLag=lag;}
+  }
+  if(bestLag<0)return null;
+  const confidence=best/(best+1e-9);
+  return confidence<0.05?null:sampleRate/bestLag;
+}
+
+function PracticePdf({file}){
+  const [url,setUrl]=useState("");
+  const [error,setError]=useState("");
+  useEffect(()=>{let active=true;api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1").then(result=>{if(active)setUrl(result.url);}).catch(reason=>{if(active)setError(reason.message);});return()=>{active=false;};},[file.id]);
+  if(error)return <div className="pc-inline-error">{error}</div>;
+  if(!url)return <div className="pc-inline-status">Opening your sheet music…</div>;
+  return <div className="pc-practice-pdf"><iframe title={file.original_name} src={url}/></div>;
+}
+
+function FeedbackPage({feedback,onBack,onAgain,onOpenFile}){
+  const [audioUrl,setAudioUrl]=useState("");
+  const [mistakeAudioUrls,setMistakeAudioUrls]=useState({});
+  const [scoreXml,setScoreXml]=useState("");
+  const [scoreError,setScoreError]=useState("");
+  const [activeMistake,setActiveMistake]=useState(0);
+  const summary=feedback.summary;
+  const mistakes=summary?.trouble||[];
+  const referenceFile=feedback.referenceFile||null;
+  const mistakeClips=feedback.mistakeClips||[];
+
+  useEffect(()=>{
+    let active=true;
+    if(!feedback.recordingFileId)return ()=>{active=false;};
+    api("/api/uploads/download?id="+encodeURIComponent(feedback.recordingFileId)+"&inline=1")
+      .then(result=>{if(active)setAudioUrl(result.url);}).catch(()=>{});
+    return()=>{active=false;};
+  },[feedback.recordingFileId]);
+
+  useEffect(()=>{
+    let active=true;
+    if(!mistakeClips.length)return ()=>{active=false;};
+    Promise.all(mistakeClips.map(async clip=>{
+      if(!clip.fileId)return null;
+      try{
+        const result=await api("/api/uploads/download?id="+encodeURIComponent(clip.fileId)+"&inline=1");
+        return [clip.fileId,result.url];
+      }catch{return null;}
+    })).then(results=>{
+      if(active)setMistakeAudioUrls(Object.fromEntries(results.filter(Boolean)));
+    });
+    return()=>{active=false;};
+  },[mistakeClips.map(clip=>clip.fileId).join("|")]);
+
+  useEffect(()=>{
+    let active=true;
+    setScoreXml("");setScoreError("");
+    if(!referenceFile||!isMusicXml(referenceFile))return ()=>{active=false;};
+    async function loadScore(){
+      try{
+        const link=await api("/api/uploads/download?id="+encodeURIComponent(referenceFile.id)+"&inline=1");
+        const response=await fetch(link.url);
+        if(!response.ok)throw new Error("The score could not be loaded from your collection.");
+        const xml=await response.text();
+        if(active)setScoreXml(xml);
+      }catch(error){if(active)setScoreError(error.message||"The score could not be loaded.");}
+    }
+    loadScore();
+    return()=>{active=false;};
+  },[referenceFile?.id]);
+
+  function move(delta){setActiveMistake(index=>Math.max(0,Math.min(mistakes.length-1,index+delta)));}
+  const activeBar=Number(mistakes[activeMistake]?.bar);
+
+  return <div className="pc-feedback-page">
+    <div className="pc-feedback-heading"><button className="pc-back-link" onClick={onBack}>← Back to practice</button><span className="pc-eyebrow">SESSION COMPLETE</span><h1>A little more progress<em>.</em></h1><p>{feedback.task?.title||"Your practice session"} · {formatDuration(feedback.durationSeconds)} recorded</p></div>
+    <section className="pc-feedback-written"><div><span className="pc-eyebrow">YOUR SESSION</span><h2>{summary?"Your assisted practice result":"Your practice has been saved."}</h2><p>{summary?"You matched "+summary.hits+" of "+summary.total+" expected notes in the selected passage. "+(summary.wrong?summary.wrong+" incorrect note attempts were detected. ":"")+"Revisit the marked bars below and try them again at a comfortable pace.":"Your session time has been saved to your practice history. This document did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p></div>{summary&&<div className="pc-feedback-score"><strong>{summary.score}%</strong><small>SESSION SCORE</small></div>}</section>
+
+    <section className="pc-feedback-recordings">
+      <div className="pc-section-heading"><div><span className="pc-eyebrow">MISTAKE RECORDINGS</span><h2>Listen to the places to revisit</h2></div></div>
+      {mistakes.length>0 ? <div className="pc-mistake-recordings">
+        {mistakes.map((item,index)=>{
+          const clip=mistakeClips.find(entry=>Number(entry.bar)===Number(item.bar));
+          const clipUrl=clip?.fileId?mistakeAudioUrls[clip.fileId]:"";
+          return <article className={"pc-mistake-recording "+(activeMistake===index?"active":"")} key={item.bar+"-"+index}>
+            <button type="button" className="pc-mistake-recording-target" onClick={()=>setActiveMistake(index)}>
+              <span className="pc-mistake-number">{String(index+1).padStart(2,"0")}</span>
+              <span><strong>Bar {item.bar}</strong><small>{(item.notes||[]).join(" · ")||"Revisit this passage"}</small></span>
+              <b>View on sheet ↗</b>
+            </button>
+            {clipUrl?<audio controls preload="metadata" src={clipUrl} onPlay={()=>setActiveMistake(index)} aria-label={"Mistake recording for bar "+item.bar}/>:<small className="pc-muted-small">{clip?"Preparing the clip…":"No separate clip was saved for this bar."}</small>}
+          </article>;
+        })}
+      </div> : <p>{summary?"No specific trouble bars were returned by the practice engine.":"Mistake-level recordings require note-level score analysis; your session duration has still been saved."}</p>}
+      {audioUrl&&<details className="pc-full-session-audio"><summary>Listen to the full session recording</summary><audio controls preload="metadata" src={audioUrl}/></details>}
+      {!audioUrl&&<p className="pc-muted-small">{feedback.recordingSaved?"The full session recording is saved in your Sheet Music collection.":"No audio recording was saved for this session."}</p>}
+    </section>
+
+    <section className="pc-feedback-sheet">
+      <div className="pc-section-heading"><div><span className="pc-eyebrow">SHEET MUSIC</span><h2>Your score, with mistakes highlighted</h2><p>Every detected mistake is marked in orange. Select a recording or use the arrows to move to its bar.</p></div>
+        {mistakes.length>0&&<div className="pc-mistake-nav"><button onClick={()=>move(-1)} disabled={activeMistake===0} aria-label="Previous mistake">←</button><span>{activeMistake+1} / {mistakes.length}</span><button onClick={()=>move(1)} disabled={activeMistake===mistakes.length-1} aria-label="Next mistake">→</button></div>}
+      </div>
+      {scoreXml?<MusicXMLViewer xml={scoreXml} title={referenceFile?.original_name||feedback.task?.title||"Your score"} highlightMeasures={mistakes.map(item=>Number(item.bar))} focusMeasure={Number.isInteger(activeBar)&&activeBar>0?activeBar:null}/>:
+        referenceFile&&!isMusicXml(referenceFile)?<div className="pc-linked-score"><span className="pc-file-icon">▤</span><div><strong>{referenceFile.original_name}</strong><small>{scoreError||"Open the original score. Page-level mistake highlights require score-recognition alignment."}</small></div><button className="pc-button outline" onClick={()=>onOpenFile(referenceFile)}>Open sheet ↗</button></div>:
+        <div className="pc-empty-chart"><span>𝄞</span><p>{scoreError||"A MusicXML score linked to this session will appear here with orange mistake markers."}</p></div>}
+      {mistakes.length>0&&activeBar>0&&<div className="pc-active-mistake"><strong>Currently viewing bar {activeBar}</strong><p>{(mistakes[activeMistake]?.notes||[]).join(", ")}</p><small>You can still scroll manually to any other part of the score.</small></div>}
+    </section>
+    <div className="pc-feedback-footer"><button className="pc-button outline" onClick={onBack}>Back to practice</button><button className="pc-button dark" onClick={onAgain}>Start another session ↗</button></div>
+  </div>;
+}
+
+function ProfilePage({data,onSaved,toast,onRefresh}){
+  const user=data.user||{},initialPrefs=data.preferences||{};
+  const [displayName,setDisplayName]=useState(user.display_name||auth.currentUser?.displayName||"");
+  const [preferredName,setPreferredName]=useState(user.preferred_name||"");
+  const [targetDate,setTargetDate]=useState(user.target_date?String(user.target_date).slice(0,10):"");
+  const [notationStyle,setNotationStyle]=useState(initialPrefs.notation_style||"standard");
+  const [theme,setTheme]=useState(initialPrefs.theme||"light");
+  const [fontSize,setFontSize]=useState(initialPrefs.font_size||"normal");
+  const [remindersEmail,setRemindersEmail]=useState(initialPrefs.reminders_email??true);
+  const [remindersBrowser,setRemindersBrowser]=useState(initialPrefs.reminders_browser??false);
+  const [reminderSchedule,setReminderSchedule]=useState(initialPrefs.reminder_schedule||[]);
+  const [timezone,setTimezone]=useState(initialPrefs.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [saving,setSaving]=useState(false);
+  const [password,setPassword]=useState("");
+  const [newPassword,setNewPassword]=useState("");
+  const [passwordBusy,setPasswordBusy]=useState(false);
+  const [accountMessage,setAccountMessage]=useState("");
+  const [interfaceOpen,setInterfaceOpen]=useState(false);
+  const [scheduleEnabled,setScheduleEnabled]=useState(false);
+  const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");
+  const [checkoutSecret,setCheckoutSecret]=useState("");
+  const plan=user.plan||"free";
+  const connected=(auth.currentUser?.providerData||[]).map(provider=>provider.providerId);
+  async function saveProfile(event){
+    event.preventDefault();setSaving(true);setAccountMessage("");
+    try{
+      await api("/api/profile",{method:"PATCH",body:{
+        displayName,preferredName,targetDate,
+        preferences:{notationStyle,theme,fontSize,remindersEmail,remindersBrowser,reminderSchedule,timezone},
+      }});
+      if(displayName&&auth.currentUser?.displayName!==displayName)await updateProfile(auth.currentUser,{displayName});
+      await onSaved();
+    }catch(error){setAccountMessage(error.message||"Your profile could not be saved.");}
+    finally{setSaving(false);}
+  }
+  async function changePassword(event){
+    event.preventDefault();setPasswordBusy(true);setAccountMessage("");
+    try{
+      const current=auth.currentUser;
+      const emailProvider=connected.includes("password");
+      if(emailProvider){
+        if(!password)throw new Error("Enter your current password to confirm this change.");
+        const credential=EmailAuthProvider.credential(current.email,password);
+        await reauthenticateWithCredential(current,credential);
+      }else if(googleProvider){await reauthenticateWithPopup(current,googleProvider);}
+      if(newPassword.length<8||!/[A-Z]/.test(newPassword)||!/[a-z]/.test(newPassword)||!/[0-9]/.test(newPassword))throw new Error("Use at least 8 characters, including uppercase, lowercase and a number.");
+      await updatePassword(current,newPassword);
+      setPassword("");setNewPassword("");setAccountMessage("Your password has been changed.");
+    }catch(error){setAccountMessage(error.message||"The password could not be changed.");}
+    finally{setPasswordBusy(false);}
+  }
+  async function openPortal(){
+    try{const result=await api("/api/billing/portal",{method:"POST"});window.location.assign(result.url);}
+    catch(error){setAccountMessage(error.message||"Billing management could not be opened.");}
+  }
+  async function startCheckout(){
+    try{
+      const selected=checkoutPlan;
+      await api("/api/profile",{method:"PATCH",body:{examBoard:user.exam_board,grade:user.grade,plan:selected,interval:"monthly",targetDate,bookSources:Array.isArray(user.book_sources)?user.book_sources:[],examBookSkipped:!user.exam_book_file_id}});
+      const checkout=await api("/api/billing/checkout",{method:"POST",body:{plan:selected,interval:"monthly"}});
+      setCheckoutSecret(checkout.clientSecret);
+    }catch(error){setAccountMessage(error.message||"Checkout could not be opened.");}
+  }
+  function toggleDay(day){
+    setReminderSchedule(current=>{
+      const currentDay=current.find(item=>Number(item.day)===day);
+      const next=current.filter(item=>Number(item.day)!==day);
+      return [...next,{day,enabled:!currentDay?.enabled,times:currentDay?.times?.length?currentDay.times:["18:00"]}].sort((a,b)=>a.day-b.day);
+    });
+  }
+  function addTime(day){
+    setReminderSchedule(current=>current.map(item=>Number(item.day)===day?{...item,times:[...new Set([...(item.times||[]),"19:00"])].slice(0,8)}:item));
+  }
+  function setTime(day,index,time){
+    setReminderSchedule(current=>current.map(item=>Number(item.day)===day?{...item,times:item.times.map((value,i)=>i===index?time:value)}:item));
+  }
+  return <div className="pc-profile-page">
+    <div className="pc-welcome-row"><div><span className="pc-eyebrow">YOUR ACCOUNT</span><h1>Profile<em>.</em></h1><p>Your details and preferences, just how you like them.</p></div></div>
+    <form className="pc-profile-form" onSubmit={saveProfile}>
+      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">01 · PERSONAL DETAILS</span><div className="pc-profile-avatar-row"><span className="pc-avatar large">{(preferredName||displayName||"P").split(/\s+/).map(x=>x[0]).join("").slice(0,2).toUpperCase()}</span><div><h2>{preferredName||displayName||"Piano student"}</h2><p>Student account</p></div></div>
+        <div className="pc-profile-fields"><label>Name<input value={displayName} onChange={e=>setDisplayName(e.target.value)} required/></label><label>Preferred name<input value={preferredName} onChange={e=>setPreferredName(e.target.value)} placeholder="What should we call you?"/></label><label>Email address<input value={user.email||auth.currentUser?.email||""} disabled/></label><label>Connected services<input value={connected.map(id=>id==="google.com"?"Google":id==="password"?"Email and password":id).join(" · ")||"No linked service"} disabled/></label><label>Grade and exam board<input value={[user.grade,user.exam_board].filter(Boolean).join(" · ")||"Not set"} disabled/></label><label>Target completion date<input type="date" value={targetDate} onChange={e=>setTargetDate(e.target.value)}/></label></div>
+      </section>
+      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">02 · REMINDERS & NOTATION</span><h2>Make practice feel right.</h2><div className="pc-setting-line"><div><strong>Email reminders</strong><small>Choose this independently from browser notifications.</small></div><Toggle value={remindersEmail} onChange={setRemindersEmail}/></div><div className="pc-setting-line"><div><strong>Browser notifications</strong><small>Permission and delivery require the Web Push service to be configured.</small></div><Toggle value={remindersBrowser} onChange={setRemindersBrowser}/></div>
+        <label className="pc-profile-label">Notation style<select value={notationStyle} onChange={e=>setNotationStyle(e.target.value)}><option value="standard">Standard notation</option><option value="closer">Closer-together spacing</option><option value="larger">Larger noteheads</option><option value="inverted">Inverted notation</option></select></label>
+        <div className={"pc-notation-preview "+notationStyle}><span className="pc-eyebrow">NOTATION PREVIEW</span><div>𝄞　♩　♪　♫　♬　♩　𝄢　♬</div></div>
+        <label className="pc-profile-label">Your timezone<select value={timezone} onChange={e=>setTimezone(e.target.value)}><option value={timezone}>{timezone}</option>{["Europe/London","Europe/Paris","America/New_York","America/Los_Angeles","Asia/Kolkata","Australia/Sydney"].filter(item=>item!==timezone).map(item=><option key={item}>{item}</option>)}</select></label>
+        <div className="pc-setting-line"><div><strong>Reminder schedule</strong><small>Set individual days and multiple times. Your preferences are saved; delivery service is not connected yet.</small></div><button type="button" className="pc-small-button" onClick={()=>setScheduleEnabled(v=>!v)}>{scheduleEnabled?"Hide":"Edit schedule"}</button></div>
+        {scheduleEnabled&&<div className="pc-reminder-days">{WEEKDAYS.map((day,index)=>{const item=reminderSchedule.find(entry=>Number(entry.day)===index);return <div className="pc-reminder-day" key={day}><label><input type="checkbox" checked={Boolean(item?.enabled)} onChange={()=>toggleDay(index)}/>{day}</label>{item?.enabled&&<div>{(item.times||[]).map((time,i)=><input aria-label={day+" reminder time"} key={i} type="time" value={time} onChange={e=>setTime(index,i,e.target.value)}/>)}<button type="button" onClick={()=>addTime(index)}>＋ Time</button></div>}</div>;})}</div>}
+      </section>
+      <section className="pc-panel pc-profile-section"><button type="button" className="pc-collapse-head" onClick={()=>setInterfaceOpen(v=>!v)}><span><span className="pc-eyebrow">03 · INTERFACE SETTINGS</span><strong>Accessibility and appearance</strong></span><b>{interfaceOpen?"−":"＋"}</b></button>
+        {interfaceOpen&&<div className="pc-interface-settings"><label>Appearance<select value={theme} onChange={e=>setTheme(e.target.value)}><option value="light">Light</option><option value="dark">Dark</option><option value="contrast">High contrast</option></select></label><label>Text size<select value={fontSize} onChange={e=>setFontSize(e.target.value)}><option value="normal">Standard</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><p>Changes are applied in this browser and saved with your profile.</p></div>}
+      </section>
+      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">04 · SECURITY</span><h2>Change password</h2><div className="pc-profile-fields"><label>Current password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder={connected.includes("password")?"Current password":"Not needed for Google sign-in"}/></label><label>New password<input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} autoComplete="new-password"/></label></div><button type="button" className="pc-button outline" disabled={passwordBusy||!newPassword} onClick={changePassword}>{passwordBusy?"Updating…":"Update password"}</button><p className="pc-muted-small">At least 8 characters, including uppercase, lowercase and a number.</p></section>
+      <section className="pc-panel pc-profile-section pc-delete-note"><span className="pc-eyebrow">05 · ACCOUNT DELETION</span><h2>Leaving Piano Coach?</h2><p>Account deletion must verify your identity, cancel an active subscription and provide a 15-day period in which you can cancel the request. That deletion workflow is not connected yet, so this control is deliberately not presented as active.</p><button type="button" disabled className="pc-button danger" title="Account deletion workflow is not connected">Account deletion unavailable</button></section>
+      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">06 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?"£19.99 per month":plan==="basic"?"£9.99 per month":"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
+        {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic · £9.99/month</option><option value="pro">Pro · £19.99/month</option></select></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
+        <p className="pc-muted-small">Monthly plan changes and cancellation are managed securely through Stripe. Annual changes need to be handled at renewal.</p>
+      </section>
+      {accountMessage&&<p className="pc-form-error" role="alert">{accountMessage}</p>}
+      <div className="pc-profile-save"><button className="pc-button dark" disabled={saving}>{saving?"Saving…":"Save profile and preferences"}</button></div>
+    </form>
+  </div>;
+}
 
 
-function FieldDummy() {}
+function CheckoutModal({clientSecret,onClose}){
+  const mountRef=useRef(null);
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    let active=true,checkout=null;
+    async function mount(){
+      try{
+        const {loadStripe}=await import("@stripe/stripe-js");
+        const stripe=await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+        if(!stripe)throw new Error("Stripe could not be loaded. Check the publishable key.");
+        checkout=await stripe.initEmbeddedCheckout({clientSecret});
+        if(active&&mountRef.current){checkout.mount(mountRef.current);setLoading(false);}
+      }catch(reason){if(active){setError(reason.message||"Secure checkout could not be opened.");setLoading(false);}}
+    }
+    mount();
+    return()=>{active=false;try{checkout?.destroy();}catch{}};
+  },[clientSecret]);
+  return <div className="pc-overlay pc-checkout-overlay"><section className="pc-modal pc-checkout-modal"><button className="pc-modal-close" onClick={onClose}>×</button><span className="pc-eyebrow">SECURE CHECKOUT</span><h2>Complete your subscription.</h2>{loading&&<p>Preparing secure checkout…</p>}{error&&<p className="pc-form-error">{error}</p>}<div ref={mountRef}/></section></div>;
+}
+
+function Toggle({value,onChange}){return <button type="button" role="switch" aria-checked={value} className={"pc-toggle "+(value?"on":"")} onClick={()=>onChange(!value)}><i/></button>;}
