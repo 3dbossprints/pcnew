@@ -35,7 +35,13 @@ function formatDuration(seconds) {
   const minutes = Math.floor((value % 3600) / 60);
   return hours ? hours + "h " + minutes + "m" : minutes + "m";
 }
-function currentWeekDateKeys() {\n  const monday = new Date();\n  monday.setHours(0,0,0,0);\n  monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));\n  return Array.from({length:7},(_,index)=>{const day=new Date(monday);day.setDate(monday.getDate()+index);return day.getFullYear()+"-"+String(day.getMonth()+1).padStart(2,"0")+"-"+String(day.getDate()).padStart(2,"0");});\n}\nfunction formatDate(value) {
+function currentWeekDateKeys() {
+  const monday = new Date();
+  monday.setHours(0,0,0,0);
+  monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));
+  return Array.from({length:7},(_,index)=>{const day=new Date(monday);day.setDate(monday.getDate()+index);return day.getFullYear()+"-"+String(day.getMonth()+1).padStart(2,"0")+"-"+String(day.getDate()).padStart(2,"0");});
+}
+function formatDate(value) {
   if (!value) return "Not set";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -266,7 +272,9 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const todaySeconds = Number(summary.todaySeconds || 0);
   const remaining = Math.max(0, 900 - todaySeconds);
   const demoRemaining = Math.max(0, 3600 - Number(user.demo_seconds_used || 0));
-  const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));\n  const weekDates = currentWeekDateKeys();\n  const practiced = new Set(summary.practiceDays || []);
+  const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));
+  const weekDates = currentWeekDateKeys();
+  const practiced = new Set(summary.practiceDays || []);
   const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, data.attempts || []), 0) / tasks.length) : null;
   return <div className="pc-dashboard">
     <div className="pc-welcome-row"><div><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}<em>.</em></h1><p>Make a little space for music today.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Your sheet music <span>↗</span></button></div>
