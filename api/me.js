@@ -31,11 +31,21 @@ export default async function handler(req, res) {
       "AND started_at >= NOW() - INTERVAL '90 days' GROUP BY started_at::date ORDER BY practice_date DESC",
       [user.uid],
     );
-    const pref = await db.query(
-      "SELECT notation_style,theme,reminders_email,reminders_browser,timezone,reminder_schedule " +
-      "FROM student_preferences WHERE firebase_uid=$1",
-      [user.uid],
-    );
+    let pref = { rows: [] };
+    try {
+      pref = await db.query(
+        "SELECT notation_style,theme,font_size,reminders_email,reminders_browser,timezone,reminder_schedule " +
+        "FROM student_preferences WHERE firebase_uid=$1",
+        [user.uid],
+      );
+    } catch (preferenceError) {
+      if (preferenceError.code !== "42703") throw preferenceError;
+      pref = await db.query(
+        "SELECT notation_style,theme,reminders_email,reminders_browser,timezone,reminder_schedule " +
+        "FROM student_preferences WHERE firebase_uid=$1",
+        [user.uid],
+      );
+    }
     let tasks = { rows: [] };
     let attempts = { rows: [] };
     let learningPlanAvailable = true;
