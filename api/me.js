@@ -17,18 +17,22 @@ export default async function handler(req, res) {
       "onboarding_completed, book_sources, exam_book_file_id, exam_book_skipped, exam_book_uploaded_at, demo_seconds_used, created_at",
       [user.uid, user.email, user.name],
     );
+    const timezone = result.rows[0]?.timezone || "UTC";
     const practice = await db.query(
-      "SELECT COALESCE(SUM(duration_seconds) FILTER (WHERE started_at >= date_trunc('week', NOW())), 0)::int AS weekly_seconds, " +
-      "COUNT(*) FILTER (WHERE started_at >= date_trunc('week', NOW()))::int AS sessions_this_week, " +
-      "COALESCE(SUM(duration_seconds), 0)::int AS lifetime_seconds, " +
-      "COALESCE(SUM(duration_seconds) FILTER (WHERE started_at::date = CURRENT_DATE), 0)::int AS today_seconds " +
-      "FROM practice_sessions WHERE firebase_uid = $1 AND ended_at IS NOT NULL",
+      "SELECT COALESCE(SUM(ps.duration_seconds) FILTER (WHERE (ps.started_at AT TIME ZONE COALESCE(u.timezone,'UTC')) >= date_trunc('week', NOW() AT TIME ZONE COALESCE(u.timezone,'UTC'))), 0)::int AS weekly_seconds, " +
+      "COUNT(*) FILTER (WHERE (ps.started_at AT TIME ZONE COALESCE(u.timezone,'UTC')) >= date_trunc('week', NOW() AT TIME ZONE COALESCE(u.timezone,'UTC')))::int AS sessions_this_week, " +
+      "COALESCE(SUM(ps.duration_seconds), 0)::int AS lifetime_seconds, " +
+      "COALESCE(SUM(ps.duration_seconds) FILTER (WHERE (ps.started_at AT TIME ZONE COALESCE(u.timezone,'UTC'))::date = (NOW() AT TIME ZONE COALESCE(u.timezone,'UTC'))::date), 0)::int AS today_seconds " +
+      "FROM practice_sessions ps JOIN users u ON u.firebase_uid=ps.firebase_uid " +
+      "WHERE ps.firebase_uid = $1 AND ps.ended_at IS NOT NULL",
       [user.uid],
     );
     const days = await db.query(
-      "SELECT started_at::date::text AS practice_date, SUM(duration_seconds)::int AS seconds " +
-      "FROM practice_sessions WHERE firebase_uid = $1 AND ended_at IS NOT NULL " +
-      "AND started_at >= NOW() - INTERVAL '90 days' GROUP BY started_at::date ORDER BY practice_date DESC",
+      "SELECT (ps.started_at AT TIME ZONE COALESCE(u.timezone,'UTC'))::date::text AS practice_date, SUM(ps.duration_seconds)::int AS seconds " +
+      "FROM practice_sessions ps JOIN users u ON u.firebase_uid=ps.firebase_uid " +
+      "WHERE ps.firebase_uid = $1 AND ps.ended_at IS NOT NULL " +
+      "AND ps.started_at >= NOW() - INTERVAL '95 days' " +
+      "GROUP BY (ps.started_at AT TIME ZONE COALESCE(u.timezone,'UTC'))::date ORDER BY practice_date DESC",
       [user.uid],
     );
     let pref = { rows: [] };
@@ -66,10 +70,14 @@ export default async function handler(req, res) {
       learningPlanAvailable = false;
     }
     const completedDays = new Set(days.rows.filter((row) => Number(row.seconds) >= 900).map((row) => row.practice_date));
-    const today = new Date();
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const part = (type) => parts.find((item) => item.type === type)?.value;
+    const todayKey = part("year") + "-" + part("month") + "-" + part("day");
+    const todayDate = new Date(todayKey + "T00:00:00Z");
     const utcDate = (date) => date.toISOString().slice(0, 10);
-    const streakStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    if (!completedDays.has(utcDate(streakStart))) streakStart.setUTCDate(streakStart.getUTCDate() - 1);
+    const streakStart = new Date(todayDate);
+    if (!completedDays.has(todayKey)) streakStart.setUTCDate(streakStart.getUTCDate() - 1);
     let streakDays = 0;
     for (let offset = 0; offset < 90; offset += 1) {
       const date = new Date(streakStart);
@@ -77,19 +85,21 @@ export default async function handler(req, res) {
       if (!completedDays.has(utcDate(date))) break;
       streakDays += 1;
     }
+    const localMonday = new Date(todayDate);
+    localMonday.setUTCDate(localMonday.getUTCDate() - ((localMonday.getUTCDay() + 6) % 7));
+    const mondayKey = utcDate(localMonday);
+    const localSunday = new Date(localMonday);
+    localSunday.setUTCDate(localSunday.getUTCDate() + 6);
+    const sundayKey = utcDate(localSunday);
+    const practiceDays = days.rows.filter((row) => Number(row.seconds) >= 900).map((row) => row.practice_date);
     const practiceSummary = {
       weeklySeconds: Number(practice.rows[0]?.weekly_seconds || 0),
       sessionsThisWeek: Number(practice.rows[0]?.sessions_this_week || 0),
       lifetimeSeconds: Number(practice.rows[0]?.lifetime_seconds || 0),
       todaySeconds: Number(practice.rows[0]?.today_seconds || 0),
       streakDays,
-      practiceDaysThisWeek: days.rows.filter((row) => {
-        const date = new Date(row.practice_date + "T00:00:00Z");
-        const now = new Date();
-        const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-        monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
-        return date >= monday && date <= now && Number(row.seconds) >= 900;
-      }).length,
+      practiceDays,
+      practiceDaysThisWeek: practiceDays.filter((date) => date >= mondayKey && date <= sundayKey).length,
     };
     return sendJson(res, 200, { user: result.rows[0], practiceSummary, preferences: pref.rows[0] || null, tasks: tasks.rows, attempts: attempts.rows, learningPlanAvailable });
   } catch (error) {
