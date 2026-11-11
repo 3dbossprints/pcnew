@@ -33,7 +33,7 @@ export default async function handler(req,res) {
         " SELECT firebase_uid,task_id,id,COALESCE(section_key,'full'),score,duration_seconds FROM completed WHERE task_id IS NOT NULL "+
         " ON CONFLICT(session_id) DO NOTHING RETURNING id"+
         ") SELECT completed.*,counted.demo_seconds_used FROM completed CROSS JOIN counted",
-        [sessionId,user.uid,durationSeconds,score,feedback===null?null:JSON.stringify(feedback),recordingFileId],
+        [sessionId,user.uid,safeDurationSeconds,score,feedback===null?null:JSON.stringify(feedback),recordingFileId],
       );
     } catch (schemaError) {
       if (!["42P01", "42703"].includes(schemaError.code)) throw schemaError;
@@ -46,7 +46,7 @@ export default async function handler(req,res) {
         " UPDATE users SET demo_seconds_used=CASE WHEN plan='free' THEN LEAST(3600,demo_seconds_used+(SELECT duration_seconds FROM completed)) ELSE demo_seconds_used END,updated_at=NOW() "+
         " WHERE firebase_uid=(SELECT firebase_uid FROM completed) RETURNING demo_seconds_used"+
         ") SELECT completed.*,counted.demo_seconds_used FROM completed CROSS JOIN counted",
-        [sessionId,user.uid,durationSeconds,score],
+        [sessionId,user.uid,safeDurationSeconds,score],
       );
     }
     if (!result.rowCount) return sendJson(res,404,{error:"This session is already finished or doesn't belong to your account."});
