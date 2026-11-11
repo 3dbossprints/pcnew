@@ -20,7 +20,6 @@ const addFamily = (name, keys, group, options = {}) => {
 ["Major","Natural minor","Harmonic minor","Melodic minor"].forEach(type =>
   addFamily(type,type==="Major"?majorKeys:minorKeys,"Scales",{level:type==="Major"||type==="Natural minor"?"Core":"Developing"})
 );
-addFamily("Major","C major · contrary motion".split(" · ").slice(0,1),"Scales",{motion:"Contrary motion"});
 majorKeys.forEach(key=>families.push({
   id:"contrary-major-"+key.toLowerCase().replace(/[^a-z0-9]+/g,""),
   title:key+" major · contrary motion",key,family:"Major",group:"Contrary motion",
@@ -40,8 +39,11 @@ minorKeys.forEach(key=>families.push({
 ["Dorian","Phrygian","Lydian","Mixolydian","Aeolian","Locrian"].forEach(type =>
   addFamily(type,chromaticRoots,"Modes",{level:"Advanced"})
 );
-["Major arpeggio","Minor arpeggio","Diminished arpeggio","Augmented arpeggio","Dominant seventh arpeggio","Diminished seventh arpeggio"].forEach(type =>
+["Major arpeggio","Diminished arpeggio","Augmented arpeggio","Dominant seventh arpeggio"].forEach(type =>
   addFamily(type,majorKeys,"Arpeggios",{level:type.includes("seventh")?"Advanced":"Core"})
+);
+["Minor arpeggio","Diminished seventh arpeggio"].forEach(type =>
+  addFamily(type,minorKeys,"Arpeggios",{level:"Advanced"})
 );
 ["Major broken chord","Minor broken chord","Dominant seventh broken chord","Diminished seventh broken chord"].forEach(type =>
   addFamily(type,majorKeys,"Broken chords",{level:"Developing"})
