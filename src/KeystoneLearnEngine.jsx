@@ -12,7 +12,7 @@ const midiFromKey = key => {
   return 12 * (Number(m[3]) + 1) + semitones[m[1].toUpperCase()] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
 };
 
-export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120, timeSignature = '4/4', title = 'Your piece', micInputRef, onConnectMic, onDisconnectMic, microphoneListening = false, microphoneLevel = 0, microphoneStatus = 'Microphone is off', onFinish, onClose }) {
+export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120, timeSignature = '4/4', title = 'Your piece', micInputRef, onConnectMic, onDisconnectMic, microphoneListening = false, microphoneLevel = 0, microphoneStatus = 'Microphone is off', onFinish, onClose, onReady, onProgress }) {
   const parsed = useMemo(() => {
     if (xml) {
       try { return parseKeystoneMusicXML(xml); }
@@ -171,6 +171,9 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
           for(const n of run.active){if(n.hold&&!n.broken){if(run.clock>=n.he){n.hold=0;n.heldEnd=now;}else if(pressedRef.current.has(n.midi))n.upAt=0;else if(!n.upAt)n.upAt=now;else if(now-n.upAt>350){n.broken=true;n.upAt=0;run.stall=true;if(n.res==='perfect')n.res='good';setMessage('Keep the note held down. Press it again to continue.');}}}
           if(!run.stall){const next=run.active.find(n=>!n.res);run.clock=next?Math.min(run.clock+advance,Math.max(next.t,run.clock)):run.clock+advance;}
         }else run.clock+=advance;
+        const currentNote=run.active.find(n=>run.clock>=n.t&&run.clock<=n.t+n.d)||run.active.find(n=>n.t>run.clock);
+        const currentMeasure=Number(currentNote?.measure)||null;
+        if(currentMeasure!==run.lastReportedBar){run.lastReportedBar=currentMeasure;onProgress?.(currentMeasure);}
         for(const n of run.active){if(!n.arrivedAt&&n.t<=run.clock)n.arrivedAt=now;if(run.mode==='perform'&&!n.res&&!n.missed&&run.clock>n.t+.4){n.missed=true;run.combo=0;}}
         for(const n of run.accompaniment){if(!n.played&&run.clock>=n.t){n.played=true;const id='accompaniment-'+n.orderIndex+'-'+n.noteIndex;sound(n.midi,true,id);const timer=window.setTimeout(()=>{timersRef.current.delete(timer);sound(n.midi,false,id);},Math.max(140,n.d*1000/run.speed));timersRef.current.add(timer);}}
         if(run.mode==='learn'&&run.active.every(n=>n.res&&!n.hold)){run.finishAt ||= now+700;if(now>run.finishAt)finishRun();}
@@ -197,7 +200,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
     };
     rafRef.current=requestAnimationFrame(drawFrame);
     return()=>{active=false;cancelAnimationFrame(rafRef.current);};
-  }, [dimensions,keyRange,fromBar,toBar,hands,keyStart,sound,finishRun,tick,timeline]);
+  }, [dimensions,keyRange,fromBar,toBar,hands,keyStart,sound,finishRun,tick,timeline,onProgress]);
 
   const canvasDown = useCallback((event) => {
     const rect=canvasRef.current.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top,fh=rect.height-KEYBOARD_HEIGHT;
@@ -229,7 +232,23 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
   }, [disconnectMidi]);
 
   const shiftKey = delta => setKeyStart(v=>Math.max(21,Math.min(108-COMPUTER_KEYS.length,v+delta)));
-  const finish = () => { const run=runRef.current;if(run){const hits=run.active.filter(n=>n.res),summary={score:Math.max(0,Math.round(100*hits.reduce((sum,n)=>sum+({perfect:1,good:.8,almost:.5}[n.res]||0),0)/Math.max(1,run.active.length))),hits:hits.length,total:run.active.length,perfect:hits.filter(n=>n.res==='perfect').length,good:hits.filter(n=>n.res==='good').length,almost:hits.filter(n=>n.res==='almost').length,wrong:run.wrong.length,maxCombo:run.maxCombo,mode:run.mode,hands,tempo:bpm,speed:run.speed,trouble:[]};runRef.current=null;onFinish?.(summary);}else onFinish?.(result); };
+  const finish = useCallback(() => {
+    const run=runRef.current;
+    if(run){
+      const hits=run.active.filter(n=>n.res);
+      const bars={};
+      run.active.filter(n=>!n.res||n.bad).forEach(n=>(bars[n.measure]??=new Set()).add(midiName(n.midi)));
+      const trouble=Object.entries(bars).sort((a,b)=>b[1].size-a[1].size).slice(0,12).map(([bar,ns])=>({bar:Number(bar),notes:[...ns]}));
+      const summary={
+        score:Math.max(0,Math.round(100*hits.reduce((sum,n)=>sum+({perfect:1,good:.8,almost:.5}[n.res]||0),0)/Math.max(1,run.active.length))),
+        hits:hits.length,total:run.active.length,perfect:hits.filter(n=>n.res==='perfect').length,
+        good:hits.filter(n=>n.res==='good').length,almost:hits.filter(n=>n.res==='almost').length,
+        wrong:run.wrong.length,maxCombo:run.maxCombo,mode:run.mode,hands,tempo:bpm,speed:run.speed,trouble
+      };
+      runRef.current=null;onFinish?.(summary);
+    }else onFinish?.(result);
+  }, [hands,bpm,onFinish,result]);
+  useEffect(() => { onReady?.({ finish }); }, [onReady, finish]);
 
   return <div className="keystone-engine" role="dialog" aria-modal="true" aria-label="Keystone Listen and Learn engine">
     <header className="keystone-head"><div><span className="eyebrow">LISTEN & LEARN · KEYSTONE ENGINE</span><h2>{title}</h2><p>{parsed.error?'Using the imported note events because the original MusicXML could not be parsed: '+parsed.error:'MusicXML timing, repeats and endings are loaded into the lesson.'}</p></div><button type="button" className="btn" onClick={onClose}>Close ✕</button></header>
