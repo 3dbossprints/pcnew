@@ -8,6 +8,7 @@ const grades = new Set(["Initial", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "
 const plans = new Set(["free", "basic", "pro"]);
 const themes = new Set(["light", "dark", "contrast"]);
 const notationStyles = new Set(["standard", "closer", "larger", "inverted"]);
+const fontSizes = new Set(["normal", "large", "xlarge"]);
 const categories = new Set(["pieces", "exercises", "scales"]);
 
 function cleanSchedule(value) {
@@ -99,17 +100,18 @@ export default async function handler(req, res) {
   try {
     if (body.preferences !== undefined) {
       const input = body.preferences || {};
-      const current = await database().query("SELECT notation_style,theme,reminders_email,reminders_browser,timezone,reminder_schedule FROM student_preferences WHERE firebase_uid=$1", [user.uid]);
+      const current = await database().query("SELECT notation_style,theme,font_size,reminders_email,reminders_browser,timezone,reminder_schedule FROM student_preferences WHERE firebase_uid=$1", [user.uid]);
       const old = current.rows[0] || {};
       preferences = {
         notationStyle: input.notationStyle ?? old.notation_style ?? "standard",
         theme: input.theme ?? old.theme ?? "light",
+        fontSize: input.fontSize ?? old.font_size ?? "normal",
         remindersEmail: input.remindersEmail ?? old.reminders_email ?? true,
         remindersBrowser: input.remindersBrowser ?? old.reminders_browser ?? false,
         reminderSchedule: input.reminderSchedule !== undefined ? cleanSchedule(input.reminderSchedule) : old.reminder_schedule || [],
       };
       timezone = input.timezone ?? old.timezone ?? null;
-      if (!notationStyles.has(preferences.notationStyle) || !themes.has(preferences.theme) ||
+      if (!notationStyles.has(preferences.notationStyle) || !themes.has(preferences.theme) || !fontSizes.has(preferences.fontSize) ||
           typeof preferences.remindersEmail !== "boolean" || typeof preferences.remindersBrowser !== "boolean" ||
           (timezone !== null && !validTimezone(timezone))) return sendJson(res, 400, { error: "One or more preference settings are invalid." });
     }
@@ -133,13 +135,24 @@ export default async function handler(req, res) {
       );
     }
     if (preferences) {
-      await db.query(
-        "INSERT INTO student_preferences(firebase_uid,notation_style,theme,reminders_email,reminders_browser,timezone,reminder_schedule,updated_at) " +
-        "VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,NOW()) ON CONFLICT(firebase_uid) DO UPDATE SET " +
-        "notation_style=EXCLUDED.notation_style,theme=EXCLUDED.theme,reminders_email=EXCLUDED.reminders_email," +
-        "reminders_browser=EXCLUDED.reminders_browser,timezone=EXCLUDED.timezone,reminder_schedule=EXCLUDED.reminder_schedule,updated_at=NOW()",
-        [user.uid,preferences.notationStyle,preferences.theme,preferences.remindersEmail,preferences.remindersBrowser,timezone,JSON.stringify(preferences.reminderSchedule)],
-      );
+      try {
+        await db.query(
+          "INSERT INTO student_preferences(firebase_uid,notation_style,theme,font_size,reminders_email,reminders_browser,timezone,reminder_schedule,updated_at) " +
+          "VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,NOW()) ON CONFLICT(firebase_uid) DO UPDATE SET " +
+          "notation_style=EXCLUDED.notation_style,theme=EXCLUDED.theme,font_size=EXCLUDED.font_size,reminders_email=EXCLUDED.reminders_email," +
+          "reminders_browser=EXCLUDED.reminders_browser,timezone=EXCLUDED.timezone,reminder_schedule=EXCLUDED.reminder_schedule,updated_at=NOW()",
+          [user.uid,preferences.notationStyle,preferences.theme,preferences.fontSize,preferences.remindersEmail,preferences.remindersBrowser,timezone,JSON.stringify(preferences.reminderSchedule)],
+        );
+      } catch (preferenceError) {
+        if (preferenceError.code !== "42703") throw preferenceError;
+        await db.query(
+          "INSERT INTO student_preferences(firebase_uid,notation_style,theme,reminders_email,reminders_browser,timezone,reminder_schedule,updated_at) " +
+          "VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,NOW()) ON CONFLICT(firebase_uid) DO UPDATE SET " +
+          "notation_style=EXCLUDED.notation_style,theme=EXCLUDED.theme,reminders_email=EXCLUDED.reminders_email," +
+          "reminders_browser=EXCLUDED.reminders_browser,timezone=EXCLUDED.timezone,reminder_schedule=EXCLUDED.reminder_schedule,updated_at=NOW()",
+          [user.uid,preferences.notationStyle,preferences.theme,preferences.remindersEmail,preferences.remindersBrowser,timezone,JSON.stringify(preferences.reminderSchedule)],
+        );
+      }
       if (timezone) await db.query("UPDATE users SET timezone=$2,updated_at=NOW() WHERE firebase_uid=$1",[user.uid,timezone]);
     }
     const result = await db.query(
