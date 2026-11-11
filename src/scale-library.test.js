@@ -17,7 +17,8 @@ test("minor interval scales and broken chords use minor-key roots", () => {
   assert.ok(SCALE_LIBRARY.some(item => item.title === "A Minor scale in thirds"));
   assert.ok(SCALE_LIBRARY.some(item => item.title === "E Minor scale in sixths"));
   assert.ok(SCALE_LIBRARY.some(item => item.title === "E Minor broken chord"));
-  assert.ok(!SCALE_LIBRARY.some(item => item.title === "C Major scale in thirds"));
+  assert.ok(!SCALE_LIBRARY.some(item => item.title === "D♭ Minor scale in thirds"));
+  assert.ok(!SCALE_LIBRARY.some(item => item.title === "D♭ Minor broken chord"));
 });
 
 test("scale catalogue identifiers are unique", () => {
