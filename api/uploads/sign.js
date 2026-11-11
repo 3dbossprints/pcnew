@@ -7,6 +7,7 @@ import { requireMethod, sendJson } from "../_lib/http.js";
 
 const allowed = new Set(["application/epub+zip", "application/zip", "application/pdf", "image/png", "image/jpeg", "application/vnd.recordare.musicxml+xml", "application/xml", "application/octet-stream", "audio/mpeg", "audio/mp4", "audio/webm", "audio/midi", "audio/x-midi", "audio/wav", "audio/x-wav"]);
 const extensions = new Set([".epub", ".pdf", ".png", ".jpg", ".jpeg", ".xml", ".musicxml", ".mid", ".midi", ".mp3", ".m4a", ".mp4", ".webm", ".wav"]);
+const categories = new Set(["pieces", "exercises", "scales", "recordings", "other"]);
 function kindFor(name) {
   const ext = name.toLowerCase().slice(name.lastIndexOf("."));
   if ([".mp3", ".m4a", ".mp4", ".webm", ".wav"].includes(ext)) return "audio";
@@ -28,13 +29,14 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
   if (!user.emailVerified) return sendJson(res, 403, { error: "Verify your email address before uploading." });
-  const { filename, contentType, size, purpose = "library" } = req.body || {};
-  if (!["library", "exam_book", "personal_piece"].includes(purpose)) return sendJson(res, 400, { error: "Invalid upload purpose." });
+  const { filename, contentType, size, purpose = "library", category: requestedCategory } = req.body || {};
   const extension = typeof filename === "string" ? filename.toLowerCase().slice(filename.lastIndexOf(".")) : "";
+  const category = categories.has(requestedCategory) ? requestedCategory : null;
   if (typeof filename !== "string" || !filename.trim() || filename.length > 180 ||
       !extensions.has(extension) || !allowed.has(contentType) || !Number.isInteger(size) || size < 1 || size > maxBytes) {
     return sendJson(res, 400, { error: "Unsupported file or file size. Maximum upload size is 25 MB." });
   }
+  if (!["library", "exam_book", "personal_piece"].includes(purpose)) return sendJson(res, 400, { error: "Invalid upload purpose." });
   try {
     if (purpose === "exam_book" && ![".pdf", ".epub"].includes(extension)) return sendJson(res, 415, { error: "Exam-board ebooks must be PDF or EPUB files." });
     if (purpose !== "library") {
@@ -49,10 +51,11 @@ export default async function handler(req, res) {
       ContentLength: size,
     });
     const uploadUrl = await getSignedUrl(storage(), command, { expiresIn: 300 });
+    const metadata = { purpose, ...(category ? { category } : {}) };
     const result = await database().query(
       "INSERT INTO user_files (firebase_uid, object_key, original_name, content_type, size_bytes, kind, metadata, status) " +
       "VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'pending') RETURNING id",
-      [user.uid, key, filename.trim(), contentType, size, kindFor(filename), JSON.stringify({ purpose })],
+      [user.uid, key, filename.trim(), contentType, size, kindFor(filename), JSON.stringify(metadata)],
     );
     return sendJson(res, 200, { fileId: result.rows[0].id, uploadUrl, objectKey: key, expiresIn: 300 });
   } catch (error) {
