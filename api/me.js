@@ -59,12 +59,25 @@ export default async function handler(req, res) {
         "FROM practice_tasks WHERE firebase_uid=$1 AND is_archived=false ORDER BY category,created_at",
         [user.uid],
       );
-      attempts = await db.query(
-        "SELECT task_id,section_key,score,duration_seconds,attempted_at " +
-        "FROM practice_task_attempts WHERE firebase_uid=$1 AND attempted_at >= NOW()-INTERVAL '365 days' " +
-        "ORDER BY attempted_at DESC LIMIT 1000",
-        [user.uid],
-      );
+      try {
+        attempts = await db.query(
+          "SELECT a.task_id,a.section_key,a.score,a.duration_seconds,a.attempted_at,s.feedback " +
+          "FROM practice_task_attempts a LEFT JOIN practice_sessions s ON s.id=a.session_id " +
+          "WHERE a.firebase_uid=$1 AND a.attempted_at >= NOW()-INTERVAL '365 days' " +
+          "ORDER BY a.attempted_at DESC LIMIT 1000",
+          [user.uid],
+        );
+      } catch (feedbackSchemaError) {
+        // Keep the learning plan usable on databases that have the task tables
+        // but have not yet received the additive feedback column migration.
+        if (feedbackSchemaError.code !== "42703") throw feedbackSchemaError;
+        attempts = await db.query(
+          "SELECT task_id,section_key,score,duration_seconds,attempted_at " +
+          "FROM practice_task_attempts WHERE firebase_uid=$1 AND attempted_at >= NOW()-INTERVAL '365 days' " +
+          "ORDER BY attempted_at DESC LIMIT 1000",
+          [user.uid],
+        );
+      }
     } catch (taskError) {
       if (!["42P01", "42703"].includes(taskError.code)) throw taskError;
       learningPlanAvailable = false;
