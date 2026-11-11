@@ -100,7 +100,13 @@ export default async function handler(req, res) {
   try {
     if (body.preferences !== undefined) {
       const input = body.preferences || {};
-      const current = await database().query("SELECT notation_style,theme,font_size,reminders_email,reminders_browser,timezone,reminder_schedule FROM student_preferences WHERE firebase_uid=$1", [user.uid]);
+      let current;
+      try {
+        current = await database().query("SELECT notation_style,theme,font_size,reminders_email,reminders_browser,timezone,reminder_schedule FROM student_preferences WHERE firebase_uid=$1", [user.uid]);
+      } catch (preferenceError) {
+        if (preferenceError.code !== "42703") throw preferenceError;
+        current = await database().query("SELECT notation_style,theme,reminders_email,reminders_browser,timezone,reminder_schedule FROM student_preferences WHERE firebase_uid=$1", [user.uid]);
+      }
       const old = current.rows[0] || {};
       preferences = {
         notationStyle: input.notationStyle ?? old.notation_style ?? "standard",
