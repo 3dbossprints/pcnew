@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, updateProfile } from "firebase/auth";
 import { auth, googleProvider } from "./lib/firebase.js";
 import { buildKeystoneTimeline, parseKeystoneMusicXML } from "./keystone-engine.js";
+import { searchScales } from "./scale-library.js";
 import "./PianoCoachApp.css";
 
 const DocumentViewer = lazy(() => import("./DocumentViewer.jsx"));
@@ -254,7 +255,7 @@ export default function App() {
       </div>
     </main>
 
-    {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => file.kind === "sheet" && !isEpub(file))} busy={profileBusy} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
+    {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => file.kind === "sheet" && !isEpub(file))} busy={profileBusy} user={user} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
     {showLibrary && <LibraryModal files={files} busy={documentBusy} onClose={() => setShowLibrary(false)} onOpen={openFile} onUpload={uploadFile} onRefresh={refresh} toast={toast} plan={plan}/>}
     {openedDocument && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
       {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={openedDocument.xml} title={openedDocument.file.original_name}/></div> :
@@ -403,26 +404,56 @@ function ProgressChart({ values }) {
   </svg>;
 }
 
-function TaskEditor({ draft, files, busy, onClose, onSave }) {
+function TaskEditor({ draft, files, busy, user, onClose, onSave }) {
   const [value,setValue] = useState(draft);
   const [error,setError] = useState("");
+  const [libraryOpen,setLibraryOpen] = useState(false);
   const update=(key,next)=>setValue(current=>({...current,[key]:next}));
   function submit(event) {
     event.preventDefault();
     if (!value.title.trim()) { setError("Give this task a title."); return; }
     onSave(value);
   }
-  return <div className="pc-overlay" role="presentation"><form className="pc-modal pc-task-editor" onSubmit={submit}>
+  return <>
+    <div className="pc-overlay" role="presentation"><form className="pc-modal pc-task-editor" onSubmit={submit}>
     <button type="button" className="pc-modal-close" onClick={onClose}>×</button><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>{value.id ? "Edit learning task" : "Add to your learning plan"}</h2><p>Choose what you want to work towards. You can change it at any time.</p>
     <label>Type<select value={value.category} onChange={e=>update("category",e.target.value)}><option value="pieces">Piece</option><option value="exercises">Exercise</option><option value="scales">Scale</option></select></label>
-    <label>Title<input value={value.title} maxLength={180} onChange={e=>update("title",e.target.value)} placeholder="e.g. Sonatina in C, first movement" required/></label>
+    {value.category==="scales"&&<div className="pc-scale-library-entry"><div><strong>Choose from the scale library</strong><small>Search scales, keys, contrary motion, arpeggios and advanced techniques.</small></div><button type="button" className="pc-button outline" onClick={()=>setLibraryOpen(true)}>Browse scale library ↗</button></div>}
+    <label>Title<input value={value.title} maxLength={180} onChange={e=>update("title",e.target.value)} placeholder={value.category==="scales"?"Choose a scale or enter your own":"e.g. Sonatina in C, first movement"} required/></label>
     <label>Composer or short description<input value={value.composer || ""} maxLength={160} onChange={e=>update("composer",e.target.value)} placeholder="Optional"/></label>
     <label>Notes<textarea rows="3" value={value.notes || ""} onChange={e=>update("notes",e.target.value)} placeholder="What would you like to focus on?"/></label>
     <label>Linked sheet music<select value={value.sourceFileId || ""} onChange={e=>update("sourceFileId",e.target.value)}><option value="">No uploaded score</option>{files.map(file=><option key={file.id} value={file.id}>{file.original_name}</option>)}</select></label>
     <label>Number of practice sections<input type="number" min="1" max="100" value={value.sectionCount} onChange={e=>update("sectionCount",Math.max(1,Math.min(100,Number(e.target.value)||1)))}/><small>Use 1 if you want to practise the whole task as a single section.</small></label>
     {error&&<p className="pc-form-error">{error}</p>}
     <div className="pc-modal-actions"><button type="button" className="pc-button outline" onClick={onClose}>Cancel</button><button className="pc-button dark" disabled={busy}>{busy?"Saving…":"Save task"}</button></div>
-  </form></div>;
+  </form></div>
+  {libraryOpen&&<ScaleLibraryModal user={user} onClose={()=>setLibraryOpen(false)} onChoose={scale=>{
+    update("title",scale.title);
+    update("composer","Scale library · "+scale.family);
+    update("notes",[
+      "Key: "+scale.key,"Type: "+scale.family,"Motion: "+scale.motion,
+      "Hands: "+scale.hands,"Octaves: "+scale.octaves,"Level: "+scale.level,
+      scale.examMatch?"Matched to your selected exam-board syllabus.":"General technique entry; check your current exam-board syllabus for exact requirements."
+    ].join("\\n"));
+    setLibraryOpen(false);
+  }}/>}
+  </>;
+}
+
+function ScaleLibraryModal({user,onClose,onChoose}) {
+  const [query,setQuery]=useState("");
+  const [group,setGroup]=useState("All");
+  const results=useMemo(()=>searchScales(query,user?.exam_board,user?.grade).filter(item=>group==="All"||item.group===group),[query,group,user?.exam_board,user?.grade]);
+  const groups=["All",...new Set(searchScales("",user?.exam_board,user?.grade).map(item=>item.group))];
+  const matched=results.filter(item=>item.examMatch).length;
+  return <div className="pc-overlay pc-scale-overlay"><section className="pc-modal pc-scale-modal" role="dialog" aria-modal="true" aria-label="Scale library">
+    <header className="pc-scale-heading"><div><span className="pc-eyebrow">PIANO TECHNIQUE LIBRARY</span><h2>Find a scale.</h2><p>{[user?.grade,user?.exam_board].filter(Boolean).join(" · ")||"Your exam path"} · Search the catalogue and add it to your Grade Plan.</p></div><button type="button" className="pc-modal-close" onClick={onClose} aria-label="Close scale library">×</button></header>
+    <label className="pc-scale-search"><span>⌕</span><input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search e.g. C♭ minor, E minor contrary motion, arpeggio…"/></label>
+    <div className="pc-scale-filters">{groups.map(item=><button type="button" key={item} className={group===item?"active":""} onClick={()=>setGroup(item)}>{item}</button>)}</div>
+    {matched>0?<p className="pc-scale-match-note">{matched} exact syllabus match{matched===1?"":"es"} for your exam path appear first.</p>:<p className="pc-scale-match-note">Your exam path is {user?.grade||"not set"} {user?.exam_board||""}. Official board-and-grade matches will be prioritised here when the verified syllabus catalogue is connected; the entries below are general technique references, not confirmed exam requirements.</p>}
+    <div className="pc-scale-results" role="list">{results.map(item=><button type="button" role="listitem" className="pc-scale-result" key={item.id} onClick={()=>onChoose(item)}><span className="pc-scale-result-icon">♬</span><span className="pc-scale-result-copy"><strong>{item.title}</strong><small>{item.group} · {item.hands} · {item.octaves} octaves</small></span><span className="pc-scale-level">{item.level}</span>{item.examMatch&&<span className="pc-scale-match">Your syllabus</span>}<b>＋</b></button>)}{!results.length&&<p className="pc-empty-category">No scales match that search. Try a key, scale type or motion.</p>}</div>
+    <footer className="pc-scale-footer"><span>{results.length} results · Choose one to add it to your learning plan.</span><button type="button" className="pc-button outline" onClick={onClose}>Close</button></footer>
+  </section></div>;
 }
 
 function LibraryModal({ files, busy, onClose, onOpen, onUpload, onRefresh, toast, plan }) {
