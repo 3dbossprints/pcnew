@@ -660,6 +660,66 @@ function PracticeSession({ config, files, onComplete, onExit }) {
     }catch(error){setCaptureMessage("The session was saved, but its recording could not be added to your library: "+error.message);return null;}
   }
 
+  function encodeAudioRangeAsWav(audioBuffer,startSeconds,endSeconds) {
+    const sampleRate=audioBuffer.sampleRate;
+    const first=Math.max(0,Math.floor(startSeconds*sampleRate));
+    const last=Math.min(audioBuffer.length,Math.floor(endSeconds*sampleRate));
+    const frameCount=Math.max(0,last-first);
+    const channels=audioBuffer.numberOfChannels;
+    if(frameCount<1||channels<1)return null;
+    const bytesPerSample=2,blockAlign=channels*bytesPerSample,dataBytes=frameCount*blockAlign;
+    const output=new ArrayBuffer(44+dataBytes),view=new DataView(output);
+    const writeText=(offset,value)=>{for(let i=0;i<value.length;i+=1)view.setUint8(offset+i,value.charCodeAt(i));};
+    writeText(0,"RIFF");view.setUint32(4,36+dataBytes,true);writeText(8,"WAVE");
+    writeText(12,"fmt ");view.setUint32(16,16,true);view.setUint16(20,1,true);
+    view.setUint16(22,channels,true);view.setUint32(24,sampleRate,true);
+    view.setUint32(28,sampleRate*blockAlign,true);view.setUint16(32,blockAlign,true);
+    view.setUint16(34,16,true);writeText(36,"data");view.setUint32(40,dataBytes,true);
+    let offset=44;
+    const channelData=Array.from({length:channels},(_,channel)=>audioBuffer.getChannelData(channel));
+    for(let frame=first;frame<last;frame+=1){
+      for(let channel=0;channel<channels;channel+=1){
+        const sample=Math.max(-1,Math.min(1,channelData[channel][frame]));
+        view.setInt16(offset,sample<0?sample*0x8000:sample*0x7fff,true);offset+=2;
+      }
+    }
+    return new Blob([output],{type:"audio/wav"});
+  }
+
+  async function saveMistakeClips(blob,trouble) {
+    if(!blob||!Array.isArray(trouble)||!trouble.length)return [];
+    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+    if(!AudioContextClass)return [];
+    const decoder=new AudioContextClass();
+    let decoded;
+    try{
+      decoded=await decoder.decodeAudioData(await blob.arrayBuffer());
+    }catch(error){
+      setCaptureMessage("The full recording was saved, but this browser could not create separate mistake clips: "+error.message);
+      return [];
+    }finally{try{await decoder.close();}catch{}}
+    const areas=trouble.filter(item=>Number.isFinite(Number(item.timeSeconds))&&Number(item.bar)>0);
+    const results=await Promise.all(areas.map(async item=>{
+      const moment=Number(item.timeSeconds);
+      const start=Math.max(0,moment-0.9),end=Math.min(decoded.duration,moment+1.8);
+      if(end-start<0.45)return null;
+      const clip=encodeAudioRangeAsWav(decoded,start,end);
+      if(!clip||clip.size<1200)return null;
+      const filename="mistake-bar-"+item.bar+"-"+Date.now()+".wav";
+      try{
+        const signed=await api("/api/uploads/sign",{method:"POST",body:{filename,contentType:"audio/wav",size:clip.size,purpose:"library",category:"recordings"}});
+        const put=await fetch(signed.uploadUrl,{method:"PUT",headers:{"Content-Type":"audio/wav"},body:clip});
+        if(!put.ok)throw new Error("The clip upload was rejected.");
+        const completed=await api("/api/uploads/complete",{method:"POST",body:{fileId:signed.fileId,purpose:"library"}});
+        return completed.file?.id?{bar:Number(item.bar),fileId:completed.file.id}:null;
+      }catch(error){
+        setCaptureMessage("The full recording was saved, but one mistake clip could not be uploaded: "+error.message);
+        return null;
+      }
+    }));
+    return results.filter(Boolean);
+  }
+
   async function startSession(){
     if(session||busy)return;
     setBusy(true);setScoreLoadError("");standardCursorRef.current=0;setCurrentBar(null);
@@ -683,6 +743,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
       const durationSeconds=Math.min(14400,Math.max(elapsed,Math.floor((Date.now()-sessionStartRef.current)/1000)));
       const blob=await stopCapture();
       const recordingFileId=await saveRecording(blob);
+      const mistakeClips=engineSummary?.trouble?.length?await saveMistakeClips(blob,engineSummary.trouble):[];
       const score=engineSummary&&Number.isFinite(engineSummary.score)?engineSummary.score:null;
       const feedbackPayload=engineSummary?{
         source:"assisted-engine",
@@ -697,12 +758,13 @@ function PracticeSession({ config, files, onComplete, onExit }) {
         hands:engineSummary.hands,
         tempo:engineSummary.tempo,
         trouble:engineSummary.trouble||[],
+        mistakeClips,
       }:null;
       const saved=await api("/api/practice/finish",{method:"PATCH",body:{sessionId:session.id,durationSeconds,score,feedback:feedbackPayload,recordingFileId}});
       const result={
         session:saved.session,summary:engineSummary,durationSeconds:Number(saved.session?.duration_seconds ?? durationSeconds),recordingFileId,
         task:config.task,sectionKey:config.sectionKey,mode:config.mode,referenceFile:config.referenceFile||null,
-        recordingSaved:Boolean(recordingFileId),
+        recordingSaved:Boolean(recordingFileId),mistakeClips,
       };
       onComplete(result);
     }catch(error){
@@ -728,7 +790,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
     </section> : <div className="pc-session-stage">
       <div className="pc-session-status"><span className="pc-recording-dot"/><span>Session in progress · {captureMessage}{currentBar?" · Bar "+currentBar:""}</span><span className="pc-input-level"><i style={{width:captureLevel+"%"}}/></span></div>
       {config.mode==="assisted"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Preparing your falling-note lesson…</div>}>
-        <KeystoneLearnEngine xml={xml} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
+        <KeystoneLearnEngine xml={xml} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} recordingStartedAt={captureRef.current?.startedAt||null} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
       </Suspense> : config.mode==="standard"&&file&&isPdf(file) ? <PracticePdf file={file} /> :
       config.mode==="standard"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Rendering the score…</div>}><MusicXMLViewer xml={xml} title={file.original_name} currentMeasure={currentBar}/></Suspense> :
       <div className="pc-practice-no-score"><span>𝄞</span><h2>Practise at your own pace.</h2><p>{scoreLoadError||"Use your own sheet music or upload a score to see it alongside your session."}</p></div>}
