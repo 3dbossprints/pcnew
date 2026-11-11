@@ -20,7 +20,7 @@ export function midiToName(value) {
 }
 
 export function nameToMidi(value) {
-  const match = String(value ?? '').trim().match(/^([A-Ga-g])([#b]?)(-?\d)$/);
+  const match = String(value ?? '').trim().match(/^([A-Ga-g])([#♯b♭]?)(-?\d)$/);
   if (!match) return null;
   const accidental = match[2] === '#' || match[2] === '♯' ? 1 : match[2] === 'b' || match[2] === '♭' ? -1 : 0;
   const midi = 12 * (Number(match[3]) + 1) + NATURAL[match[1].toUpperCase()] + accidental;
