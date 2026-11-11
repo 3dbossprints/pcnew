@@ -30,11 +30,22 @@ export default async function handler(req, res) {
     if (practiceType==="personal" && !referenceFileId) return sendJson(res,400,{error:"Choose one of your uploaded personal pieces first."});
     if (account.rows[0].plan==="free" && account.rows[0].demo_seconds_used>=3600) return sendJson(res,403,{error:"Your free 60-minute demo has been used. Subscribe to continue practising."});
     const id=randomUUID();
-    const result=await database().query(
-      "INSERT INTO practice_sessions(id,firebase_uid,task_id,section_key,reference_file_id,started_at,mode) " +
-      "VALUES($1,$2,$3,$4,$5,NOW(),$6) RETURNING id,started_at,mode,task_id,section_key,reference_file_id",
-      [id,user.uid,taskId,sectionKey,referenceFileId,mode],
-    );
+    let result;
+    try {
+      result = await database().query(
+        "INSERT INTO practice_sessions(id,firebase_uid,task_id,section_key,reference_file_id,started_at,mode) " +
+        "VALUES($1,$2,$3,$4,$5,NOW(),$6) RETURNING id,started_at,mode,task_id,section_key,reference_file_id",
+        [id,user.uid,taskId,sectionKey,referenceFileId,mode],
+      );
+    } catch (schemaError) {
+      if (!["42P01", "42703"].includes(schemaError.code) || taskId || sectionKey !== "full") throw schemaError;
+      result = await database().query(
+        referenceFileId
+          ? "INSERT INTO practice_sessions(id,firebase_uid,task_id,reference_file_id,started_at,mode) VALUES($1,$2,$3,$4,NOW(),$5) RETURNING id,started_at,mode,reference_file_id"
+          : "INSERT INTO practice_sessions(id,firebase_uid,task_id,started_at,mode) VALUES($1,$2,$3,NOW(),$4) RETURNING id,started_at,mode",
+        referenceFileId ? [id,user.uid,taskId,referenceFileId,mode] : [id,user.uid,taskId,mode],
+      );
+    }
     return sendJson(res,201,{session:result.rows[0]});
   } catch(error) {
     console.error("POST /api/practice/start failed:",error.message);
