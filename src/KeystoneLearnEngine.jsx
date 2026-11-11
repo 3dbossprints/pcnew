@@ -23,13 +23,14 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
   const timeline = useMemo(() => parsed.measures ? buildKeystoneTimeline(parsed) : (parsed.timeline || []), [parsed]);
   const canvasRef = useRef(null), stageRef = useRef(null), rafRef = useRef(0);
   const runRef = useRef(null), pressedRef = useRef(new Set()), voicesRef = useRef(new Map());
-  const audioRef = useRef(null), pianoSamplerRef = useRef(null), midiRef = useRef(null), keyHeldRef = useRef({}), timersRef = useRef(new Set());
+  const audioRef = useRef(null), pianoSamplerRef = useRef(null), midiRef = useRef(null), keyHeldRef = useRef({}), timersRef = useRef(new Set()), demoTimersRef = useRef([]);
   const [mode, setMode] = useState('learn'), [hands, setHands] = useState('both');
   const [speed, setSpeed] = useState(1), [bpm, setBpm] = useState(Math.max(20, Number(initialBpm) || 120));
   const [fromBar, setFromBar] = useState(1), [toBar, setToBar] = useState(9999);
   const [keyStart, setKeyStart] = useState(48), [message, setMessage] = useState('Press Start when you are ready.');
   const [midiDeviceName, setMidiDeviceName] = useState('Not connected'), [midiConnected, setMidiConnected] = useState(false);
   const [result, setResult] = useState(null), [tick, setTick] = useState(0);
+  const [currentMeasure, setCurrentMeasure] = useState(null), [demoActive, setDemoActive] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 900, height: 430 });
 
   const availableBars = useMemo(() => [...new Set(timeline.map(n => Number(n.measure) || 1))].sort((a,b)=>a-b), [timeline]);
@@ -120,6 +121,53 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
     return()=>{if(micInputRef.current?.noteDown===noteDown)micInputRef.current=null;};
   },[micInputRef,noteDown,noteUp]);
 
+  const clearDemo = useCallback(() => {
+    demoTimersRef.current.forEach(timer => window.clearTimeout(timer));
+    demoTimersRef.current = [];
+    try { pianoSamplerRef.current?.releaseAll?.(); } catch {}
+    setDemoActive(false);
+  }, []);
+
+  const playTwoBars = useCallback(async () => {
+    if (demoActive) { clearDemo(); return; }
+    if (runRef.current) { setMessage('Stop the current lesson before playing a demonstration.'); return; }
+    const firstBar = Math.max(fromBar, Math.min(toBar === 9999 ? maxBar : toBar, currentMeasure || fromBar));
+    const lastBar = Math.min(toBar === 9999 ? maxBar : toBar, firstBar + 1);
+    const demoNotes = timeline.filter(note =>
+      note.measure >= firstBar && note.measure <= lastBar &&
+      (hands === 'both' || note.hand === hands)
+    );
+    if (!demoNotes.length) { setMessage('There are no playable notes in the next two bars for this hand selection.'); return; }
+    try {
+      await Tone.start();
+      const sampler = pianoSamplerRef.current || createGrandPiano(-7);
+      pianoSamplerRef.current = sampler;
+      await loadGrandPiano(sampler);
+      const start = Math.min(...demoNotes.map(note => note.t));
+      const end = Math.max(...demoNotes.map(note => note.t + note.d));
+      const sourceBpm = Math.max(20, Number(parsed.measures?.find(measure => Number(measure.number) === firstBar)?.bpm) || Number(initialBpm) || 120);
+      const effectiveSpeed = Math.max(0.1, speed * bpm / sourceBpm);
+      demoNotes.forEach(note => {
+        const delay = Math.max(0, ((note.t - start) / effectiveSpeed) * 1000);
+        const timer = window.setTimeout(() => {
+          const toneName = midiName(note.midi).replace('♯', '#');
+          sampler.triggerAttackRelease(toneName, Math.max(0.08, note.d / effectiveSpeed));
+        }, delay);
+        demoTimersRef.current.push(timer);
+      });
+      const stopTimer = window.setTimeout(() => {
+        demoTimersRef.current = [];
+        setDemoActive(false);
+      }, ((end - start) / effectiveSpeed) * 1000 + 500);
+      demoTimersRef.current.push(stopTimer);
+      setDemoActive(true);
+      setMessage('Playing bars ' + firstBar + '–' + lastBar + ' as a demonstration.');
+    } catch (error) {
+      clearDemo();
+      setMessage(error.message || 'The two-bar demonstration could not be played.');
+    }
+  }, [demoActive,clearDemo,fromBar,toBar,maxBar,currentMeasure,timeline,hands,parsed,initialBpm,speed,bpm]);
+
   const stopRun = useCallback(() => {
     runRef.current=null;pressedRef.current.forEach(m=>sound(m,false));pressedRef.current.clear();
     setMessage('Stopped. Press Start to try again.');setTick(v=>v+1);
@@ -127,6 +175,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
 
   const startRun = useCallback(async () => {
     if(runRef.current){stopRun();return;}
+    if(demoActive)clearDemo();
     if(!selected.length){setMessage('There are no playable notes in this hand and bar range.');return;}
     await Tone.start();
     const active=selected.map(n=>({...n,on:true,res:null,arrivedAt:null,played:false}));
@@ -137,7 +186,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
     runRef.current={mode,speed:effectiveSpeed,active,accompaniment,clock:start-3.2*effectiveSpeed,start,end,combo:0,maxCombo:0,points:0,wrong:[],auto:new Set(),stall:false,done:false,finishAt:0};
     setResult(null);setMessage(mode==='learn'?'Learn mode: the notes will wait for you.':'Perform mode: play along with the falling notes.');
     setTick(v=>v+1);
-  }, [selected,timeline,fromBar,toBar,mode,speed,bpm,parsed,initialBpm,stopRun]);
+  }, [selected,timeline,fromBar,toBar,mode,speed,bpm,parsed,initialBpm,stopRun,demoActive,clearDemo]);
 
   const finishRun = useCallback(() => {
     const run=runRef.current;if(!run||run.done)return;
@@ -173,7 +222,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
         }else run.clock+=advance;
         const currentNote=run.active.find(n=>run.clock>=n.t&&run.clock<=n.t+n.d)||run.active.find(n=>n.t>run.clock);
         const currentMeasure=Number(currentNote?.measure)||null;
-        if(currentMeasure!==run.lastReportedBar){run.lastReportedBar=currentMeasure;onProgress?.(currentMeasure);}
+        if(currentMeasure!==run.lastReportedBar){run.lastReportedBar=currentMeasure;setCurrentMeasure(currentMeasure);onProgress?.(currentMeasure);}
         for(const n of run.active){if(!n.arrivedAt&&n.t<=run.clock)n.arrivedAt=now;if(run.mode==='perform'&&!n.res&&!n.missed&&run.clock>n.t+.4){n.missed=true;run.combo=0;}}
         for(const n of run.accompaniment){if(!n.played&&run.clock>=n.t){n.played=true;const id='accompaniment-'+n.orderIndex+'-'+n.noteIndex;sound(n.midi,true,id);const timer=window.setTimeout(()=>{timersRef.current.delete(timer);sound(n.midi,false,id);},Math.max(140,n.d*1000/run.speed));timersRef.current.add(timer);}}
         if(run.mode==='learn'&&run.active.every(n=>n.res&&!n.hold)){run.finishAt ||= now+700;if(now>run.finishAt)finishRun();}
@@ -227,7 +276,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
 
   useEffect(() => () => {
     if(runRef.current)runRef.current=null;
-    disconnectMidi();for(const timer of timersRef.current)clearTimeout(timer);timersRef.current.clear();
+    disconnectMidi();for(const timer of timersRef.current)clearTimeout(timer);timersRef.current.clear();for(const timer of demoTimersRef.current)clearTimeout(timer);demoTimersRef.current=[];
     try{pianoSamplerRef.current?.dispose();pianoSamplerRef.current=null;audioRef.current?.close();}catch{}
   }, [disconnectMidi]);
 
@@ -260,6 +309,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
       <label>To bar<input type="number" min={fromBar} max={maxBar} value={toBar===9999?maxBar:toBar} onChange={e=>setToBar(Math.max(fromBar,Math.min(maxBar,Number(e.target.value)||maxBar)))}/></label>
       <label>Tempo · {bpm} BPM<input type="range" min="20" max="240" step="1" value={bpm} onChange={e=>setBpm(Number(e.target.value))}/></label>
       <div className="keystone-key-controls"><span>Keys start · {midiName(keyStart)}</span><button className="btn" onClick={()=>shiftKey(-12)}>«</button><button className="btn" onClick={()=>shiftKey(-1)}>‹</button><button className="btn" onClick={()=>shiftKey(1)}>›</button><button className="btn" onClick={()=>shiftKey(12)}>»</button><button className="btn" onClick={()=>setKeyStart(Math.max(21,Math.floor(minMidi/12)*12))}>Auto</button></div>
+      <button className="btn" type="button" onClick={playTwoBars} disabled={!timeline.length}>{demoActive?'Stop demonstration':'Play 2 bars'}</button>
       <button className="btn btn-dark keystone-start" onClick={startRun}>{runRef.current?'Stop':'Start'}</button>
     </div>
     <div className="keystone-input-panel">
