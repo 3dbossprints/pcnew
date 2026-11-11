@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, updateProfile } from "firebase/auth";
 import { auth, googleProvider } from "./lib/firebase.js";
+import { buildKeystoneTimeline, parseKeystoneMusicXML } from "./keystone-engine.js";
 import "./PianoCoachApp.css";
 
 const DocumentViewer = lazy(() => import("./DocumentViewer.jsx"));
@@ -509,6 +510,11 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   const [summary,setSummary]=useState(null);
   const [currentBar,setCurrentBar]=useState(null);
   const [captureAvailable,setCaptureAvailable]=useState(false);
+  const standardEvents=useMemo(()=>{
+    if(config.mode!=="standard"||!xml)return [];
+    try{return buildKeystoneTimeline(parseKeystoneMusicXML(xml));}catch{return [];}
+  },[config.mode,xml]);
+  const standardCursorRef=useRef(0);
   const micInputRef=useRef(null);
   const captureRef=useRef(null);
   const engineControlRef=useRef(null);
@@ -563,11 +569,11 @@ function PracticeSession({ config, files, onComplete, onExit }) {
       const source=context?context.createMediaStreamSource(stream):null;
       const buffer=analyser?new Float32Array(analyser.fftSize):null;
       if(analyser){analyser.fftSize=4096;analyser.smoothingTimeConstant=0.15;source.connect(analyser);}
-      const state={stream,recorder,chunks,context,analyser,buffer,raf:0,currentMidi:null,lastDetection:0,assisted};
+      const state={stream,recorder,chunks,context,analyser,buffer,raf:0,currentMidi:null,lastDetection:0,assisted,startedAt:performance.now()};
       captureRef.current=state;
       setCaptureAvailable(Boolean(recorder));
       setCaptureMessage(recorder?"Recording this practice session. Microphone audio stays in this browser until the session ends.":"Microphone listening is on, but this browser cannot record audio.");
-      if(assisted&&analyser){
+      if(analyser){
         const sample=()=>{
           if(captureRef.current!==state)return;
           analyser.getFloatTimeDomainData(buffer);
@@ -581,18 +587,37 @@ function PracticeSession({ config, files, onComplete, onExit }) {
             if(midi>=21&&midi<=108&&now-state.lastDetection>90){
               state.lastDetection=now;
               if(state.currentMidi!==midi){
-                if(state.currentMidi!==null)micInputRef.current?.noteUp?.(state.currentMidi);
-                state.currentMidi=midi;
-                micInputRef.current?.noteDown?.(midi);
+                if(assisted){
+                  if(state.currentMidi!==null)micInputRef.current?.noteUp?.(state.currentMidi);
+                  state.currentMidi=midi;
+                  micInputRef.current?.noteDown?.(midi);
+                }else{
+                  state.currentMidi=midi;
+                  const cursor=standardCursorRef.current;
+                  const limit=Math.min(standardEvents.length,cursor+18);
+                  let match=-1;
+                  for(let index=cursor;index<limit;index+=1){
+                    if(standardEvents[index].midi===midi){match=index;break;}
+                  }
+                  if(match>=0){
+                    standardCursorRef.current=match+1;
+                    setCurrentBar(standardEvents[match].measure);
+                  }
+                }
               }
             }
           }else if(state.currentMidi!==null&&now-state.lastDetection>220){
-            micInputRef.current?.noteUp?.(state.currentMidi);state.currentMidi=null;
+            if(assisted)micInputRef.current?.noteUp?.(state.currentMidi);
+            state.currentMidi=null;
           }
           state.raf=requestAnimationFrame(sample);
         };
         state.raf=requestAnimationFrame(sample);
-        setCaptureMessage("Microphone is listening locally for individual pitches. MIDI is recommended for chords.");
+        setCaptureMessage(assisted
+        ? "Microphone is listening locally for individual pitches. MIDI is recommended for chords."
+        : standardEvents.length
+          ? "Listening locally for pitches and following recognised notes through your score. Chords may need a MIDI keyboard."
+          : "Recording this session. This score has no MusicXML note timeline for bar following.");
       }
       return true;
     }catch(error){
@@ -637,7 +662,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
 
   async function startSession(){
     if(session||busy)return;
-    setBusy(true);setScoreLoadError("");
+    setBusy(true);setScoreLoadError("");standardCursorRef.current=0;setCurrentBar(null);
     try{
       const body=await api("/api/practice/start",{method:"POST",body:{
         mode:config.mode,taskId:config.task?.id||null,sectionKey:config.sectionKey,
@@ -705,9 +730,9 @@ function PracticeSession({ config, files, onComplete, onExit }) {
       {config.mode==="assisted"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Preparing your falling-note lesson…</div>}>
         <KeystoneLearnEngine xml={xml} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
       </Suspense> : config.mode==="standard"&&file&&isPdf(file) ? <PracticePdf file={file} /> :
-      config.mode==="standard"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Rendering the score…</div>}><MusicXMLViewer xml={xml} title={file.original_name}/></Suspense> :
+      config.mode==="standard"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Rendering the score…</div>}><MusicXMLViewer xml={xml} title={file.original_name} currentMeasure={currentBar}/></Suspense> :
       <div className="pc-practice-no-score"><span>𝄞</span><h2>Practise at your own pace.</h2><p>{scoreLoadError||"Use your own sheet music or upload a score to see it alongside your session."}</p></div>}
-      {config.mode==="standard"&&<div className="pc-standard-note"><strong>Standard Practice</strong><span>The session timer and recording are active. Bar-by-bar detection for this document requires score-recognition alignment.</span></div>}
+      {config.mode==="standard"&&<div className="pc-standard-note"><strong>Standard Practice</strong><span>{standardEvents.length?"The microphone follows matching pitches through the score where possible. A MIDI keyboard or full score-alignment service is more reliable for chords.":"The session is recording, but this file has no structured note timeline for a live bar cursor."}</span></div>}
       {scoreLoadError&&<p className="pc-form-error">{scoreLoadError}</p>}
     </div>}
     <footer className="pc-session-footer"><span>{config.mode==="assisted"?"Follow the falling notes and play without rushing.":"Play through the music at a comfortable pace."}</span><span>15 minutes of practice earns today's streak.</span></footer>
