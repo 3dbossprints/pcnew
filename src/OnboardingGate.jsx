@@ -20,6 +20,10 @@ export default function OnboardingGate({ children }) {
   const [bookTitle, setBookTitle] = useState("");
   const [bookUrl, setBookUrl] = useState("");
   const [bookCategory, setBookCategory] = useState("repertoire");
+  const [bookChoice, setBookChoice] = useState("skip");
+  const [examBookUploaded, setExamBookUploaded] = useState(false);
+  const [bookUploadBusy, setBookUploadBusy] = useState(false);
+  const [bookUploadName, setBookUploadName] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -46,6 +50,7 @@ export default function OnboardingGate({ children }) {
           if (savedBook) { setBookTitle(savedBook.title || ""); setBookUrl(savedBook.url || ""); setBookCategory(savedBook.category || "repertoire"); }
         }
         if (body.user.target_date) setTargetDate(String(body.user.target_date).slice(0,10));
+        if (body.user.exam_book_file_id) { setExamBookUploaded(true); setBookChoice("own"); }
       } catch (e) {
         if (active) setError(e.message || "We couldn't connect to your account.");
       } finally { if (active) setLoading(false); }
@@ -125,21 +130,38 @@ export default function OnboardingGate({ children }) {
     return () => { active = false; };
   }, [profile?.onboarding_completed, profile?.pending_plan]);
 
+  async function uploadExamBook(file) {
+    if (!file) return;
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (!["pdf", "epub"].includes(ext)) { setError("Please choose a PDF or EPUB exam-board ebook."); return; }
+    if (file.size > 25 * 1024 * 1024) { setError("The ebook must be 25 MB or smaller."); return; }
+    setBookUploadBusy(true); setError(""); setBookUploadName(file.name);
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const signedResponse = await fetch("/api/uploads/sign", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ filename: file.name, contentType: file.type || (ext === "pdf" ? "application/pdf" : "application/epub+zip"), size: file.size, purpose: "exam_book" }) });
+      const signed = await signedResponse.json();
+      if (!signedResponse.ok) throw new Error(signed.error || "The ebook upload could not be prepared.");
+      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type || (ext === "pdf" ? "application/pdf" : "application/epub+zip") }, body: file });
+      if (!put.ok) throw new Error("The ebook could not be uploaded to secure storage. Please try again.");
+      const completeResponse = await fetch("/api/uploads/complete", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ fileId: signed.fileId, purpose: "exam_book" }) });
+      const completed = await completeResponse.json();
+      if (!completeResponse.ok) throw new Error(completed.error || "The ebook upload could not be verified.");
+      setExamBookUploaded(true); setBookChoice("own"); setBookTitle(file.name.replace(/\.(pdf|epub)$/i, ""));
+    } catch (uploadError) { setError(uploadError.message || "The ebook upload failed."); }
+    finally { setBookUploadBusy(false); }
+  }
+
   async function finish() {
     setError("");
-    if (plan !== "free" && (!bookTitle.trim() || !/^https:\/\//i.test(bookUrl.trim()))) {
-      setError("For a paid plan, add a book title and a secure https:// retailer or book link.");
-      setStep(3);
-      return;
-    }
+    if (plan !== "free" && bookChoice === "own" && !examBookUploaded) { setError("Please upload your PDF or EPUB, or choose Skip for now."); return; }
     setSaving(true);
     try {
       const token = await auth.currentUser.getIdToken();
-      const bookSources = plan === "free" ? [] : [{ title: bookTitle.trim(), url: bookUrl.trim(), category: bookCategory }];
+      const bookSources = plan === "free" || !bookTitle.trim() || !/^https:\/\//i.test(bookUrl.trim()) ? [] : [{ title: bookTitle.trim(), url: bookUrl.trim(), category: bookCategory }];
       const response = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({ examBoard, grade, plan, interval: billingInterval, targetDate, bookSources }),
+        body: JSON.stringify({ examBoard, grade, plan, interval: billingInterval, targetDate, bookSources, examBookSkipped: plan !== "free" && !examBookUploaded }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Your choices couldn't be saved.");
@@ -165,7 +187,8 @@ export default function OnboardingGate({ children }) {
     <header className="onboarding-brand"><div className="auth-mark">𝄞</div><div><strong>Piano <em>Coach</em></strong><small>SECURE CHECKOUT</small></div></header>
     <section className="onboarding-card checkout-card">
       <p className="eyebrow">ALMOST THERE</p><h1>Complete your subscription.</h1>
-      <p className="onboarding-intro">Your selected {plan === "pro" ? "Pro" : "Basic"} plan is ready. Payment details are handled securely by Stripe.</p>
+      <p className="onboarding-intro">Your selected {plan === "pro" ? "Pro" : "Basic"} subscription is ready. Payment details are handled securely by Stripe.</p>
+      <div className="demo-explainer"><span>!</span><div><strong>Your exam-board ebook is purchased separately.</strong><p>The subscription price shown here covers Piano Coach only. It does not include your exam-board ebook. If you have not uploaded it, you will need to buy it separately from an authorised retailer and upload it later. Graded learning stays locked until then. Pro Extras and your own uploaded pieces remain available with Pro.</p></div></div>
       {error && <p className="auth-message" role="alert">{error}</p>}
       <div className="embedded-checkout" ref={checkoutMountRef}/>
       <button type="button" className="auth-text-button" onClick={()=>setCheckoutClientSecret("")}>Back to your plan details</button>
@@ -198,12 +221,23 @@ export default function OnboardingGate({ children }) {
       </>}
       {step === 3 && <>
         <p className="eyebrow">YOUR LEARNING MATERIALS</p><h1>Which books will you be using?</h1>
-        {plan==="free" ? <div className="demo-explainer"><span>✧</span><div><strong>Your free hour starts with no books.</strong><p>We'll give you a small selection of demo pieces. You can add your own exam-board books whenever you're ready to upgrade.</p></div></div> : <>
-          <p className="onboarding-intro">Add a reference to a book you already own or a trusted retailer listing. We don't host or redistribute copyrighted books.</p>
-          <label className="onboarding-field"><span>Book type</span><select value={bookCategory} onChange={e=>setBookCategory(e.target.value)}><option value="repertoire">Repertoire</option><option value="scales">Scales</option><option value="sight-reading">Sight-reading</option><option value="technique">Technique</option></select></label>
-          <label className="onboarding-field"><span>Book title</span><input value={bookTitle} onChange={e=>setBookTitle(e.target.value)} placeholder="e.g. ABRSM Piano Exam Pieces 2025–2026"/></label>
-          <label className="onboarding-field"><span>Book link (secure https:// address)</span><input type="url" value={bookUrl} onChange={e=>setBookUrl(e.target.value)} placeholder="https://…"/></label>
-          <p className="onboarding-note">You can upload your own PDF or EPUB from Sheet Music after onboarding. Only upload material you have the right to use.</p>
+        {plan==="free" ? <div className="demo-explainer"><span>✧</span><div><strong>Your free hour starts with no books.</strong><p>We'll give you a small selection of demo pieces. You can add your own exam-board book whenever you're ready to upgrade.</p></div></div> : <>
+          <p className="onboarding-intro">Your exam-board ebook is separate from your Piano Coach subscription. Choose whether to upload a copy you already own, buy it first, or skip this step and add it later.</p>
+          <div className="onboarding-options">
+            <button type="button" className={bookChoice==="own"?"chosen":""} onClick={()=>{setBookChoice("own");document.getElementById("exam-book-upload")?.click();}}><strong>I already own the ebook</strong><span>Upload your PDF or EPUB copy</span></button>
+            <button type="button" className={bookChoice==="buy"?"chosen":""} onClick={()=>setBookChoice("buy")}><strong>I need to buy the ebook</strong><span>Find it through an authorised retailer first</span></button>
+            <button type="button" className={bookChoice==="skip"?"chosen":""} onClick={()=>setBookChoice("skip")}><strong>Skip for now</strong><span>I'll purchase and upload it later</span></button>
+          </div>
+          <input id="exam-book-upload" type="file" accept=".pdf,.epub,application/pdf,application/epub+zip" hidden disabled={bookUploadBusy} onChange={e=>{uploadExamBook(e.target.files[0]);e.target.value="";}}/>
+          {bookUploadBusy && <p className="onboarding-note">Uploading {bookUploadName}…</p>}
+          {examBookUploaded && <p className="onboarding-note">✓ {bookTitle || "Exam-board ebook"} uploaded securely. Graded learning will be available after setup.</p>}
+          {bookChoice==="buy" && <>
+            <label className="onboarding-field"><span>Book type</span><select value={bookCategory} onChange={e=>setBookCategory(e.target.value)}><option value="repertoire">Repertoire</option><option value="scales">Scales</option><option value="sight-reading">Sight-reading</option><option value="technique">Technique</option></select></label>
+            <label className="onboarding-field"><span>Book title</span><input value={bookTitle} onChange={e=>setBookTitle(e.target.value)} placeholder="e.g. ABRSM Piano Exam Pieces 2025–2026"/></label>
+            <label className="onboarding-field"><span>Authorised retailer link (optional)</span><input type="url" value={bookUrl} onChange={e=>setBookUrl(e.target.value)} placeholder="https://…"/></label>
+            <p className="onboarding-note">Purchase the ebook directly from the retailer. It is not included in your Piano Coach subscription or charged by Piano Coach.</p>
+          </>}
+          {bookChoice==="skip" && <p className="onboarding-note">You can continue without the ebook. Your dashboard and Profile will remain available. Graded exam pieces, exercises and scales stay locked until you upload the required ebook. Pro users can still use Extras in the Pieces section to upload and practise their own music.</p>}
         </>}
         {paymentConfirming && <p className="onboarding-note">Payment received. Waiting for secure confirmation from Stripe…</p>}
         <label className="onboarding-field target-date"><span>Target exam date (optional)</span><input type="date" value={targetDate} onChange={e=>setTargetDate(e.target.value)}/></label>

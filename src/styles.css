@@ -68,3 +68,13 @@
 .billing-interval-picker button.chosen{background:#9dc183;color:#242423;box-shadow:0 1px 4px #24242314}
 .checkout-card{max-width:760px}
 .embedded-checkout{min-height:520px;width:100%;margin:18px 0}
+
+.grade-locked{padding:20px 22px 24px;background:#fbf3e9;border-top:1px solid #eee3d6}.grade-locked strong{font:600 17px "Playfair Display",serif;color:#594536}.grade-locked p{max-width:680px;font-size:11px;line-height:1.65;color:#88796b}.exam-book-upload input,.personal-upload input{display:none}.exam-book-upload>p{font-size:11px;color:#a14f43}.personal-pieces{padding:18px 20px 20px;border-top:1px solid #eee3d6;background:#fffaf3}.personal-pieces-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.personal-pieces-heading h3{font:600 19px "Playfair Display",serif;margin:8px 0 4px}.personal-pieces-heading p,.personal-locked,.personal-empty{font-size:11px;line-height:1.6;color:#8f8378;margin:4px 0 12px}.personal-piece-list{display:grid;gap:8px;margin-top:12px}.personal-piece-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:#fffdf9;border:1px solid #eee5dc;border-radius:9px}.personal-piece-row>span{font-size:20px;color:#9a704e}.personal-piece-row>div{display:grid;gap:3px;min-width:0;flex:1}.personal-piece-row strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.personal-piece-row small{font-size:9px;color:#9a8e82}.personal-piece-row button{border:0;background:transparent;color:#8c694b;font-size:10px;font-weight:700}.personal-upload{position:relative;white-space:nowrap}.personal-locked{padding:12px;background:#f8f0e7;border-radius:8px}.personal-empty{margin-top:12px}
+
+.dashboard-categories { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; margin:24px 0; }
+.dashboard-category { min-width:0; padding:24px; }
+.dashboard-category-symbol { width:42px; height:42px; display:grid; place-items:center; border-radius:14px; background:var(--pc-paper-2); color:var(--pc-green-deep); font-size:22px; margin-bottom:18px; }
+.dashboard-category h2 { margin:8px 0; }
+.dashboard-category p { color:var(--pc-muted); min-height:48px; }
+.dashboard-lock { border-top:1px solid var(--pc-line); padding:16px 0; margin-top:16px; color:var(--pc-muted); font-size:14px; line-height:1.5; min-height:76px; }
+@media (max-width: 900px) { .dashboard-categories { grid-template-columns:1fr; } .dashboard-category p { min-height:0; } }

@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     if (!result.rowCount) return sendJson(res, 404, { error: "File not found." });
     const file = result.rows[0];
     const command = new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: file.object_key,
-      ResponseContentDisposition: "attachment; filename*=UTF-8''" + encodeURIComponent(file.original_name),
+      ResponseContentDisposition: req.query?.inline === "1" ? "inline; filename*=UTF-8''" + encodeURIComponent(file.original_name) : "attachment; filename*=UTF-8''" + encodeURIComponent(file.original_name),
       ResponseContentType: file.content_type });
     const url = await getSignedUrl(storage(), command, { expiresIn: 180 });
     return sendJson(res, 200, { url, expiresIn: 180 });

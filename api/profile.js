@@ -12,15 +12,12 @@ export default async function handler(req, res) {
   if (!user) return;
   if (!user.emailVerified) return sendJson(res, 403, { error: "Verify your email address before continuing." });
 
-  const { examBoard, grade, plan, interval, targetDate, bookSources } = req.body || {};
+  const { examBoard, grade, plan, interval, targetDate, bookSources, examBookSkipped = false } = req.body || {};
   if (!boards.has(examBoard) || !grades.has(grade) || !plans.has(plan)) {
     return sendJson(res, 400, { error: "Choose a valid exam board, grade and plan." });
   }
   if (plan !== "free" && !["monthly", "annual"].includes(interval)) {
     return sendJson(res, 400, { error: "Choose monthly or annual billing." });
-  }
-  if (plan !== "free" && (!Array.isArray(bookSources) || bookSources.length === 0)) {
-    return sendJson(res, 400, { error: "Add at least one exam-book reference for a paid plan." });
   }
   if (plan === "free" && bookSources?.length) {
     return sendJson(res, 400, { error: "The free demo does not require exam books." });
@@ -30,21 +27,18 @@ export default async function handler(req, res) {
     url: String(item.url || "").trim().slice(0, 1000),
     category: ["repertoire", "scales", "sight-reading", "technique"].includes(item.category) ? item.category : "repertoire",
   })).filter((item) => item.title && /^https:\/\//i.test(item.url)) : [];
-  if (plan !== "free" && sources.length === 0) {
-    return sendJson(res, 400, { error: "Enter a book title and a secure https:// link for at least one book." });
-  }
   const date = targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate) ? targetDate : null;
 
   try {
     const result = await database().query(
       "UPDATE users SET exam_board = $2, grade = $3, plan = CASE WHEN $4 = 'free' THEN 'free' ELSE plan END, " +
       "pending_plan = CASE WHEN $4 = 'free' THEN NULL ELSE $4 END, pending_interval = CASE WHEN $4 = 'free' THEN NULL ELSE $7 END, " +
-      "target_date = $5, book_sources = $6::jsonb, onboarding_completed = ($4 = 'free'), " +
+      "target_date = $5, book_sources = $6::jsonb, exam_book_skipped = CASE WHEN $4 = 'free' THEN false ELSE $8 END, onboarding_completed = ($4 = 'free'), " +
       "demo_started_at = CASE WHEN $4 = 'free' AND demo_started_at IS NULL THEN NOW() ELSE demo_started_at END, " +
       "updated_at = NOW() WHERE firebase_uid = $1 " +
       "RETURNING id, email, display_name, preferred_name, exam_board, grade, target_date, plan, pending_plan, pending_interval, " +
-      "onboarding_completed, book_sources, demo_seconds_used, subscription_status",
-      [user.uid, examBoard, grade, plan, date, JSON.stringify(sources), interval || null],
+      "onboarding_completed, book_sources, exam_book_file_id, exam_book_skipped, demo_seconds_used, subscription_status",
+      [user.uid, examBoard, grade, plan, date, JSON.stringify(sources), interval || null, plan === "free" ? false : Boolean(examBookSkipped)],
     );
     return sendJson(res, 200, { user: result.rows[0] });
   } catch (error) {
