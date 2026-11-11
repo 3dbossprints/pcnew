@@ -52,7 +52,7 @@ export default function App() {
         if (!current) return;
         const token = await current.getIdToken();
         const response = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } });
-        if (response.ok) { const body = await response.json(); if (active) setStudentProfile(body.user); }
+        if (response.ok) { const body = await response.json(); if (active) setStudentProfile({ ...body.user, practiceSummary: body.practiceSummary || null }); }
       } catch { /* Keep the app usable while profile data reconnects. */ }
     }
     loadProfile();
@@ -144,38 +144,47 @@ export default function App() {
 function PageHeading({ eyebrow, title, subtitle, action }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>{action}</div>;
 }
-function Dashboard({ go, streak, setStreak, toast, studentName, studentProfile }) {
-  const [done, setDone] = useState([true, false, false]);
-  const complete = done.filter(Boolean).length;
+function Dashboard({ go, toast, studentName, studentProfile }) {
+  const summary = studentProfile?.practiceSummary;
+  const weeklySeconds = Number(summary?.weeklySeconds || 0);
+  const hours = Math.floor(weeklySeconds / 3600);
+  const minutes = Math.floor((weeklySeconds % 3600) / 60);
+  const demoRemaining = Math.max(0, 3600 - Number(studentProfile?.demo_seconds_used || 0));
+  const hasExamBook = Boolean(studentProfile?.exam_book_file_id);
+  const plan = studentProfile?.plan || "free";
+  const dateLabel = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const categories = [
+    { id: "pieces", title: "Pieces", description: "Your repertoire and performance pieces.", symbol: "♫" },
+    { id: "exercises", title: "Exercises", description: "Technical exercises for control and confidence.", symbol: "⌁" },
+    { id: "scales", title: "Scales", description: "Scales, arpeggios and technical requirements.", symbol: "♬" },
+  ];
   return <>
-    <PageHeading eyebrow="MONDAY, 9 NOVEMBER" title={<>Good afternoon, {studentName}<span className="heading-period">.</span></>} subtitle="A little time at the piano today goes a long way." action={<Button kind="outline" onClick={() => toast("Your weekly practice report is being prepared.")}>↗ <span>Weekly report</span></Button>}/>
-    <section className="welcome-grid">
-      <div className="hero-card">
-        <div className="hero-copy"><div className="hero-kicker"><span className="spark">✦</span> YOUR DAILY PRACTICE</div><h2>Make today<br/><em>sound beautiful.</em></h2><p>You're building something lovely, one practice at a time.</p><Button kind="cream" onClick={() => go("practice")}>Begin practice <span>→</span></Button></div>
-        <div className="hero-art" aria-hidden="true"><div className="halo halo-one"/><div className="halo halo-two"/><div className="piano-art"><div className="piano-lid"/><div className="piano-keys">{Array.from({length:14},(_,i)=><span key={i} className={ [1,3,6,8,10,13].includes(i) ? "black-key" : ""}/>)}</div><div className="piano-leg left"/><div className="piano-leg right"/></div><div className="music-note note-one">♪</div><div className="music-note note-two">♫</div><div className="music-note note-three">♬</div></div>
-      </div>
-      <div className="streak-card">
-        <div className="card-topline"><span>YOUR STREAK</span><span className="flame">♨</span></div><div className="streak-number">{streak}<small> days</small></div><p>You're showing up for your music. Keep it going!</p><div className="week-dots">{["M","T","W","T","F","S","S"].map((d,i)=><div key={i} className={`week-day ${i < 5 ? "complete" : ""}`}><span>{d}</span><b>{i < 5 ? "✓" : "·"}</b></div>)}</div><div className="streak-foot"><span>15 min daily goal</span><strong>5 / 7 days</strong></div><Progress value={71} small/>
-      </div>
-    </section>
+    <PageHeading eyebrow={dateLabel.toUpperCase()} title={<>{greeting}, {studentName}<span className="heading-period">.</span></>} subtitle="Your practice history and learning materials, all in one place." action={<Button kind="outline" onClick={() => go("profile")}>Your profile ↗</Button>} />
     <section className="stats-grid">
-      <Stat label="THIS WEEK" value="2h 35m" note="+18% from last week" icon="◷" />
-      <Stat label="PRACTICE SESSIONS" value="8" note="Across 4 different days" icon="♫"/>
-      <Stat label="GRADE PROGRESS" value="64%" note={`${studentProfile?.exam_board || "Exam"} ${studentProfile?.grade || ""}`.trim()} icon="⌁"/>
-      <Stat label="NEXT MILESTONE" value="30 days" note="18 days to go" icon="✧"/>
+      <Stat label="THIS WEEK" value={summary ? (hours ? hours + "h " : "") + minutes + "m" : "—"} note={summary ? "Recorded practice time" : "Practice history unavailable"} icon="◷" />
+      <Stat label="SESSIONS THIS WEEK" value={summary ? String(summary.sessionsThisWeek) : "—"} note="Completed sessions" icon="♫" />
+      <Stat label="DAILY STREAK" value={summary ? String(summary.streakDays) + (summary.streakDays === 1 ? " day" : " days") : "—"} note="Days with at least 15 minutes" icon="✧" />
+      <Stat label={plan === "free" ? "DEMO TIME LEFT" : "TOTAL PRACTICE"} value={plan === "free" ? Math.floor(demoRemaining / 60) + " min" : summary ? Math.floor(Number(summary.lifetimeSeconds || 0) / 3600) + "h" : "—"} note={plan === "free" ? "Your lifetime 60-minute allowance" : "Recorded across your account"} icon="⌁" />
     </section>
-    <div className="content-grid">
-      <section className="panel recommended-panel">
-        <div className="section-heading"><div><div className="eyebrow">PICK UP WHERE YOU LEFT OFF</div><h2>Recommended for you</h2></div><button className="text-link" onClick={() => go("grade")}>View grade plan ↗</button></div>
-        <div className="recommended-piece"><div className="piece-art"><span>♬</span><small>CLAUDE DEBUSSY</small></div><div className="piece-info"><div className="piece-tag">PERFORMANCE PIECE</div><h3>Clair de Lune</h3><p>Suite bergamasque · Grade 5</p><div className="piece-progress"><Progress value={72}/><span>72%</span></div><div className="piece-actions"><Button onClick={() => go("practice")}>Practise this piece <span>→</span></Button><button className="subtle-button" onClick={() => toast("Choose another piece from your Grade Plan.")}>Choose another</button></div></div></div>
-      </section>
-      <section className="panel today-panel">
-        <div className="section-heading"><div><div className="eyebrow">YOUR PLAN</div><h2>Today's focus</h2></div><span className="date-chip">15–25 MIN</span></div>
-        <div className="task-list">{tasks.map((task,i)=><button className={`task-row ${done[i] ? "task-done" : ""}`} key={task.title} onClick={() => setDone(old => old.map((v,j)=>j===i?!v:v))}><span className="task-check">{done[i] ? "✓" : ""}</span><span className="task-copy"><strong>{task.title}</strong><small>{task.sub}</small></span><span className="task-duration">{task.duration}</span></button>)}</div>
-        <div className="today-foot"><span>{complete} of 3 completed</span><strong>{Math.round(complete/3*100)}%</strong></div><Progress value={complete/3*100} small/>
-      </section>
+    <section className="dashboard-categories">
+      {categories.map(category => <article className="panel dashboard-category" key={category.id}>
+        <div className="dashboard-category-symbol">{category.symbol}</div>
+        <div className="eyebrow">YOUR LEARNING PLAN</div>
+        <h2>{category.title}</h2>
+        <p>{category.description}</p>
+        {!hasExamBook && plan !== "free" ? <div className="dashboard-lock">Upload your exam-board ebook to unlock official syllabus content.</div>
+          : !hasExamBook ? <div className="dashboard-lock">Your free demo learning materials will appear here when demo repertoire is available.</div>
+          : <div className="dashboard-lock">Your exam book is connected. Its syllabus content is not yet available in your learning plan.</div>}
+        <button className="text-link" onClick={() => go("grade")}>{category.id === "pieces" && plan === "pro" ? "Open Pieces & Pro Extras →" : "Open learning plan →"}</button>
+      </article>)}
+    </section>
+    <div className="bottom-tip">
+      <span className="tip-icon">✦</span>
+      <div><strong>Your progress is based on completed sessions</strong><p>Practice days count towards your streak when you record at least 15 minutes in a day. Paused or unfinished sessions do not count.</p></div>
+      <button onClick={() => go("practice")}>Open Practice →</button>
     </div>
-    <div className="bottom-tip"><span className="tip-icon">✦</span><div><strong>A note to remember</strong><p>Slow practice is still progress. Take your time with the tricky middle section of Clair de Lune.</p></div><button onClick={() => go("practice")}>Open practice →</button></div>
   </>;
 }
 function Stat({ label, value, note, icon }) { return <div className="stat-card"><div className="stat-top"><span>{label}</span><i>{icon}</i></div><strong>{value}</strong><small>{note}</small></div>; }
