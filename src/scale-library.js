@@ -22,12 +22,12 @@ const addFamily = (name, keys, group, options = {}) => {
   addFamily(type,type==="Major"?majorKeys:minorKeys,"Scales",{level:type==="Major"||type==="Natural minor"?"Core":"Developing"})
 );
 majorKeys.forEach(key=>families.push({
-  id:"contrary-major-"+key.toLowerCase().replace(/[^a-z0-9]+/g,""),
+  id:"contrary-major-"+slugKey(key),
   title:key+" major · contrary motion",key,family:"Major",group:"Contrary motion",
   motion:"Contrary motion",hands:"Both hands",octaves:2,level:"Developing",syllabusMatches:[]
 }));
 minorKeys.forEach(key=>families.push({
-  id:"contrary-minor-"+key.toLowerCase().replace(/[^a-z0-9]+/g,""),
+  id:"contrary-minor-"+slugKey(key),
   title:key+" minor · contrary motion",key,family:"Natural minor",group:"Contrary motion",
   motion:"Contrary motion",hands:"Both hands",octaves:2,level:"Developing",syllabusMatches:[]
 }));
