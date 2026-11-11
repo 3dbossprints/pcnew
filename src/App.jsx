@@ -161,7 +161,7 @@ function Dashboard({ go, toast, studentName, studentProfile }) {
     { id: "scales", title: "Scales", description: "Scales, arpeggios and technical requirements.", symbol: "♬" },
   ];
   return <>
-    <PageHeading eyebrow={dateLabel.toUpperCase()} title={<>{greeting}, {studentName}<span className="heading-period">.</span></>} subtitle="Your practice history and learning materials, all in one place." action={<Button kind="outline" onClick={() => go("profile")}>Your profile ↗</Button>} />
+    <PageHeading eyebrow={dateLabel.toUpperCase()} title={<>{greeting}, {studentName}<span className="heading-period">.</span></>} subtitle="Your practice history and learning materials, all in one place." action={<Button kind="outline" onClick={() => go("practice")}>Open Practice ↗</Button>} />
     <section className="stats-grid">
       <Stat label="THIS WEEK" value={summary ? (hours ? hours + "h " : "") + minutes + "m" : "—"} note={summary ? "Recorded practice time" : "Practice history unavailable"} icon="◷" />
       <Stat label="SESSIONS THIS WEEK" value={summary ? String(summary.sessionsThisWeek) : "—"} note="Completed sessions" icon="♫" />
