@@ -154,3 +154,76 @@ export function calculatePracticeScore(events) {
 export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
+
+/**
+ * Build bar intervals from the actual score timeline.
+ * Measure starts are explicit score metadata, not inferred from whichever note
+ * happened to be played most recently. Empty bars must be supplied by parser.
+ */
+export function buildMeasureTimeline(measures) {
+  if (!Array.isArray(measures)) return [];
+  const cleaned = measures.map((measure, index) => {
+    const number = Math.max(1, Math.floor(Number(measure?.number) || index + 1));
+    const start = Number(measure?.start ?? measure?.startTime);
+    const end = Number(measure?.end ?? measure?.endTime);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
+    return { number, start, end };
+  }).filter(Boolean).sort((a, b) => a.start - b.start || a.number - b.number);
+  for (let i = 1; i < cleaned.length; i += 1) {
+    if (cleaned[i].start < cleaned[i - 1].start) return [];
+  }
+  return cleaned.map((measure, index) => Object.freeze({
+    ...measure,
+    index,
+    duration: measure.end - measure.start
+  }));
+}
+
+/** Find the bar containing the transport position, including rests and empty bars. */
+export function findActiveMeasure(measures, positionSeconds) {
+  const timeline = Array.isArray(measures) ? measures : [];
+  const position = Number(positionSeconds);
+  if (!Number.isFinite(position) || position < 0 || !timeline.length) return null;
+  let low = 0;
+  let high = timeline.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const measure = timeline[mid];
+    if (position < measure.start) high = mid - 1;
+    else if (position >= measure.end) low = mid + 1;
+    else return measure.number;
+  }
+  if (low >= timeline.length) return timeline[timeline.length - 1].number;
+  return high >= 0 ? timeline[high].number : timeline[0].number;
+}
+
+/** Stable note-on matching: repeated MIDI note-ons are tracked independently. */
+export function createHeldNoteTracker() {
+  const held = new Map();
+  return {
+    noteOn(midi, timestamp = performance.now()) {
+      const key = Number(midi);
+      if (!Number.isInteger(key) || key < 0 || key > 127) return null;
+      const stack = held.get(key) || [];
+      const token = Object.freeze({ midi: key, timestamp: Number(timestamp), sequence: stack.length ? stack[stack.length - 1].sequence + 1 : 1 });
+      stack.push(token);
+      held.set(key, stack);
+      return token;
+    },
+    noteOff(midi) {
+      const key = Number(midi);
+      const stack = held.get(key);
+      if (!stack?.length) return null;
+      const token = stack.shift();
+      if (!stack.length) held.delete(key);
+      return token;
+    },
+    releaseAll() {
+      const released = [...held.values()].flat();
+      held.clear();
+      return released;
+    },
+    isHeld(midi) { return Boolean(held.get(Number(midi))?.length); },
+    get size() { return [...held.values()].reduce((total, stack) => total + stack.length, 0); }
+  };
+}
