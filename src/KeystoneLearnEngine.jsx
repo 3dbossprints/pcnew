@@ -206,8 +206,8 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
     const start=Math.min(...active.map(n=>n.t)),end=Math.max(...active.map(n=>n.t+n.d));
     const sourceBpm=Math.max(20,Number(parsed.measures?.[0]?.bpm)||Number(initialBpm)||120),effectiveSpeed=speed*bpm/sourceBpm;
     const startedAt=performance.now();
-    const captureStartedAt=Number(recordingStartedAt);
-    const recordingOffsetSeconds=Number.isFinite(captureStartedAt)?Math.max(0,(startedAt-captureStartedAt)/1000):0;
+    const captureStartedAt=Number.isFinite(recordingStartedAt)?Number(recordingStartedAt):null;
+    const recordingOffsetSeconds=captureStartedAt===null?0:Math.max(0,(startedAt-captureStartedAt)/1000);
     runRef.current={mode,speed:effectiveSpeed,active,accompaniment,clock:start-3.2*effectiveSpeed,start,end,startedAt,recordingOffsetSeconds,combo:0,maxCombo:0,points:0,wrong:[],auto:new Set(),stall:false,done:false,finishAt:0};
     setResult(null);setMessage(mode==='learn'?'Learn mode: the notes will wait for you.':'Perform mode: play along with the falling notes.');
     setTick(v=>v+1);
