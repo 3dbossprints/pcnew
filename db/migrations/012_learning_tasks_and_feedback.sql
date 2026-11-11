@@ -1,5 +1,7 @@
--- Persistent student-owned Grade Plan tasks and section-level practice history.
+-- Persistent student-owned Grade Plan tasks, section history and accessibility preferences.
 -- Additive only: existing users, files and practice sessions remain intact.
+ALTER TABLE public.student_preferences ADD COLUMN IF NOT EXISTS font_size TEXT NOT NULL DEFAULT 'normal';
+
 CREATE TABLE IF NOT EXISTS public.practice_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   firebase_uid TEXT NOT NULL REFERENCES public.users(firebase_uid) ON DELETE CASCADE,
