@@ -498,6 +498,10 @@ function PracticeSession({ config, files, onComplete, onExit }) {
     return()=>window.clearInterval(timer);
   },[session?.id]);
 
+  useEffect(()=>{
+    if(session && config.demoRemainingSeconds !== null && config.demoRemainingSeconds !== undefined && elapsed >= config.demoRemainingSeconds) finishSession(null);
+  },[elapsed,session?.id,config.demoRemainingSeconds]);
+
   async function beginCapture(assisted) {
     try {
       if(!navigator.mediaDevices?.getUserMedia)throw new Error("This browser does not support microphone input.");
