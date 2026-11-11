@@ -18,8 +18,7 @@ export default async function handler(req, res) {
       [user.uid, user.email, user.name],
     );
     const practice = await db.query(
-      "SELECT " +
-      "COALESCE(SUM(duration_seconds) FILTER (WHERE started_at >= date_trunc('week', NOW())), 0)::int AS weekly_seconds, " +
+      "SELECT COALESCE(SUM(duration_seconds) FILTER (WHERE started_at >= date_trunc('week', NOW())), 0)::int AS weekly_seconds, " +
       "COUNT(*) FILTER (WHERE started_at >= date_trunc('week', NOW()))::int AS sessions_this_week, " +
       "COALESCE(SUM(duration_seconds), 0)::int AS lifetime_seconds, " +
       "COALESCE(SUM(duration_seconds) FILTER (WHERE started_at::date = CURRENT_DATE), 0)::int AS today_seconds " +
@@ -35,6 +34,17 @@ export default async function handler(req, res) {
     const pref = await db.query(
       "SELECT notation_style,theme,reminders_email,reminders_browser,timezone,reminder_schedule " +
       "FROM student_preferences WHERE firebase_uid=$1",
+      [user.uid],
+    );
+    const tasks = await db.query(
+      "SELECT id,category,title,composer,notes,source_file_id,section_count,is_archived,created_at,updated_at " +
+      "FROM practice_tasks WHERE firebase_uid=$1 AND is_archived=false ORDER BY category,created_at",
+      [user.uid],
+    );
+    const attempts = await db.query(
+      "SELECT task_id,section_key,score,duration_seconds,attempted_at " +
+      "FROM practice_task_attempts WHERE firebase_uid=$1 AND attempted_at >= NOW()-INTERVAL '365 days' " +
+      "ORDER BY attempted_at DESC LIMIT 1000",
       [user.uid],
     );
     const completedDays = new Set(days.rows.filter((row) => Number(row.seconds) >= 900).map((row) => row.practice_date));
@@ -63,7 +73,7 @@ export default async function handler(req, res) {
         return date >= monday && date <= now && Number(row.seconds) >= 900;
       }).length,
     };
-    return sendJson(res, 200, { user: result.rows[0], practiceSummary, preferences: pref.rows[0] || null });
+    return sendJson(res, 200, { user: result.rows[0], practiceSummary, preferences: pref.rows[0] || null, tasks: tasks.rows, attempts: attempts.rows });
   } catch (error) {
     console.error("GET /api/me failed:", error.message);
     return sendJson(res, 503, { error: "Your account could not be loaded. Please try again shortly." });
