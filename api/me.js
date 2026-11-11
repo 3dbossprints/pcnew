@@ -36,17 +36,25 @@ export default async function handler(req, res) {
       "FROM student_preferences WHERE firebase_uid=$1",
       [user.uid],
     );
-    const tasks = await db.query(
-      "SELECT id,category,title,composer,notes,source_file_id,section_count,is_archived,created_at,updated_at " +
-      "FROM practice_tasks WHERE firebase_uid=$1 AND is_archived=false ORDER BY category,created_at",
-      [user.uid],
-    );
-    const attempts = await db.query(
-      "SELECT task_id,section_key,score,duration_seconds,attempted_at " +
-      "FROM practice_task_attempts WHERE firebase_uid=$1 AND attempted_at >= NOW()-INTERVAL '365 days' " +
-      "ORDER BY attempted_at DESC LIMIT 1000",
-      [user.uid],
-    );
+    let tasks = { rows: [] };
+    let attempts = { rows: [] };
+    let learningPlanAvailable = true;
+    try {
+      tasks = await db.query(
+        "SELECT id,category,title,composer,notes,source_file_id,section_count,is_archived,created_at,updated_at " +
+        "FROM practice_tasks WHERE firebase_uid=$1 AND is_archived=false ORDER BY category,created_at",
+        [user.uid],
+      );
+      attempts = await db.query(
+        "SELECT task_id,section_key,score,duration_seconds,attempted_at " +
+        "FROM practice_task_attempts WHERE firebase_uid=$1 AND attempted_at >= NOW()-INTERVAL '365 days' " +
+        "ORDER BY attempted_at DESC LIMIT 1000",
+        [user.uid],
+      );
+    } catch (taskError) {
+      if (!["42P01", "42703"].includes(taskError.code)) throw taskError;
+      learningPlanAvailable = false;
+    }
     const completedDays = new Set(days.rows.filter((row) => Number(row.seconds) >= 900).map((row) => row.practice_date));
     const today = new Date();
     const utcDate = (date) => date.toISOString().slice(0, 10);
@@ -73,7 +81,7 @@ export default async function handler(req, res) {
         return date >= monday && date <= now && Number(row.seconds) >= 900;
       }).length,
     };
-    return sendJson(res, 200, { user: result.rows[0], practiceSummary, preferences: pref.rows[0] || null, tasks: tasks.rows, attempts: attempts.rows });
+    return sendJson(res, 200, { user: result.rows[0], practiceSummary, preferences: pref.rows[0] || null, tasks: tasks.rows, attempts: attempts.rows, learningPlanAvailable });
   } catch (error) {
     console.error("GET /api/me failed:", error.message);
     return sendJson(res, 503, { error: "Your account could not be loaded. Please try again shortly." });
