@@ -7,9 +7,10 @@ const minorKeys = [
 ];
 const chromaticRoots = ["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
 const families = [];
+const slugKey = value => String(value).toLowerCase().replace(/♭/g,"b").replace(/♯/g,"sharp").replace(/[^a-z0-9]+/g,"");
 const addFamily = (name, keys, group, options = {}) => {
   keys.forEach(key => families.push({
-    id: name.toLowerCase().replace(/[^a-z0-9]+/g,"-")+"-"+key.toLowerCase().replace(/[^a-z0-9]+/g,""),
+    id: name.toLowerCase().replace(/[^a-z0-9]+/g,"-")+"-"+slugKey(key),
     title: key+" "+name+(options.motion ? " · "+options.motion : ""),
     key, family:name, group, motion:options.motion||"Similar motion",
     hands:options.hands||"Hands together", octaves:options.octaves||2,
