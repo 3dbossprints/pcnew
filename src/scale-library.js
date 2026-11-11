@@ -46,11 +46,20 @@ minorKeys.forEach(key=>families.push({
 ["Minor arpeggio","Diminished seventh arpeggio"].forEach(type =>
   addFamily(type,minorKeys,"Arpeggios",{level:"Advanced"})
 );
-["Major broken chord","Minor broken chord","Dominant seventh broken chord","Diminished seventh broken chord"].forEach(type =>
+["Major broken chord","Dominant seventh broken chord"].forEach(type =>
   addFamily(type,majorKeys,"Broken chords",{level:"Developing"})
 );
-["Major scale in thirds","Major scale in sixths","Minor scale in thirds","Minor scale in sixths"].forEach(type =>
+["Minor broken chord"].forEach(type =>
+  addFamily(type,minorKeys,"Broken chords",{level:"Developing"})
+);
+["Diminished seventh broken chord"].forEach(type =>
+  addFamily(type,chromaticRoots,"Broken chords",{level:"Advanced"})
+);
+["Major scale in thirds","Major scale in sixths"].forEach(type =>
   addFamily(type,majorKeys,"Scales in intervals",{level:"Advanced"})
+);
+["Minor scale in thirds","Minor scale in sixths"].forEach(type =>
+  addFamily(type,minorKeys,"Scales in intervals",{level:"Advanced"})
 );
 
 export const SCALE_LIBRARY = families;
@@ -75,6 +84,11 @@ export function searchScales(query, examBoard, grade) {
     );
     const text=normalise([item.title,item.key,item.family,item.group,item.level].join(" "));
     return {...item,examMatch:exact,searchText:text};
-  }).filter(item=>!q||item.searchText.includes(q))
-    .sort((a,b)=>Number(b.examMatch)-Number(a.examMatch)||a.title.localeCompare(b.title));
+  }).filter(item=>{
+    if(!q)return true;
+    // Match all meaningful query terms independently so "C♭ minor" also finds
+    // catalogue titles such as "C♭ Natural minor".
+    const terms=q.match(/[a-z0-9#]+/g)||[];
+    return terms.every(term=>item.searchText.includes(term));
+  }).sort((a,b)=>Number(b.examMatch)-Number(a.examMatch)||a.title.localeCompare(b.title));
 }
