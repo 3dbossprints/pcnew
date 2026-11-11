@@ -217,7 +217,7 @@ export default function App() {
       toast("Assisted Practice needs a MusicXML score so the notes and timing can be checked. Choose Standard for this document.", "error");
       return;
     }
-    setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType, referenceFile: actualFile, practiceType: actualPracticeType });
+    setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType: actualPracticeType, referenceFile: actualFile, demoRemainingSeconds: plan === "free" ? demoRemaining : null });
     setFeedback(null);
     setPage("practice");
   }
@@ -628,7 +628,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
       }:null;
       const saved=await api("/api/practice/finish",{method:"PATCH",body:{sessionId:session.id,durationSeconds,score,feedback:feedbackPayload,recordingFileId}});
       const result={
-        session:saved.session,summary:engineSummary,durationSeconds,recordingFileId,
+        session:saved.session,summary:engineSummary,durationSeconds:Number(saved.session?.duration_seconds ?? durationSeconds),recordingFileId,
         task:config.task,sectionKey:config.sectionKey,mode:config.mode,
         recordingSaved:Boolean(recordingFileId),
       };
@@ -814,11 +814,11 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
         {interfaceOpen&&<div className="pc-interface-settings"><label>Appearance<select value={theme} onChange={e=>setTheme(e.target.value)}><option value="light">Light</option><option value="dark">Dark</option><option value="contrast">High contrast</option></select></label><label>Text size<select value={fontSize} onChange={e=>setFontSize(e.target.value)}><option value="normal">Standard</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><p>Changes are applied in this browser and saved with your profile.</p></div>}
       </section>
       <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">04 · SECURITY</span><h2>Change password</h2><div className="pc-profile-fields"><label>Current password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder={connected.includes("password")?"Current password":"Not needed for Google sign-in"}/></label><label>New password<input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} autoComplete="new-password"/></label></div><button type="button" className="pc-button outline" disabled={passwordBusy||!newPassword} onClick={changePassword}>{passwordBusy?"Updating…":"Update password"}</button><p className="pc-muted-small">At least 8 characters, including uppercase, lowercase and a number.</p></section>
-      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">05 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?"£19.99 per month":plan==="basic"?"£9.99 per month":"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
+      <section className="pc-panel pc-profile-section pc-delete-note"><span className="pc-eyebrow">05 · ACCOUNT DELETION</span><h2>Leaving Piano Coach?</h2><p>Account deletion must verify your identity, cancel an active subscription and provide a 15-day period in which you can cancel the request. That deletion workflow is not connected yet, so this control is deliberately not presented as active.</p><button type="button" disabled className="pc-button danger" title="Account deletion workflow is not connected">Account deletion unavailable</button></section>
+      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">06 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?"£19.99 per month":plan==="basic"?"£9.99 per month":"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
         {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic · £9.99/month</option><option value="pro">Pro · £19.99/month</option></select></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
         <p className="pc-muted-small">Monthly plan changes and cancellation are managed securely through Stripe. Annual changes need to be handled at renewal.</p>
       </section>
-      <section className="pc-panel pc-profile-section pc-delete-note"><span className="pc-eyebrow">05 · ACCOUNT DELETION</span><h2>Leaving Piano Coach?</h2><p>Account deletion must verify your identity, cancel an active subscription and provide a 15-day period in which you can cancel the request. That deletion workflow is not connected yet, so this control is deliberately not presented as active.</p><button type="button" disabled className="pc-button danger" title="Account deletion workflow is not connected">Account deletion unavailable</button></section>
       {accountMessage&&<p className="pc-form-error" role="alert">{accountMessage}</p>}
       <div className="pc-profile-save"><button className="pc-button dark" disabled={saving}>{saving?"Saving…":"Save profile and preferences"}</button></div>
     </form>
