@@ -5,6 +5,28 @@ import { buildKeystoneTimeline, midiName, parseKeystoneMusicXML, scoreNotesToKey
 
 const COMPUTER_KEYS = 'zsxdcvgbhnjmq2w3er5t6y7u';
 const KEYBOARD_HEIGHT = 116;
+function collectTroubleBars(run) {
+  const bars = new Map();
+  const add = (barValue, noteName, timeSeconds) => {
+    const bar = Number(barValue);
+    if (!Number.isInteger(bar) || bar < 1) return;
+    const entry = bars.get(bar) || { notes: new Set(), timeSeconds: Number.POSITIVE_INFINITY };
+    entry.notes.add(noteName);
+    if (Number.isFinite(timeSeconds)) entry.timeSeconds = Math.min(entry.timeSeconds, Math.max(0, timeSeconds));
+    bars.set(bar, entry);
+  };
+  (run.active || []).filter(note => !note.res || note.bad).forEach(note => {
+    const expectedTime = (run.recordingOffsetSeconds || 0) + 3.2 + Math.max(0, (note.t - run.start) / (run.speed || 1));
+    add(note.measure, midiName(note.midi), expectedTime);
+  });
+  (run.wrong || []).forEach(note => add(note.bar, midiName(note.midi), note.timeSeconds));
+  return [...bars.entries()].sort((a, b) => a[0] - b[0]).map(([bar, item]) => ({
+    bar,
+    notes: [...item.notes],
+    timeSeconds: Number.isFinite(item.timeSeconds) ? Number(item.timeSeconds.toFixed(2)) : null,
+  }));
+}
+
 const midiFromKey = key => {
   const m = String(key || '').match(/^([A-G])(#|b)?(-?\d)$/i);
   if (!m) return null;
@@ -12,7 +34,7 @@ const midiFromKey = key => {
   return 12 * (Number(m[3]) + 1) + semitones[m[1].toUpperCase()] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
 };
 
-export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120, timeSignature = '4/4', title = 'Your piece', micInputRef, onConnectMic, onDisconnectMic, microphoneListening = false, microphoneLevel = 0, microphoneStatus = 'Microphone is off', onFinish, onClose, onReady, onProgress }) {
+export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120, timeSignature = '4/4', title = 'Your piece', micInputRef, onConnectMic, onDisconnectMic, microphoneListening = false, microphoneLevel = 0, microphoneStatus = 'Microphone is off', onFinish, onClose, onReady, onProgress, recordingStartedAt = null }) {
   const parsed = useMemo(() => {
     if (xml) {
       try { return parseKeystoneMusicXML(xml); }
@@ -73,7 +95,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
   }, []);
   const bad = useCallback((midi, text) => {
     const run=runRef.current;if(!run)return;
-    run.wrong.push({midi,bar:(run.active.find(n=>!n.res)||{}).measure||0});
+    run.wrong.push({midi,bar:(run.active.find(n=>!n.res)||{}).measure||0,timeSeconds:(run.recordingOffsetSeconds||0)+(performance.now()-run.startedAt)/1000});
     run.combo=0;run.popup={text,at:performance.now(),good:false};run.shakeUntil=performance.now()+180;
     if(run.mode==='learn'){run.stall=true;const next=run.active.find(n=>!n.res);if(next)next.bad=1;}
     setMessage(run.mode==='learn'?text+' — play the correct note to continue.':text);
@@ -183,10 +205,13 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
     const accompaniment=timeline.filter(n=>n.measure>=fromBar&&n.measure<=toBar&&!activeIds.has(n.orderIndex+':'+n.noteIndex+':'+n.t)).map(n=>({...n,played:false}));
     const start=Math.min(...active.map(n=>n.t)),end=Math.max(...active.map(n=>n.t+n.d));
     const sourceBpm=Math.max(20,Number(parsed.measures?.[0]?.bpm)||Number(initialBpm)||120),effectiveSpeed=speed*bpm/sourceBpm;
-    runRef.current={mode,speed:effectiveSpeed,active,accompaniment,clock:start-3.2*effectiveSpeed,start,end,combo:0,maxCombo:0,points:0,wrong:[],auto:new Set(),stall:false,done:false,finishAt:0};
+    const startedAt=performance.now();
+    const captureStartedAt=Number(recordingStartedAt);
+    const recordingOffsetSeconds=Number.isFinite(captureStartedAt)?Math.max(0,(startedAt-captureStartedAt)/1000):0;
+    runRef.current={mode,speed:effectiveSpeed,active,accompaniment,clock:start-3.2*effectiveSpeed,start,end,startedAt,recordingOffsetSeconds,combo:0,maxCombo:0,points:0,wrong:[],auto:new Set(),stall:false,done:false,finishAt:0};
     setResult(null);setMessage(mode==='learn'?'Learn mode: the notes will wait for you.':'Perform mode: play along with the falling notes.');
     setTick(v=>v+1);
-  }, [selected,timeline,fromBar,toBar,mode,speed,bpm,parsed,initialBpm,stopRun,demoActive,clearDemo]);
+  }, [selected,timeline,fromBar,toBar,mode,speed,bpm,parsed,initialBpm,stopRun,demoActive,clearDemo,recordingStartedAt]);
 
   const finishRun = useCallback(() => {
     const run=runRef.current;if(!run||run.done)return;
@@ -194,8 +219,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
     const hits=run.active.filter(n=>n.res);
     const total=run.active.length, score=Math.max(0,Math.round(100*(hits.reduce((sum,n)=>sum+({perfect:1,good:.8,almost:.5}[n.res]||0),0)-(run.mode==='perform'?run.wrong.length*.25:0))/Math.max(1,total)));
     const errors=hits.filter(n=>Number.isFinite(n.error)),mean=errors.length?errors.reduce((s,n)=>s+n.error,0)/errors.length:0;
-    const bars={};run.active.filter(n=>!n.res||n.bad).forEach(n=>(bars[n.measure]??=new Set()).add(midiName(n.midi)));
-    const trouble=Object.entries(bars).sort((a,b)=>b[1].size-a[1].size).slice(0,6).map(([bar,ns])=>({bar,notes:[...ns]}));
+    const trouble=collectTroubleBars(run);
     const summary={score,hits:hits.length,total,perfect:hits.filter(n=>n.res==='perfect').length,good:hits.filter(n=>n.res==='good').length,almost:hits.filter(n=>n.res==='almost').length,wrong:run.wrong.length,maxCombo:run.maxCombo,mode:run.mode,hands,tempo:bpm,speed:run.speed,meanTimingMs:errors.length?Math.round(mean*1000):null,trouble};
     setResult(summary);setMessage('Finished. Review your result or start again.');runRef.current=null;setTick(v=>v+1);
   }, [hands,bpm]);
@@ -285,9 +309,7 @@ export default function KeystoneLearnEngine({ xml, notes, bpm: initialBpm = 120,
     const run=runRef.current;
     if(run){
       const hits=run.active.filter(n=>n.res);
-      const bars={};
-      run.active.filter(n=>!n.res||n.bad).forEach(n=>(bars[n.measure]??=new Set()).add(midiName(n.midi)));
-      const trouble=Object.entries(bars).sort((a,b)=>b[1].size-a[1].size).slice(0,12).map(([bar,ns])=>({bar:Number(bar),notes:[...ns]}));
+      const trouble=collectTroubleBars(run);
       const summary={
         score:Math.max(0,Math.round(100*hits.reduce((sum,n)=>sum+({perfect:1,good:.8,almost:.5}[n.res]||0),0)/Math.max(1,run.active.length))),
         hits:hits.length,total:run.active.length,perfect:hits.filter(n=>n.res==='perfect').length,
