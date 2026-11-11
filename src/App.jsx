@@ -78,7 +78,7 @@ export default function App() {
   const [noticeType, setNoticeType] = useState("success");
   const [selectedTask, setSelectedTask] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [document, setDocument] = useState(null);
+  const [openedDocument, setOpenedDocument] = useState(null);
   const [documentBusy, setDocumentBusy] = useState(false);
   const [taskEditor, setTaskEditor] = useState(null);
   const [profileDirty, setProfileDirty] = useState(false);
@@ -250,7 +250,7 @@ export default function App() {
     {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => file.kind === "sheet" && !isEpub(file))} busy={profileBusy} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
     {showLibrary && <LibraryModal files={files} busy={documentBusy} onClose={() => setShowLibrary(false)} onOpen={openFile} onUpload={uploadFile} onRefresh={refresh} toast={toast} plan={plan}/>}
     {openedDocument && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
-      {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={document.xml} title={openedDocument.file.original_name}/></div> :
+      {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={openedDocument.xml} title={openedDocument.file.original_name}/></div> :
         <DocumentViewer file={document.file} url={openedDocument.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setOpenedDocument(null)} onUseForPractice={(file) => { setOpenedDocument(null); beginPractice(null,"full","standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
     </Suspense>}
     {notice && <div className={"pc-toast " + noticeType} role="status"><span>{noticeType === "error" ? "!" : "✓"}</span>{notice}</div>}
@@ -569,7 +569,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   async function saveRecording(blob) {
     if(!blob||blob.size<1024)return null;
     const extension=blob.type.includes("mp4")?"m4a":"webm";
-    const file=new File([blob],"practice-recording-"+new Date().toISOString().replace(/[:.]/g,"-")+"."+extension,{type:blob.type||"audio/webm"});
+    const recordingType=extension==="m4a"?"audio/mp4":"audio/webm";\n    const file=new File([blob],"practice-recording-"+new Date().toISOString().replace(/[:.]/g,"-")+"."+extension,{type:recordingType});
     try{
       const signed=await api("/api/uploads/sign",{method:"POST",body:{filename:file.name,contentType:file.type||"audio/webm",size:file.size,purpose:"library",category:"recordings"}});
       const put=await fetch(signed.uploadUrl,{method:"PUT",headers:{"Content-Type":file.type||"audio/webm"},body:file});
@@ -634,7 +634,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   const file=config.referenceFile;
   const xmlReady=Boolean(xml);
   const isXml=file&&isMusicXml(file);
-  const docUrl=file&&!isXml?null:null;
+  
   const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0");
 
   return <div className="pc-live-session">
