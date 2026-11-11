@@ -162,12 +162,12 @@ export default function App() {
     setDocumentBusy(true);
     try {
       const result = await api("/api/uploads/download?id=" + encodeURIComponent(file.id) + "&inline=1");
-      setDocument({ file, url: result.url, xml: null });
+      setOpenedDocument({ file, url: result.url, xml: null });
       if (isMusicXml(file)) {
         const response = await fetch(result.url);
         if (!response.ok) throw new Error("The MusicXML file could not be downloaded.");
         const xml = await response.text();
-        setDocument({ file, url: result.url, xml });
+        setOpenedDocument({ file, url: result.url, xml });
       }
     } catch (error) { toast(error.message || "The document could not be opened.", "error"); }
     finally { setDocumentBusy(false); }
@@ -204,12 +204,14 @@ export default function App() {
 
   function beginPractice(task, sectionKey = "full", practiceMode = "standard", practiceType = "graded", referenceFile = null) {
     if (freeLocked) { setPage("profile"); toast("Your 60-minute demo has been used. Choose a subscription to continue.", "error"); return; }
-    if (practiceType === "graded" && plan !== "free" && !hasExamBook) { setPage("home"); toast("Upload your exam-board ebook to unlock graded learning.", "error"); return; }
-    if (practiceMode === "assisted" && (!referenceFile || !isMusicXml(referenceFile))) {
+    const actualFile = referenceFile || (task ? getTaskFile(task, files) : null);
+    const actualPracticeType = actualFile?.metadata?.purpose === "personal_piece" ? "personal" : practiceType;
+    if (actualPracticeType === "graded" && plan !== "free" && !hasExamBook) { setPage("home"); toast("Upload your exam-board ebook to unlock graded learning.", "error"); return; }
+    if (practiceMode === "assisted" && (!actualFile || !isMusicXml(actualFile))) {
       toast("Assisted Practice needs a MusicXML score so the notes and timing can be checked. Choose Standard for this document.", "error");
       return;
     }
-    setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType, referenceFile: referenceFile || (task ? getTaskFile(task, files) : null) });
+    setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType, referenceFile: actualFile, practiceType: actualPracticeType });
     setFeedback(null);
     setPage("practice");
   }
@@ -247,9 +249,9 @@ export default function App() {
 
     {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => file.kind === "sheet" && !isEpub(file))} busy={profileBusy} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
     {showLibrary && <LibraryModal files={files} busy={documentBusy} onClose={() => setShowLibrary(false)} onOpen={openFile} onUpload={uploadFile} onRefresh={refresh} toast={toast} plan={plan}/>}
-    {document && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
-      {document.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{document.file.original_name}</strong></div><button onClick={() => setDocument(null)}>Close ×</button></header><MusicXMLViewer xml={document.xml} title={document.file.original_name}/></div> :
-        <DocumentViewer file={document.file} url={document.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setDocument(null)} onUseForPractice={(file) => { setDocument(null); beginPractice(null,"full","standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
+    {openedDocument && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
+      {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={document.xml} title={openedDocument.file.original_name}/></div> :
+        <DocumentViewer file={document.file} url={openedDocument.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setOpenedDocument(null)} onUseForPractice={(file) => { setOpenedDocument(null); beginPractice(null,"full","standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
     </Suspense>}
     {notice && <div className={"pc-toast " + noticeType} role="status"><span>{noticeType === "error" ? "!" : "✓"}</span>{notice}</div>}
   </div>;
@@ -458,6 +460,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   const [captureAvailable,setCaptureAvailable]=useState(false);
   const micInputRef=useRef(null);
   const captureRef=useRef(null);
+  const engineControlRef=useRef(null);
   const endingRef=useRef(false);
   const sessionStartRef=useRef(0);
   const configRef=useRef(config);
@@ -635,16 +638,16 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0");
 
   return <div className="pc-live-session">
-    <header className="pc-session-top"><div><button className="pc-back-link" onClick={onExit} disabled={Boolean(session)}>← Back</button><span className="pc-eyebrow">{config.mode==="assisted"?"ASSISTED PRACTICE":"STANDARD PRACTICE"}</span><h1>{config.task?.title||file?.original_name||"Free practice"}</h1><p>{config.sectionKey==="full"?"Whole task":config.sectionKey.replace("section-","Section ")}</p></div><div className="pc-session-top-right"><span className="pc-session-clock">{elapsedLabel}</span>{session&&<button className="pc-button dark" onClick={()=>finishSession(summary)} disabled={busy}>{busy?"Saving session…":"Stop Session ■"}</button>}</div></header>
+    <header className="pc-session-top"><div><button className="pc-back-link" onClick={onExit} disabled={Boolean(session)}>← Back</button><span className="pc-eyebrow">{config.mode==="assisted"?"ASSISTED PRACTICE":"STANDARD PRACTICE"}</span><h1>{config.task?.title||file?.original_name||"Free practice"}</h1><p>{config.sectionKey==="full"?"Whole task":config.sectionKey.replace("section-","Section ")}</p></div><div className="pc-session-top-right"><span className="pc-session-clock">{elapsedLabel}</span>{session&&<button className="pc-button dark" onClick={()=>{if(config.mode==="assisted"&&engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}} disabled={busy}>{busy?"Saving session…":"Stop Session ■"}</button>}</div></header>
     {!session ? <section className="pc-session-ready"><span className="pc-session-ready-icon">♫</span><h2>Take a moment to settle in.</h2><p>Your session will be recorded when you begin. Microphone input is optional, and you can connect a MIDI piano for more accurate note detection.</p>
       {config.mode==="assisted"&&<div className="pc-inline-warning">Assisted mode will use the score's note timings. Use an external MIDI keyboard for accurate chords; microphone pitch detection is monophonic.</div>}
       {scoreLoadError&&<p className="pc-form-error">{scoreLoadError}</p>}
       <button className="pc-button dark" onClick={startSession} disabled={busy||(config.mode==="assisted"&&!xmlReady)}>{busy?"Starting…":"Start session ↗"}</button>
       {config.mode==="assisted"&&!xmlReady&&<small>{scoreLoadError||"Preparing the MusicXML score…"}</small>}
     </section> : <div className="pc-session-stage">
-      <div className="pc-session-status"><span className="pc-recording-dot"/><span>Session in progress · {captureMessage}</span><span className="pc-input-level"><i style={{width:captureLevel+"%"}}/></span></div>
+      <div className="pc-session-status"><span className="pc-recording-dot"/><span>Session in progress · {captureMessage}{currentBar?" · Bar "+currentBar:""}</span><span className="pc-input-level"><i style={{width:captureLevel+"%"}}/></span></div>
       {config.mode==="assisted"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Preparing your falling-note lesson…</div>}>
-        <KeystoneLearnEngine xml={xml} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onConnectMic={()=>beginCapture(true)} onDisconnectMic={()=>stopCapture()} onProgress={setCurrentBar} onFinish={finishSession} onClose={()=>finishSession(summary)}/>
+        <KeystoneLearnEngine xml={xml} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
       </Suspense> : config.mode==="standard"&&file&&isPdf(file) ? <PracticePdf file={file} /> :
       config.mode==="standard"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Rendering the score…</div>}><MusicXMLViewer xml={xml} title={file.original_name}/></Suspense> :
       <div className="pc-practice-no-score"><span>𝄞</span><h2>Practise at your own pace.</h2><p>{scoreLoadError||"Use your own sheet music or upload a score to see it alongside your session."}</p></div>}
@@ -728,7 +731,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [accountMessage,setAccountMessage]=useState("");
   const [interfaceOpen,setInterfaceOpen]=useState(false);
   const [scheduleEnabled,setScheduleEnabled]=useState(false);
-  const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");
+  const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");\n  const [checkoutSecret,setCheckoutSecret]=useState("");
   const plan=user.plan||"free";
   const connected=(auth.currentUser?.providerData||[]).map(provider=>provider.providerId);
   async function saveProfile(event){
@@ -768,13 +771,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
       const selected=checkoutPlan;
       const saved=await api("/api/profile",{method:"PATCH",body:{examBoard:user.exam_board,grade:user.grade,plan:selected,interval:"monthly",targetDate,bookSources:Array.isArray(user.book_sources)?user.book_sources:[],examBookSkipped:!user.exam_book_file_id}});
       const checkout=await api("/api/billing/checkout",{method:"POST",body:{plan:selected,interval:"monthly"}});
-      const stripe=await import("@stripe/stripe-js").then(module=>module.loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY));
-      if(!stripe)throw new Error("Secure checkout could not be opened.");
-      const embedded=await stripe.initEmbeddedCheckout({clientSecret:checkout.clientSecret});
-      const mount=document.createElement("div");
-      mount.className="pc-stripe-mount";
-      document.body.appendChild(mount);
-      embedded.mount(mount);
+      setCheckoutSecret(checkout.clientSecret);
     }catch(error){setAccountMessage(error.message||"Checkout could not be opened.");}
   }
   function toggleDay(day){
@@ -811,7 +808,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
         {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic · £9.99/month</option><option value="pro">Pro · £19.99/month</option></select></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
         <p className="pc-muted-small">Monthly plan changes and cancellation are managed securely through Stripe. Annual changes need to be handled at renewal.</p>
       </section>
-      <section className="pc-panel pc-profile-section pc-delete-note"><span className="pc-eyebrow">06 · ACCOUNT DELETION</span><h2>Leaving Piano Coach?</h2><p>Account deletion must verify your identity, cancel an active subscription and provide a 15-day period in which you can cancel the request. That deletion workflow is not connected yet, so this control is deliberately not presented as active.</p><button type="button" disabled className="pc-button danger" title="Account deletion workflow is not connected">Account deletion unavailable</button></section>
+      <section className="pc-panel pc-profile-section pc-delete-note"><span className="pc-eyebrow">05 · ACCOUNT DELETION</span><h2>Leaving Piano Coach?</h2><p>Account deletion must verify your identity, cancel an active subscription and provide a 15-day period in which you can cancel the request. That deletion workflow is not connected yet, so this control is deliberately not presented as active.</p><button type="button" disabled className="pc-button danger" title="Account deletion workflow is not connected">Account deletion unavailable</button></section>
       {accountMessage&&<p className="pc-form-error" role="alert">{accountMessage}</p>}
       <div className="pc-profile-save"><button className="pc-button dark" disabled={saving}>{saving?"Saving…":"Save profile and preferences"}</button></div>
     </form>
