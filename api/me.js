@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       "ON CONFLICT (firebase_uid) DO UPDATE SET email = EXCLUDED.email, " +
       "display_name = COALESCE(users.display_name, EXCLUDED.display_name), updated_at = NOW() " +
       "RETURNING id, email, display_name, preferred_name, exam_board, grade, target_date, timezone, plan, pending_plan, pending_interval, stripe_customer_id, subscription_status, subscription_current_period_end, cancel_at_period_end, subscription_interval, " +
-      "onboarding_completed, book_sources, exam_book_file_id, exam_book_skipped, exam_book_uploaded_at, demo_seconds_used, created_at",
+      "onboarding_completed, book_sources, exam_book_file_id, exam_book_skipped, exam_book_uploaded_at, demo_seconds_used, created_at, deletion_requested_at, deletion_scheduled_at, deletion_cancelled_at",
       [user.uid, user.email, user.name],
     );
     const timezone = result.rows[0]?.timezone || "UTC";

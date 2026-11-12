@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
+import Stripe from "stripe";
 import { requireUser } from "./_lib/auth.js";
 import { database } from "./_lib/db.js";
 import { requireMethod, sendJson } from "./_lib/http.js";
+
+let stripeClient;
+function stripe() {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error("Stripe is not configured.");
+  if (!stripeClient) stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+  return stripeClient;
+}
 
 const boards = new Set(["RSL Awards", "ABRSM", "LCME", "Trinity College London", "MTB", "VCM", "NCM"]);
 const grades = new Set(["Initial", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"]);
@@ -63,6 +71,44 @@ async function saveTask(req, res, user, body) {
   return sendJson(res, 200, { task: result.rows[0] });
 }
 
+async function handleDeletion(req, res, user, body) {
+  const action = body.deletionAction?.action;
+  if (!["request", "cancel"].includes(action)) return sendJson(res, 400, { error: "Choose a valid deletion action." });
+  const db = database();
+  const current = await db.query("SELECT deletion_requested_at, deletion_scheduled_at, stripe_subscription_id, subscription_status FROM users WHERE firebase_uid=$1", [user.uid]);
+  if (!current.rowCount) return sendJson(res, 404, { error: "Your Piano Coach profile could not be found." });
+  const row = current.rows[0];
+
+  if (action === "request") {
+    if (row.deletion_scheduled_at) return sendJson(res, 409, { error: "Account deletion has already been requested." });
+    const subscriptionId = row.stripe_subscription_id;
+    if (subscriptionId && ["active", "trialing", "past_due"].includes(row.subscription_status)) {
+      try {
+        await stripe().subscriptions.cancel(subscriptionId, { invoice_now: false });
+      } catch (stripeError) {
+        console.error("Deletion: Stripe subscription cancel failed:", stripeError.message);
+      }
+    }
+    const result = await db.query(
+      "UPDATE users SET deletion_requested_at=NOW(), deletion_scheduled_at=NOW()+INTERVAL '15 days', deletion_cancelled_at=NULL, subscription_status='canceled', cancel_at_period_end=TRUE, updated_at=NOW() WHERE firebase_uid=$1 " +
+      "RETURNING id,email,display_name,preferred_name,exam_board,grade,target_date,plan,pending_plan,pending_interval,onboarding_completed,book_sources,exam_book_file_id,exam_book_skipped,demo_seconds_used,subscription_status,stripe_customer_id,subscription_interval,subscription_current_period_end,cancel_at_period_end,deletion_requested_at,deletion_scheduled_at,deletion_cancelled_at",
+      [user.uid],
+    );
+    return sendJson(res, 200, { user: result.rows[0] });
+  }
+
+  if (action === "cancel") {
+    if (!row.deletion_scheduled_at) return sendJson(res, 409, { error: "No deletion request is active." });
+    if (new Date(row.deletion_scheduled_at) < new Date()) return sendJson(res, 409, { error: "The grace period has ended and deletion can no longer be cancelled." });
+    const result = await db.query(
+      "UPDATE users SET deletion_requested_at=NULL, deletion_scheduled_at=NULL, deletion_cancelled_at=NOW(), updated_at=NOW() WHERE firebase_uid=$1 " +
+      "RETURNING id,email,display_name,preferred_name,exam_board,grade,target_date,plan,pending_plan,pending_interval,onboarding_completed,book_sources,exam_book_file_id,exam_book_skipped,demo_seconds_used,subscription_status,stripe_customer_id,subscription_interval,subscription_current_period_end,cancel_at_period_end,deletion_requested_at,deletion_scheduled_at,deletion_cancelled_at",
+      [user.uid],
+    );
+    return sendJson(res, 200, { user: result.rows[0] });
+  }
+}
+
 export default async function handler(req, res) {
   if (!requireMethod(req, res, "PATCH")) return;
   const user = await requireUser(req, res);
@@ -74,6 +120,14 @@ export default async function handler(req, res) {
     catch (error) {
       console.error("PATCH /api/profile task action failed:", error.message);
       return sendJson(res, 503, { error: "Your learning task couldn't be saved." });
+    }
+  }
+
+  if (body.deletionAction) {
+    try { return await handleDeletion(req, res, user, body); }
+    catch (error) {
+      console.error("PATCH /api/profile deletion action failed:", error.message);
+      return sendJson(res, 503, { error: "The account deletion request could not be completed." });
     }
   }
 

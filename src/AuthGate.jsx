@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword, signInWithPopup, signOut,
 } from "firebase/auth";
 import { auth, googleProvider, firebaseConfigured } from "./lib/firebase.js";
+import LandingPage from "./LandingPage.jsx";
 
 function passwordIsValid(value) {
   return value.length >= 8 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value);
@@ -149,6 +150,9 @@ export default function AuthGate({ children }) {
       setMessage(messages[error.code] || error.message || "We couldn't complete that request.");
     } finally { setBusy(false); }
   }
+
+  const hasResetToken = new URLSearchParams(window.location.search).has("resetToken");
+  if (!hasResetToken && mode === "signin") return <LandingPage />;
 
   return <main className="auth-screen"><section className="auth-card">
     <div className="auth-mark">𝄞</div><p className="eyebrow">YOUR MUSICAL JOURNEY</p>

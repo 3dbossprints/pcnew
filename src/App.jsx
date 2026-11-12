@@ -971,8 +971,18 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [scheduleEnabled,setScheduleEnabled]=useState(false);
   const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");
   const [checkoutSecret,setCheckoutSecret]=useState("");
+  const [deletionStep,setDeletionStep]=useState("idle");
+  const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");
+  const [deletionBusy,setDeletionBusy]=useState(false);
+  const [deletionMessage,setDeletionMessage]=useState("");
   const plan=user.plan||"free";
   const connected=(auth.currentUser?.providerData||[]).map(provider=>provider.providerId);
+  const deletionScheduled=user.deletion_scheduled_at;
+  const deletionRequested=user.deletion_requested_at;
+  const deletionDate=deletionScheduled?new Date(deletionScheduled):null;
+  const deletionDaysLeft=deletionDate?Math.max(0,Math.ceil((deletionDate-new Date())/(1000*60*60*24))):0;
+  const deletionActive=Boolean(deletionScheduled)&&deletionDaysLeft>0;
+  const deletionExpired=Boolean(deletionScheduled)&&deletionDaysLeft<=0;
   async function saveProfile(event){
     event.preventDefault();setSaving(true);setAccountMessage("");
     try{
@@ -1013,6 +1023,42 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
       setCheckoutSecret(checkout.clientSecret);
     }catch(error){setAccountMessage(error.message||"Checkout could not be opened.");}
   }
+  async function requestDeletion(event){
+    event.preventDefault();
+    setDeletionBusy(true);
+    setDeletionMessage("");
+    try{
+      const current=auth.currentUser;
+      const emailProvider=(current.providerData||[]).some(p=>p.providerId==="password");
+      if(emailProvider){
+        if(!deletionConfirmPassword)throw new Error("Enter your password to confirm your identity.");
+        const credential=EmailAuthProvider.credential(current.email,deletionConfirmPassword);
+        await reauthenticateWithCredential(current,credential);
+      }else{
+        await reauthenticateWithPopup(current,googleProvider);
+      }
+      await api("/api/profile",{method:"PATCH",body:{deletionAction:{action:"request"}}});
+      await onRefresh();
+      setDeletionStep("requested");
+      setDeletionConfirmPassword("");
+      setDeletionMessage("Your deletion request has been received. You have 15 days to cancel.");
+    }catch(error){
+      setDeletionMessage(error.message||"We could not verify your identity. Please try again.");
+    }finally{setDeletionBusy(false);}
+  }
+  async function cancelDeletion(){
+    setDeletionBusy(true);
+    setDeletionMessage("");
+    try{
+      await api("/api/profile",{method:"PATCH",body:{deletionAction:{action:"cancel"}}});
+      await onRefresh();
+      setDeletionStep("idle");
+      setDeletionConfirmPassword("");
+      setDeletionMessage("Your deletion request has been cancelled. Welcome back.");
+    }catch(error){
+      setDeletionMessage(error.message||"We could not cancel the deletion request.");
+    }finally{setDeletionBusy(false);}
+  }
   function toggleDay(day){
     setReminderSchedule(current=>{
       const currentDay=current.find(item=>Number(item.day)===day);
@@ -1043,7 +1089,40 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
         {interfaceOpen&&<div className="pc-interface-settings"><label>Appearance<select value={theme} onChange={e=>setTheme(e.target.value)}><option value="light">Light</option><option value="dark">Dark</option><option value="contrast">High contrast</option></select></label><label>Text size<select value={fontSize} onChange={e=>setFontSize(e.target.value)}><option value="normal">Standard</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><p>Changes are applied in this browser and saved with your profile.</p></div>}
       </section>
       <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">04 · SECURITY</span><h2>Change password</h2><div className="pc-profile-fields"><label>Current password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder={connected.includes("password")?"Current password":"Not needed for Google sign-in"}/></label><label>New password<input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} autoComplete="new-password"/></label></div><button type="button" className="pc-button outline" disabled={passwordBusy||!newPassword} onClick={changePassword}>{passwordBusy?"Updating…":"Update password"}</button><p className="pc-muted-small">At least 8 characters, including uppercase, lowercase and a number.</p></section>
-      <section className="pc-panel pc-profile-section pc-delete-note"><span className="pc-eyebrow">05 · ACCOUNT DELETION</span><h2>Leaving Piano Coach?</h2><p>Account deletion must verify your identity, cancel an active subscription and provide a 15-day period in which you can cancel the request. That deletion workflow is not connected yet, so this control is deliberately not presented as active.</p><button type="button" disabled className="pc-button danger" title="Account deletion workflow is not connected">Account deletion unavailable</button></section>
+      <section className="pc-panel pc-profile-section pc-delete-note">
+        <span className="pc-eyebrow">05 · ACCOUNT DELETION</span>
+        <h2>Leaving Piano Coach?</h2>
+        {deletionActive ? (
+          <>
+            <p className="pc-deletion-warning">Your account is scheduled for permanent deletion on <strong>{deletionDate.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</strong> — that's <strong>{deletionDaysLeft} day{deletionDaysLeft===1?"":"s"}</strong> from now.</p>
+            <p>During this 15-day grace period your account remains accessible. Your subscription has been automatically cancelled. After the grace period, all of your data will be permanently deleted.</p>
+            {deletionMessage&&<p className="pc-form-error" role="alert">{deletionMessage}</p>}
+            <button type="button" className="pc-button outline" disabled={deletionBusy} onClick={cancelDeletion}>{deletionBusy?"Cancelling…":"Cancel deletion request"}</button>
+          </>
+        ) : deletionExpired ? (
+          <>
+            <p className="pc-deletion-warning">The 15-day grace period has ended. Your account is being processed for permanent deletion and can no longer be cancelled from here.</p>
+            <p>If you believe this is an error, please contact support immediately.</p>
+          </>
+        ) : deletionStep==="idle" ? (
+          <>
+            <p>Requesting account deletion will verify your identity, cancel any active subscription, and start a <strong>15-day grace period</strong>. During that time you can cancel the request and keep your account. After 15 days, all of your data is permanently deleted.</p>
+            <button type="button" className="pc-button danger" onClick={()=>{setDeletionStep("confirm");setDeletionMessage("");}}>Request account deletion</button>
+          </>
+        ) : (
+          <>
+            <p className="pc-deletion-warning">To confirm your identity, please {connected.includes("password")?"enter your password":"re-authenticate with Google"} below. This is required before a deletion request can be submitted.</p>
+            <form onSubmit={requestDeletion} className="pc-deletion-form">
+              {connected.includes("password")&&<label className="field"><span>Your password</span><input type="password" autoComplete="current-password" value={deletionConfirmPassword} onChange={e=>setDeletionConfirmPassword(e.target.value)} required/></label>}
+              {deletionMessage&&<p className="pc-form-error" role="alert">{deletionMessage}</p>}
+              <div className="pc-deletion-buttons">
+                <button type="submit" className="pc-button danger" disabled={deletionBusy}>{deletionBusy?"Verifying…":"Confirm deletion request"}</button>
+                <button type="button" className="pc-button outline" disabled={deletionBusy} onClick={()=>{setDeletionStep("idle");setDeletionConfirmPassword("");setDeletionMessage("");}}>Back</button>
+              </div>
+            </form>
+          </>
+        )}
+      </section>
       <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">06 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?"£19.99 per month":plan==="basic"?"£9.99 per month":"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
         {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic · £9.99/month</option><option value="pro">Pro · £19.99/month</option></select></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
         <p className="pc-muted-small">Monthly plan changes and cancellation are managed securely through Stripe. Annual changes need to be handled at renewal.</p>
