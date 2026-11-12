@@ -880,3 +880,132 @@ button{color:inherit}
 @media (prefers-reduced-motion:reduce){
   .lp-orbit,.lp-piano-key,.lp-falling-notes span{animation:none}
 }
+
+
+/* ===== Phase 3: Recommendations, Grade Plan, Pro scale gating ===== */
+.pc-recommend-panel{margin:0 0 35px}
+.pc-recommend-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:15px 0 10px}
+.pc-recommend-card{display:flex;align-items:center;gap:12px;background:var(--pc-paper);border:1px solid var(--pc-line);border-radius:13px;padding:15px 16px;text-align:left;cursor:pointer;transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease}
+.pc-recommend-card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--pc-sage-dark) 24%,var(--pc-line));box-shadow:0 12px 34px rgba(50,42,27,.07)}
+.pc-recommend-icon{width:38px;height:38px;flex:0 0 38px;border-radius:11px;background:var(--pc-sage-pale);display:grid;place-items:center;font-family:"Playfair Display",serif;font-size:20px;color:var(--pc-sage-dark)}
+.pc-recommend-card>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.pc-recommend-card strong{font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc-recommend-card small{font-size:9px;color:var(--pc-muted)}
+.pc-recommend-score{font-variant-numeric:tabular-nums;font-size:17px;font-weight:700;color:var(--pc-sage-dark);font-family:"Playfair Display",serif}
+.pc-recommend-card>b{font-size:9px;color:var(--pc-sage-dark);white-space:nowrap}
+
+.pc-gradeplan-guide{margin-top:20px}
+.pc-gradeplan-guide h3{font-family:"Playfair Display",serif;font-size:22px;font-weight:600;margin:8px 0 10px}
+.pc-gradeplan-guide p{font-size:11px;line-height:1.7;color:var(--pc-muted);margin:0;max-width:680px}
+
+.pc-scale-pro-tag{font-size:8px;letter-spacing:1px;font-weight:700;padding:4px 8px;border-radius:20px;background:#f3ead9;color:#856b45;white-space:nowrap}
+.pc-scale-result.pro-locked{opacity:.62;cursor:not-allowed}
+.pc-scale-result.pro-locked:hover{background:transparent}
+
+/* ===== Phase 4: Tablet breakpoints, touch targets, mobile fixes ===== */
+
+/* iPad portrait — 768px to 1023px */
+@media(min-width:768px) and (max-width:1023px){
+  .pc-sidebar{width:200px;flex-basis:200px;padding-left:16px;padding-right:16px}
+  .pc-main{margin-left:200px}
+  .pc-content{padding-left:32px;padding-right:32px}
+  .pc-stat-row{grid-template-columns:repeat(2,1fr)}
+  .pc-learning-grid{grid-template-columns:1fr 1fr}
+  .pc-learning-card:last-child{grid-column:1/-1}
+  .pc-recommend-grid{grid-template-columns:1fr 1fr}
+  .pc-recommend-card:last-child{grid-column:1/-1}
+  .pc-practice-file-grid{grid-template-columns:repeat(2,1fr)}
+  .pc-library-groups{grid-template-columns:1fr 1fr}
+  .pc-detail-grid{grid-template-columns:1fr}
+  .pc-hero-art{width:30%;right:-3%}
+}
+
+/* iPad landscape and small desktop — 1024px to 1149px */
+@media(min-width:1024px) and (max-width:1149px){
+  .pc-sidebar{width:226px;flex-basis:226px}
+  .pc-main{margin-left:226px}
+  .pc-recommend-grid{grid-template-columns:repeat(3,1fr)}
+}
+
+/* Touch-friendly: minimum 44px hit targets on coarse pointers */
+@media(pointer:coarse){
+  .pc-nav button{min-height:44px;padding:13px 14px}
+  .pc-task-row{min-height:52px;padding:14px 15px}
+  .pc-button{min-height:44px;padding:14px 18px}
+  .pc-scale-result{min-height:48px;padding:14px 9px}
+  .pc-recommend-card{min-height:54px}
+  .pc-file-open,.pc-file-delete{min-width:44px;min-height:44px}
+  .pc-mode-grid button{min-height:88px;padding:18px}
+  .pc-section-row>button{min-height:40px;padding:10px 14px}
+  .pc-learning-card header button[aria-label]{min-width:44px;min-height:44px}
+  .pc-mistake-recording-target{min-height:48px;padding:6px 0}
+}
+
+/* Mobile bottom-nav safe area and keyboard-aware layout */
+@media(max-width:600px){
+  .pc-sidebar{
+    padding-bottom:max(7px,env(safe-area-inset-bottom));
+  }
+  .pc-main{
+    padding-bottom:max(66px,calc(66px + env(safe-area-inset-bottom)));
+  }
+  .pc-recommend-grid{grid-template-columns:1fr}
+  .pc-recommend-card{flex-wrap:wrap}
+  .pc-recommend-card>div{min-width:60%;flex:1 1 60%}
+  .pc-recommend-score{flex:0 0 auto}
+  .pc-recommend-card>b{flex:1 1 100%;text-align:right;margin-top:4px}
+  .pc-gradeplan-guide{padding:18px}
+  .pc-session-top-right{flex-wrap:wrap;gap:10px}
+  .pc-session-clock{font-size:14px}
+  .pc-scale-pro-tag{margin-left:4px}
+  .pc-feedback-written{padding:18px 16px}
+  .pc-feedback-score{width:74px;height:74px;flex-basis:74px}
+  .pc-feedback-score strong{font-size:22px}
+}
+
+/* Prevent horizontal overflow on all viewports */
+.pc-app,.pc-main,.pc-content,.pc-dashboard,.pc-practice-hub,.pc-feedback-page,.pc-profile-page{
+  max-width:100%;
+  overflow-x:hidden;
+}
+.pc-practice-file-grid,.pc-library-groups,.pc-scale-results,.pc-scale-filters{
+  min-width:0;
+}
+.pc-scale-result-copy strong,.pc-mistake-recording-target strong,.pc-file-info strong{
+  overflow-wrap:break-word;
+  word-break:break-word;
+}
+.pc-session-stage,.pc-practice-pdf,.pc-practice-pdf iframe{
+  max-width:100%;
+}
+.pc-musicxml-viewer,.pc-musicxml-canvas{
+  max-width:100%;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* Device capability warnings */
+.pc-device-warning{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px;border-radius:10px;
+  background:#f3ead9;border:1px solid #e2d3b8;
+  font-size:10px;color:#856b45;line-height:1.6;
+  margin:10px 0;
+}
+.pc-device-warning span:first-child{font-size:18px;flex:0 0 auto}
+
+/* Score notation readability on small screens */
+.pc-musicxml-viewer{
+  font-size:clamp(10px,2.5vw,14px);
+}
+.pc-musicxml-canvas svg{
+  max-width:100%;
+  height:auto;
+}
+
+/* Improved touch scrolling for modals on mobile */
+@media(max-width:600px){
+  .pc-modal{max-height:92dvh;-webkit-overflow-scrolling:touch}
+  .pc-scale-results{-webkit-overflow-scrolling:touch}
+  .pc-library-groups{-webkit-overflow-scrolling:touch}
+}

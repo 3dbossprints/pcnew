@@ -1,3 +1,5 @@
+import { ALL_SYLLABUS_ENTRIES } from "./syllabus-data.js";
+
 const majorKeys = [
   "C","G","D","A","E","B","F♯","C♯","F","B♭","E♭","A♭","D♭","G♭","C♭"
 ];
@@ -62,6 +64,51 @@ minorKeys.forEach(key=>families.push({
   addFamily(type,minorKeys,"Scales in intervals",{level:"Advanced"})
 );
 
+// Wire verified syllabus matches from the exam-board data.
+// Each family entry gets a syllabusMatches array of {examBoard, grade} pairs.
+function normaliseKey(value) {
+  return String(value||"").toLowerCase()
+    .replace(/♭/g,"b").replace(/flat/g,"b")
+    .replace(/♯/g,"#").replace(/sharp/g,"#");
+}
+function familyMatch(item, entry) {
+  const fam = normaliseKey(item.family);
+  const entryFam = normaliseKey(entry.family);
+  if (fam !== entryFam) {
+    if (fam === "naturalminor" && entryFam === "harmonicminor") return false;
+    if (fam === "harmonicminor" && entryFam === "naturalminor") return false;
+    if (fam === "majorscaleinthirds" && entryFam === "major" && entry.motion && entry.motion.toLowerCase().includes("third")) return true;
+    if (fam === "majorscaleinsixths" && entryFam === "major" && entry.motion && entry.motion.toLowerCase().includes("sixth")) return true;
+    if (fam === "minorscaleinthirds" && (entryFam === "harmonicminor" || entryFam === "melodicminor") && entry.motion && entry.motion.toLowerCase().includes("third")) return true;
+    if (fam === "minorscaleinsixths" && (entryFam === "harmonicminor" || entryFam === "melodicminor") && entry.motion && entry.motion.toLowerCase().includes("sixth")) return true;
+    return false;
+  }
+  // Check motion for contrary motion entries
+  const itemMotion = normaliseKey(item.motion || "");
+  const entryMotion = normaliseKey(entry.motion || "");
+  const itemIsContrary = item.group === "Contrary motion" || itemMotion.includes("contrary");
+  const entryIsContrary = entry.group === "Contrary motion" || entryMotion.includes("contrary");
+  if (itemIsContrary !== entryIsContrary) {
+    if (itemIsContrary && !entryIsContrary) return false;
+    if (!itemIsContrary && entryIsContrary) return false;
+  }
+  return true;
+}
+const normKey = value => String(value).toLowerCase().replace(/♭/g,"b").replace(/♯/g,"#");
+
+families.forEach(item => {
+  ALL_SYLLABUS_ENTRIES.forEach(entry => {
+    if (normKey(item.key) !== normKey(entry.key)) return;
+    if (!familyMatch(item, entry)) return;
+    item.syllabusMatches.push({
+      examBoard: entry.examBoard,
+      grade: entry.grade,
+      octaves: entry.octaves,
+      hands: entry.hands,
+    });
+  });
+});
+
 export const SCALE_LIBRARY = families;
 
 function normalise(value) {
@@ -86,9 +133,18 @@ export function searchScales(query, examBoard, grade) {
     return {...item,examMatch:exact,searchText:text};
   }).filter(item=>{
     if(!q)return true;
-    // Match all meaningful query terms independently so "C♭ minor" also finds
-    // catalogue titles such as "C♭ Natural minor".
     const terms=q.match(/[a-z0-9#]+/g)||[];
     return terms.every(term=>item.searchText.includes(term));
   }).sort((a,b)=>Number(b.examMatch)-Number(a.examMatch)||a.title.localeCompare(b.title));
+}
+
+export function scalesForGrade(examBoard, grade) {
+  const board=normalise(examBoard);
+  const gradeKey=String(grade||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  return SCALE_LIBRARY.filter(item =>
+    (Array.isArray(item.syllabusMatches)?item.syllabusMatches:[]).some(match =>
+      normalise(match.examBoard)===board &&
+      String(match.grade||"").toLowerCase().replace(/[^a-z0-9]/g,"")===gradeKey
+    )
+  );
 }

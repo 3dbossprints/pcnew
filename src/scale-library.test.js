@@ -26,8 +26,18 @@ test("scale catalogue identifiers are unique", () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test("unverified catalogue entries are not presented as exam-board matches", () => {
+test("verified syllabus matches are prioritised for the student's exam board and grade", () => {
   const results = searchScales("", "ABRSM", "Grade 1");
   assert.ok(results.length > 0);
+  const matched = results.filter(item => item.examMatch);
+  assert.ok(matched.length > 0, "ABRSM Grade 1 should have verified syllabus matches");
+  assert.ok(matched.every(item => item.syllabusMatches.some(m => m.examBoard === "ABRSM" && m.grade === "Grade 1")));
+  // Non-matching entries should not be flagged as exam matches
+  const unmatched = results.filter(item => !item.examMatch);
+  assert.ok(unmatched.length > 0, "there should also be non-matching general entries");
+});
+
+test("non-matching exam board does not produce false matches", () => {
+  const results = searchScales("", "Nonexistent Board", "Grade 99");
   assert.ok(results.every(item => item.examMatch === false));
 });

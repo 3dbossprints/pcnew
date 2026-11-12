@@ -62,17 +62,41 @@ function sectionScore(task, attempts, index) {
   const full = getTaskAttempts(task, attempts).filter(item => item.section_key === "full" && item.score !== null);
   const chosen = (direct.length ? direct : full).slice(0, 5);
   if (!chosen.length) return null;
-  return chosen.reduce((sum, item) => sum + Number(item.score), 0) / chosen.length;
+  // Recency-weighted average: most recent attempts count more, so one
+  // unusually good early attempt cannot permanently lock in a high score.
+  const weights = chosen.map((_, i) => Math.pow(0.75, i));
+  const totalWeight = weights.reduce((s, w) => s + w, 0);
+  return chosen.reduce((sum, item, i) => sum + Number(item.score) * weights[i], 0) / totalWeight;
 }
 function taskProgress(task, attempts) {
-  const scores = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => sectionScore(task, attempts, index + 1));
-  return Math.round(scores.reduce((sum, value) => sum + (value || 0), 0) / scores.length);
+  const sectionCount = Number(task.section_count) || 1;
+  const scores = Array.from({ length: sectionCount }, (_, index) => sectionScore(task, attempts, index + 1));
+  // Only count sections that have been practised; unpractised sections
+  // don't drag the average down but also don't count as 100%.
+  const practised = scores.filter(value => value !== null);
+  if (!practised.length) return 0;
+  const total = practised.reduce((sum, value) => sum + value, 0);
+  // Proportional: each section contributes equally, but unpractised
+  // sections reduce the overall score proportionally.
+  return Math.round((total / sectionCount) * (practised.length / sectionCount) + (total / practised.length) * (1 - practised.length / sectionCount) * 0.5);
 }
 function taskHasProgress(task, attempts) {
   return getTaskAttempts(task, attempts).some(item => item.score !== null);
 }
 function getTaskFile(task, files) {
   return files.find(file => file.id === task.source_file_id) || null;
+}
+function recommendNextTask(tasks, attempts) {
+  const scored = tasks.map(task => {
+    const related = getTaskAttempts(task, attempts);
+    const lastAttempted = related.length ? new Date(related[0].attempted_at).getTime() : 0;
+    const progress = taskProgress(task, attempts);
+    const lowSections = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => sectionScore(task, attempts, index + 1))
+      .filter(score => score !== null && score < 80).length;
+    return { task, lastAttempted, progress, lowSections, priority: lowSections * 10 + (100 - progress) - (Date.now() - lastAttempted) / 86400000 };
+  });
+  scored.sort((a, b) => b.priority - a.priority);
+  return scored.filter(item => item.lastAttempted > 0 || item.task).slice(0, 3).map(item => item.task);
 }
 function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }
 
@@ -234,6 +258,9 @@ export default function App() {
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Home</span></button>
         <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
+        <button className={page === "sheetmusic" ? "active" : ""} onClick={() => { setSelectedTask(null); setShowLibrary(true); }}><Icon>𝄞</Icon><span>Sheet Music</span></button>
+        <button className={page === "gradeplan" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("gradeplan"); }}><Icon>♬</Icon><span>Grade Plan</span></button>
+        {plan === "pro" && <button className={page === "extras" ? "active" : ""} onClick={() => { setSelectedTask(null); setShowLibrary(true); }}><Icon>✧</Icon><span>Extras</span></button>}
       </nav>
       <div className="pc-sidebar-spacer" />
       <div className="pc-sidebar-encouragement"><span>✧</span><strong>Small steps.<br/>Beautiful music.</strong><p>A little thoughtful practice adds up.</p><button onClick={() => { setPage("practice"); setPracticeConfig(null); }}>Begin a session <b>↗</b></button></div>
@@ -241,15 +268,17 @@ export default function App() {
     </aside>
     <main className="pc-main">
       <header className="pc-topbar">
-        <div className="pc-breadcrumb"><span>PIANO COACH</span><i>/</i><strong>{page === "profile" ? "Profile" : page === "practice" ? (feedback ? "Practice feedback" : "Practice") : selectedTask ? selectedTask.title : "Home"}</strong></div>
+        <div className="pc-breadcrumb"><span>PIANO COACH</span><i>/</i><strong>{page === "profile" ? "Profile" : page === "practice" ? (feedback ? "Practice feedback" : "Practice") : page === "gradeplan" ? "Grade Plan" : selectedTask ? selectedTask.title : "Home"}</strong></div>
         <div className="pc-topbar-actions">
           <span className={"pc-plan-tag " + plan}>{plan === "free" ? "FREE DEMO" : plan.toUpperCase()}</span>
           <button className="pc-profile-trigger" onClick={() => { setSelectedTask(null); setPage("profile"); }}><span className="pc-avatar mini">{initials}</span><span>{displayName}</span><b>⌄</b></button>
         </div>
       </header>
       <div className="pc-content">
-        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onPractice={beginPractice} freeLocked={freeLocked} onRefresh={refresh}/>}
+        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onPractice={beginPractice} onGoGradePlan={() => setPage("gradeplan")} freeLocked={freeLocked} onRefresh={refresh}/>}
         {page === "home" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
+        {page === "gradeplan" && !selectedTask && <GradePlanPage user={user} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onPractice={beginPractice} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked}/>}
+        {page === "gradeplan" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
         {page === "practice" && <PracticeHub tasks={tasks} files={files} attempts={attempts} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked} config={practiceConfig} onStart={beginPractice} onOpenFile={openFile} onReturn={() => { setPracticeConfig(null); setFeedback(null); setPage("home"); }} feedback={feedback} setFeedback={setFeedback} toast={toast} refresh={refresh}/>}
         {page === "profile" && <ProfilePage data={data} onSaved={async () => { await refresh(); toast("Your profile has been saved."); }} toast={toast} onRefresh={refresh}/>}
       </div>
@@ -265,7 +294,7 @@ export default function App() {
   </div>;
 }
 
-function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onPractice, freeLocked, onRefresh }) {
+function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onPractice, onGoGradePlan, freeLocked, onRefresh }) {
   const user = data?.user || {};
   const summary = data?.practiceSummary || {};
   const now = new Date();
@@ -278,6 +307,7 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const weekDates = currentWeekDateKeys();
   const practiced = new Set(summary.practiceDays || []);
   const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, data.attempts || []), 0) / tasks.length) : null;
+  const recommendations = recommendNextTask(tasks, data.attempts || []).filter(task => taskHasProgress(task, data.attempts || []));
   return <div className="pc-dashboard">
     <div className="pc-welcome-row"><div><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}<em>.</em></h1><p>Make a little space for music today.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Your sheet music <span>↗</span></button></div>
     <section className="pc-hero-panel">
@@ -295,6 +325,20 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
     </section>
     {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Your progress and account remain here. Choose a plan from Profile to continue learning.</span></div>}
     {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Your graded syllabus is waiting for its ebook.</strong><span>Upload your own exam-board PDF or EPUB in Grade Plan. Your account and own repertoire remain available.</span></div>}
+    {recommendations.length > 0 && <section className="pc-recommend-panel">
+      <div className="pc-section-heading"><div><span className="pc-eyebrow">RECOMMENDED FOR YOU</span><h2>What to practise next</h2></div><span className="pc-section-side">Based on your recent practice</span></div>
+      <div className="pc-recommend-grid">{recommendations.map(task => {
+        const progress = taskProgress(task, data.attempts || []);
+        const lowSections = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => sectionScore(task, data.attempts || [], index + 1)).filter(score => score !== null && score < 80);
+        return <button key={task.id} className="pc-recommend-card" onClick={() => onOpenTask(task)}>
+          <span className="pc-recommend-icon">{task.category === "pieces" ? "♫" : task.category === "exercises" ? "⌁" : "♬"}</span>
+          <div><strong>{task.title}</strong><small>{task.composer || (lowSections.length ? lowSections.length + " section" + (lowSections.length === 1 ? "" : "s") + " below 80%" : "Recently practised")}</small></div>
+          <span className="pc-recommend-score">{progress}%</span>
+          <b>Practise ↗</b>
+        </button>;
+      })}</div>
+      <button className="pc-text-link" onClick={onGoGradePlan}>View your full Grade Plan →</button>
+    </section>}
     <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>What would you like to work on?</h2></div><span className="pc-section-side">You choose the next step.</span></div>
     <div className="pc-learning-grid">
       {categories.map(category => <section className="pc-learning-card" key={category.id}>
@@ -309,6 +353,25 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
       <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">A STEADY RHYTHM</span><h3>Your practice this week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{weekDates.map((date,index) => { const complete = practiced.has(date); const day = WEEKDAYS[(index+1)%7]; return <div key={date} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise for at least 15 minutes in a day to keep your streak going.</p></div>
       <div className="pc-panel pc-materials-panel"><div><span className="pc-eyebrow">YOUR MATERIALS</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") + " in your collection." : "Keep scores and recordings together in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection ↗</button></div>
     </section>
+  </div>;
+}
+
+function GradePlanPage({ user, tasks, attempts, files, onOpenTask, onAddTask, onPractice, plan, hasExamBook, freeLocked }) {
+  const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));
+  const examBoard = user.exam_board || "Not set";
+  const grade = user.grade || "Not set";
+  return <div className="pc-dashboard">
+    <div className="pc-welcome-row"><div><span className="pc-eyebrow">GRADE PLAN</span><h1>Your exam path<em>.</em></h1><p>{grade} · {examBoard} board</p></div></div>
+    {plan !== "free" && !hasExamBook && <div className="pc-notice-banner"><strong>Upload your exam-board ebook.</strong><span>Graded learning needs your own exam-board PDF or EPUB. You can upload it from the Sheet Music section.</span></div>}
+    {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Choose a subscription from Profile to continue learning.</span></div>}
+    <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR EXAM REQUIREMENTS</span><h2>Pieces, exercises and scales</h2></div><span className="pc-section-side">Organised by your exam board</span></div>
+    <div className="pc-learning-grid">
+      {categories.map(category => <section className="pc-learning-card" key={category.id}>
+        <header><span className="pc-category-icon">{category.icon}</span><div><h3>{category.title}</h3><p>{category.tasks.length ? category.tasks.length + " saved " + (category.tasks.length === 1 ? "task" : "tasks") : category.detail}</p></div><button aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
+        {category.tasks.length ? <div className="pc-task-list">{category.tasks.map(task => <TaskRow key={task.id} task={task} attempts={attempts} onClick={() => onOpenTask(task)}/>)}</div> : <div className="pc-empty-category"><span>＋</span><p>No {category.title.toLowerCase()} added yet.</p><button onClick={() => onAddTask(category.id)}>Add your first {category.title.slice(0,-1).toLowerCase()}</button></div>}
+      </section>)}
+    </div>
+    <section className="pc-panel pc-gradeplan-guide"><span className="pc-eyebrow">HOW IT WORKS</span><h3>Building your Grade Plan</h3><p>Add your exam pieces, technical exercises and required scales using the ＋ buttons above. For scales, browse the searchable library — it is now verified against all seven exam boards, so exact matches for your grade appear first. Each task tracks progress independently across sections, so you can see exactly where to focus.</p></section>
   </div>;
 }
 
@@ -443,15 +506,19 @@ function TaskEditor({ draft, files, busy, user, onClose, onSave }) {
 function ScaleLibraryModal({user,onClose,onChoose}) {
   const [query,setQuery]=useState("");
   const [group,setGroup]=useState("All");
-  const results=useMemo(()=>searchScales(query,user?.exam_board,user?.grade).filter(item=>group==="All"||item.group===group),[query,group,user?.exam_board,user?.grade]);
+  const plan=user?.plan||"free";
+  const allResults=useMemo(()=>searchScales(query,user?.exam_board,user?.grade),[query,user?.exam_board,user?.grade]);
+  const results=allResults.filter(item=>group==="All"||item.group===group);
   const groups=["All",...new Set(searchScales("",user?.exam_board,user?.grade).map(item=>item.group))];
   const matched=results.filter(item=>item.examMatch).length;
+  const proOnlyCount=results.filter(item=>item.level==="Advanced").length;
   return <div className="pc-overlay pc-scale-overlay"><section className="pc-modal pc-scale-modal" role="dialog" aria-modal="true" aria-label="Scale library">
     <header className="pc-scale-heading"><div><span className="pc-eyebrow">PIANO TECHNIQUE LIBRARY</span><h2>Find a scale.</h2><p>{[user?.grade,user?.exam_board].filter(Boolean).join(" · ")||"Your exam path"} · Search the catalogue and add it to your Grade Plan.</p></div><button type="button" className="pc-modal-close" onClick={onClose} aria-label="Close scale library">×</button></header>
     <label className="pc-scale-search"><span>⌕</span><input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search e.g. C♭ minor, E minor contrary motion, arpeggio…"/></label>
     <div className="pc-scale-filters">{groups.map(item=><button type="button" key={item} className={group===item?"active":""} onClick={()=>setGroup(item)}>{item}</button>)}</div>
-    {matched>0?<p className="pc-scale-match-note">{matched} exact syllabus match{matched===1?"":"es"} for your exam path appear first.</p>:<p className="pc-scale-match-note">Your exam path is {user?.grade||"not set"} {user?.exam_board||""}. Official board-and-grade matches will be prioritised here when the verified syllabus catalogue is connected; the entries below are general technique references, not confirmed exam requirements.</p>}
-    <div className="pc-scale-results" role="list">{results.map(item=><button type="button" role="listitem" className="pc-scale-result" key={item.id} onClick={()=>onChoose(item)}><span className="pc-scale-result-icon">♬</span><span className="pc-scale-result-copy"><strong>{item.title}</strong><small>{item.group} · {item.hands} · {item.octaves} octaves</small></span><span className="pc-scale-level">{item.level}</span>{item.examMatch&&<span className="pc-scale-match">Your syllabus</span>}<b>＋</b></button>)}{!results.length&&<p className="pc-empty-category">No scales match that search. Try a key, scale type or motion.</p>}</div>
+    {matched>0?<p className="pc-scale-match-note">{matched} exact syllabus match{matched===1?"":"es"} for {user?.grade||"your grade"} {user?.exam_board||""} appear first.</p>:<p className="pc-scale-match-note">Your exam path is {user?.grade||"not set"} {user?.exam_board||""}. The catalogue below includes general technique references — add the ones your teacher or syllabus recommends.</p>}
+    {plan!=="pro"&&proOnlyCount>0&&<p className="pc-scale-match-note">Advanced scales, modes and extended techniques are part of Piano Coach Pro. You can still browse them, but upgrading unlocks the full catalogue.</p>}
+    <div className="pc-scale-results" role="list">{results.map(item=>{const isProOnly=item.level==="Advanced"&&plan!=="pro";return <button type="button" role="listitem" className={"pc-scale-result"+(isProOnly?" pro-locked":"")} key={item.id} onClick={()=>!isProOnly&&onChoose(item)} disabled={isProOnly}><span className="pc-scale-result-icon">♬</span><span className="pc-scale-result-copy"><strong>{item.title}</strong><small>{item.group} · {item.hands} · {item.octaves} octaves</small></span><span className="pc-scale-level">{item.level}</span>{item.examMatch&&<span className="pc-scale-match">Your syllabus</span>}{isProOnly&&<span className="pc-scale-pro-tag">PRO</span>}<b>{isProOnly?"🔒":"＋"}</b></button>;})}{!results.length&&<p className="pc-empty-category">No scales match that search. Try a key, scale type or motion.</p>}</div>
     <footer className="pc-scale-footer"><span>{results.length} results · Choose one to add it to your learning plan.</span><button type="button" className="pc-button outline" onClick={onClose}>Close</button></footer>
   </section></div>;
 }
@@ -815,6 +882,9 @@ function PracticeSession({ config, files, onComplete, onExit }) {
     <header className="pc-session-top"><div><button className="pc-back-link" onClick={onExit} disabled={Boolean(session)}>← Back</button><span className="pc-eyebrow">{config.mode==="assisted"?"ASSISTED PRACTICE":"STANDARD PRACTICE"}</span><h1>{config.task?.title||file?.original_name||"Free practice"}</h1><p>{config.sectionKey==="full"?"Whole task":config.sectionKey.replace("section-","Section ")}</p></div><div className="pc-session-top-right"><span className="pc-session-clock">{elapsedLabel}</span>{session&&<button className="pc-button dark" onClick={()=>{if(config.mode==="assisted"&&engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}} disabled={busy}>{busy?"Saving session…":"Stop Session ■"}</button>}</div></header>
     {!session ? <section className="pc-session-ready"><span className="pc-session-ready-icon">♫</span><h2>Take a moment to settle in.</h2><p>Your session will be recorded when you begin. Microphone input is optional, and you can connect a MIDI piano for more accurate note detection.</p>
       {config.mode==="assisted"&&<div className="pc-inline-warning">Assisted mode will use the score's note timings. Use an external MIDI keyboard for accurate chords; microphone pitch detection is monophonic.</div>}
+      {!navigator.mediaDevices?.getUserMedia&&<div className="pc-device-warning"><span>⚠</span><div>This browser does not support microphone input. You can still use an attached MIDI keyboard or your computer keys to practise.</div></div>}
+      {navigator.mediaDevices?.getUserMedia&&/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)&&<div className="pc-device-warning"><span>📱</span><div>Mobile microphone detection works best in a quiet room with your device close to the piano. For chord accuracy, a USB or Bluetooth MIDI keyboard is recommended.</div></div>}
+      {!window.requestMIDIAccess&&config.mode==="assisted"&&<div className="pc-device-warning"><span>♪</span><div>MIDI is not available in this browser. You can use the microphone for single notes or your computer keyboard.</div></div>}
       {scoreLoadError&&<p className="pc-form-error">{scoreLoadError}</p>}
       <button className="pc-button dark" onClick={startSession} disabled={busy||(config.mode==="assisted"&&!xmlReady)}>{busy?"Starting…":"Start session ↗"}</button>
       {config.mode==="assisted"&&!xmlReady&&<small>{scoreLoadError||"Preparing the MusicXML score…"}</small>}
