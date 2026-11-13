@@ -118,6 +118,7 @@ export default function App() {
   const [profileMessage, setProfileMessage] = useState("");
   const [practiceConfig, setPracticeConfig] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const checkoutConfirmationStarted = useRef(false);
 
   const refresh = useCallback(async () => {
     const [account, library] = await Promise.all([api("/api/me"), api("/api/uploads")]);
@@ -127,6 +128,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (params.get("checkout") === "complete" && sessionId && !checkoutConfirmationStarted.current) {
+      checkoutConfirmationStarted.current = true;
+      api("/api/billing/confirm", { method: "POST", body: { sessionId } })
+        .then(async result => {
+          if (result.confirmed) {
+            const cleanUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, "", cleanUrl);
+            const account = await api("/api/me");
+            setData(account);
+            setNotice("Your subscription has been confirmed and your account has been updated.");
+            setNoticeType("success");
+          } else if (result.pending) {
+            setNotice(result.message || "Stripe is still confirming your subscription. Your account will update shortly.");
+            setNoticeType("info");
+          }
+        })
+        .catch(error => {
+          setNotice(error.message || "We couldn't confirm your subscription yet. Please refresh your account shortly.");
+          setNoticeType("error");
+        });
+    }
     let active = true;
     async function load() {
       setLoading(true);
@@ -1040,6 +1064,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [interfaceOpen,setInterfaceOpen]=useState(false);
   const [scheduleEnabled,setScheduleEnabled]=useState(false);
   const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");
+  const [checkoutInterval,setCheckoutInterval]=useState("monthly");
   const [checkoutSecret,setCheckoutSecret]=useState("");
   const [deletionStep,setDeletionStep]=useState("idle");
   const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");
@@ -1088,8 +1113,8 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   async function startCheckout(){
     try{
       const selected=checkoutPlan;
-      await api("/api/profile",{method:"PATCH",body:{examBoard:user.exam_board,grade:user.grade,plan:selected,interval:"monthly",targetDate,bookSources:Array.isArray(user.book_sources)?user.book_sources:[],examBookSkipped:!user.exam_book_file_id}});
-      const checkout=await api("/api/billing/checkout",{method:"POST",body:{plan:selected,interval:"monthly"}});
+      await api("/api/profile",{method:"PATCH",body:{examBoard:user.exam_board,grade:user.grade,plan:selected,interval:checkoutInterval,targetDate,bookSources:Array.isArray(user.book_sources)?user.book_sources:[],examBookSkipped:!user.exam_book_file_id}});
+      const checkout=await api("/api/billing/checkout",{method:"POST",body:{plan:selected,interval:checkoutInterval}});
       setCheckoutSecret(checkout.clientSecret);
     }catch(error){setAccountMessage(error.message||"Checkout could not be opened.");}
   }
@@ -1193,9 +1218,9 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
           </>
         )}
       </section>
-      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">06 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?"£19.99 per month":plan==="basic"?"£9.99 per month":"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
-        {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic · £9.99/month</option><option value="pro">Pro · £19.99/month</option></select></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
-        <p className="pc-muted-small">Monthly plan changes and cancellation are managed securely through Stripe. Annual changes need to be handled at renewal.</p>
+      <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">06 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?(user.subscription_interval==="annual"?"Pro · billed annually":"£19.99 per month"):plan==="basic"?(user.subscription_interval==="annual"?"Basic · billed annually":"£9.99 per month"):"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
+        {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic</option><option value="pro">Pro</option></select></label><label>Billing interval<select value={checkoutInterval} onChange={e=>setCheckoutInterval(e.target.value)}><option value="monthly">Monthly</option><option value="annual">Annual</option></select></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
+        <p className="pc-muted-small">Plan and billing interval changes are managed securely through Stripe. Piano Coach updates your account when Stripe confirms the change.</p>
       </section>
       {accountMessage&&<p className="pc-form-error" role="alert">{accountMessage}</p>}
       <div className="pc-profile-save"><button className="pc-button dark" disabled={saving}>{saving?"Saving…":"Save profile and preferences"}</button></div>
