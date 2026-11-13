@@ -284,9 +284,6 @@ export default function App() {
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Home</span></button>
         <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
-        <button className={page === "sheetmusic" ? "active" : ""} onClick={() => { setSelectedTask(null); setShowLibrary(true); }}><Icon>𝄞</Icon><span>Sheet Music</span></button>
-        <button className={page === "gradeplan" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("gradeplan"); }}><Icon>♬</Icon><span>Grade Plan</span></button>
-        {plan === "pro" && <button className={page === "extras" ? "active" : ""} onClick={() => { setSelectedTask(null); setShowLibrary(true); }}><Icon>✧</Icon><span>Extras</span></button>}
       </nav>
       <div className="pc-sidebar-spacer" />
       <div className="pc-sidebar-encouragement"><span>✧</span><strong>Small steps.<br/>Beautiful music.</strong><p>A little thoughtful practice adds up.</p><button onClick={() => { setPage("practice"); setPracticeConfig(null); }}>Begin a session <b>↗</b></button></div>
@@ -294,17 +291,15 @@ export default function App() {
     </aside>
     <main className="pc-main">
       <header className="pc-topbar">
-        <div className="pc-breadcrumb"><span>PIANO COACH</span><i>/</i><strong>{page === "profile" ? "Profile" : page === "practice" ? (feedback ? "Practice feedback" : "Practice") : page === "gradeplan" ? "Grade Plan" : selectedTask ? selectedTask.title : "Home"}</strong></div>
+        <div className="pc-breadcrumb"><span>PIANO COACH</span><i>/</i><strong>{page === "profile" ? "Profile" : page === "practice" ? (feedback ? "Practice feedback" : "Practice") : selectedTask ? selectedTask.title : "Home"}</strong></div>
         <div className="pc-topbar-actions">
           <span className={"pc-plan-tag " + plan}>{plan === "free" ? "FREE DEMO" : plan.toUpperCase()}</span>
           <button className="pc-profile-trigger" onClick={() => { setSelectedTask(null); setPage("profile"); }}><span className="pc-avatar mini">{initials}</span><span>{displayName}</span><b>⌄</b></button>
         </div>
       </header>
       <div className="pc-content">
-        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onPractice={beginPractice} onGoGradePlan={() => setPage("gradeplan")} freeLocked={freeLocked} onRefresh={refresh}/>}
+        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onPractice={beginPractice} freeLocked={freeLocked} onRefresh={refresh}/>}
         {page === "home" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
-        {page === "gradeplan" && !selectedTask && <GradePlanPage user={user} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onPractice={beginPractice} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked}/>}
-        {page === "gradeplan" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
         {page === "practice" && <PracticeHub tasks={tasks} files={files} attempts={attempts} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked} config={practiceConfig} onStart={beginPractice} onOpenFile={openFile} onReturn={() => { setPracticeConfig(null); setFeedback(null); setPage("home"); }} feedback={feedback} setFeedback={setFeedback} toast={toast} refresh={refresh}/>}
         {page === "profile" && <ProfilePage data={data} onSaved={async () => { await refresh(); toast("Your profile has been saved."); }} toast={toast} onRefresh={refresh}/>}
       </div>
@@ -320,7 +315,7 @@ export default function App() {
   </div>;
 }
 
-function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onPractice, onGoGradePlan, freeLocked, onRefresh }) {
+function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onPractice, freeLocked, onRefresh }) {
   const user = data?.user || {};
   const summary = data?.practiceSummary || {};
   const now = new Date();
@@ -334,25 +329,26 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const practiced = new Set(summary.practiceDays || []);
   const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, data.attempts || []), 0) / tasks.length) : null;
   const recommendations = recommendNextTask(tasks, data.attempts || []).filter(task => taskHasProgress(task, data.attempts || []));
+  const totalTasks = tasks.length;
+  const practisedTasks = tasks.filter(task => taskHasProgress(task, data.attempts || [])).length;
   return <div className="pc-dashboard">
-    <div className="pc-welcome-row"><div><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}<em>.</em></h1><p>Make a little space for music today.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Your sheet music <span>↗</span></button></div>
-    <section className="pc-hero-panel">
-      <div className="pc-hero-copy"><span className="pc-eyebrow">YOUR MUSICAL JOURNEY</span><h2>{user.grade ? user.grade + " piano" : "Your piano journey"}<br/><i>{user.exam_board ? user.exam_board + " board" : "starts here"}.</i></h2>
-        <p>{user.target_date ? "Working towards " + formatDate(user.target_date) + ". Keep your practice steady and focused." : "A good practice session is more valuable than a perfect plan. Choose what you would like to work on."}</p>
-        <div className="pc-hero-actions"><button className="pc-button dark" onClick={() => onPractice(null)}>Start practising <span>↗</span></button><span>{tasks.length ? tasks.length + " learning " + (tasks.length === 1 ? "task" : "tasks") : "Build your learning plan"}</span></div>
+    <div className="pc-dash-header">
+      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{user.grade || user.exam_board ? [user.grade, user.exam_board].filter(Boolean).join(" · ") : "Welcome to your practice space."}</p></div>
+      <div className="pc-dash-actions">
+        <button className="pc-button primary" onClick={() => onPractice(null)}>Start practice <span>→</span></button>
+        <button className="pc-button outline" onClick={onOpenLibrary}>Sheet music</button>
       </div>
-      <div className="pc-hero-art" aria-hidden="true"><div className="pc-orbit orbit-one"/><div className="pc-orbit orbit-two"/><div className="pc-note note-one">♪</div><div className="pc-note note-two">♫</div><div className="pc-note note-three">♩</div><div className="pc-art-disc">𝄞</div></div>
-    </section>
+    </div>
     <section className="pc-stat-row">
       <StatCard label="THIS WEEK" value={formatDuration(summary.weeklySeconds)} note="Recorded practice" icon="◷"/>
       <StatCard label="SESSIONS" value={String(summary.sessionsThisWeek || 0)} note="This week" icon="♫"/>
-      <StatCard label="DAILY STREAK" value={String(summary.streakDays || 0) + " days"} note={remaining ? formatDuration(remaining) + " to today's 15-minute goal" : "15-minute goal reached today"} icon="✧"/>
-      <StatCard label={user.plan === "free" ? "DEMO REMAINING" : "LEARNING PROGRESS"} value={user.plan === "free" ? formatDuration(demoRemaining) : avg === null ? "—" : avg + "%"} note={user.plan === "free" ? "Lifetime allowance" : "Across your saved tasks"} icon="◎"/>
+      <StatCard label="DAILY STREAK" value={String(summary.streakDays || 0) + " days"} note={remaining ? formatDuration(remaining) + " to today's 15-min goal" : "15-min goal reached"} icon="✧"/>
+      <StatCard label={user.plan === "free" ? "DEMO LEFT" : "PROGRESS"} value={user.plan === "free" ? formatDuration(demoRemaining) : avg === null ? "—" : avg + "%"} note={user.plan === "free" ? "Lifetime allowance" : practisedTasks + "/" + totalTasks + " tasks started"} icon="◎"/>
     </section>
     {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Your progress and account remain here. Choose a plan from Profile to continue learning.</span></div>}
-    {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Your graded syllabus is waiting for its ebook.</strong><span>Upload your own exam-board PDF or EPUB in Grade Plan. Your account and own repertoire remain available.</span></div>}
+    {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Upload your exam-board ebook.</strong><span>Add your own exam-board PDF or EPUB to your sheet music collection to unlock graded learning.</span></div>}
     {recommendations.length > 0 && <section className="pc-recommend-panel">
-      <div className="pc-section-heading"><div><span className="pc-eyebrow">RECOMMENDED FOR YOU</span><h2>What to practise next</h2></div><span className="pc-section-side">Based on your recent practice</span></div>
+      <div className="pc-section-heading"><div><span className="pc-eyebrow">RECOMMENDED</span><h2>What to practise next</h2></div></div>
       <div className="pc-recommend-grid">{recommendations.map(task => {
         const progress = taskProgress(task, data.attempts || []);
         const lowSections = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => sectionScore(task, data.attempts || [], index + 1)).filter(score => score !== null && score < 80);
@@ -360,44 +356,22 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
           <span className="pc-recommend-icon">{task.category === "pieces" ? "♫" : task.category === "exercises" ? "⌁" : "♬"}</span>
           <div><strong>{task.title}</strong><small>{task.composer || (lowSections.length ? lowSections.length + " section" + (lowSections.length === 1 ? "" : "s") + " below 80%" : "Recently practised")}</small></div>
           <span className="pc-recommend-score">{progress}%</span>
-          <b>Practise ↗</b>
         </button>;
       })}</div>
-      <button className="pc-text-link" onClick={onGoGradePlan}>View your full Grade Plan →</button>
     </section>}
-    <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>What would you like to work on?</h2></div><span className="pc-section-side">You choose the next step.</span></div>
+    <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>Pieces, exercises & scales</h2></div></div>
     <div className="pc-learning-grid">
       {categories.map(category => <section className="pc-learning-card" key={category.id}>
-        <header><span className="pc-category-icon">{category.icon}</span><div><h3>{category.title}</h3><p>{category.tasks.length ? category.tasks.length + " saved " + (category.tasks.length === 1 ? "task" : "tasks") : category.detail}</p></div><button aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
+        <header><span className="pc-category-icon">{category.icon}</span><div><h3>{category.title}</h3><p>{category.tasks.length ? category.tasks.length + " saved" : category.detail}</p></div><button aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
         {category.tasks.length ? <div className="pc-task-list">{category.tasks.slice(0,4).map(task => <TaskRow key={task.id} task={task} attempts={attempts} onClick={() => onOpenTask(task)}/>)}
-          {category.tasks.length > 4 && <button className="pc-text-link" onClick={() => onOpenTask(category.tasks[4])}>View all {category.tasks.length} tasks →</button>}
+          {category.tasks.length > 4 && <button className="pc-text-link" onClick={() => onOpenTask(category.tasks[4])}>View all {category.tasks.length} →</button>}
         </div> : <div className="pc-empty-category"><span>＋</span><p>No {category.title.toLowerCase()} added yet.</p><button onClick={() => onAddTask(category.id)}>Add your first {category.title.slice(0,-1).toLowerCase()}</button></div>}
       </section>)}
     </div>
-    {user.plan === "pro" && <section className="pc-extras-strip"><div><span className="pc-eyebrow">PIANO COACH PRO</span><h3>Your music, beyond the syllabus.</h3><p>Bring in a piece you love and keep it separate from your graded learning.</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open your music collection ↗</button></section>}
     <section className="pc-lower-grid">
-      <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">A STEADY RHYTHM</span><h3>Your practice this week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{weekDates.map((date,index) => { const complete = practiced.has(date); const day = WEEKDAYS[(index+1)%7]; return <div key={date} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise for at least 15 minutes in a day to keep your streak going.</p></div>
-      <div className="pc-panel pc-materials-panel"><div><span className="pc-eyebrow">YOUR MATERIALS</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") + " in your collection." : "Keep scores and recordings together in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection ↗</button></div>
+      <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">PRACTICE RHYTHM</span><h3>This week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{weekDates.map((date,index) => { const complete = practiced.has(date); const day = WEEKDAYS[(index+1)%7]; return <div key={date} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise 15 minutes a day to keep your streak.</p></div>
+      <div className="pc-panel pc-materials-panel"><div><span className="pc-eyebrow">YOUR COLLECTION</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") : "Keep scores and recordings in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection →</button></div>
     </section>
-  </div>;
-}
-
-function GradePlanPage({ user, tasks, attempts, files, onOpenTask, onAddTask, onPractice, plan, hasExamBook, freeLocked }) {
-  const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));
-  const examBoard = user.exam_board || "Not set";
-  const grade = user.grade || "Not set";
-  return <div className="pc-dashboard">
-    <div className="pc-welcome-row"><div><span className="pc-eyebrow">GRADE PLAN</span><h1>Your exam path<em>.</em></h1><p>{grade} · {examBoard} board</p></div></div>
-    {plan !== "free" && !hasExamBook && <div className="pc-notice-banner"><strong>Upload your exam-board ebook.</strong><span>Graded learning needs your own exam-board PDF or EPUB. You can upload it from the Sheet Music section.</span></div>}
-    {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Choose a subscription from Profile to continue learning.</span></div>}
-    <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR EXAM REQUIREMENTS</span><h2>Pieces, exercises and scales</h2></div><span className="pc-section-side">Organised by your exam board</span></div>
-    <div className="pc-learning-grid">
-      {categories.map(category => <section className="pc-learning-card" key={category.id}>
-        <header><span className="pc-category-icon">{category.icon}</span><div><h3>{category.title}</h3><p>{category.tasks.length ? category.tasks.length + " saved " + (category.tasks.length === 1 ? "task" : "tasks") : category.detail}</p></div><button aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
-        {category.tasks.length ? <div className="pc-task-list">{category.tasks.map(task => <TaskRow key={task.id} task={task} attempts={attempts} onClick={() => onOpenTask(task)}/>)}</div> : <div className="pc-empty-category"><span>＋</span><p>No {category.title.toLowerCase()} added yet.</p><button onClick={() => onAddTask(category.id)}>Add your first {category.title.slice(0,-1).toLowerCase()}</button></div>}
-      </section>)}
-    </div>
-    <section className="pc-panel pc-gradeplan-guide"><span className="pc-eyebrow">HOW IT WORKS</span><h3>Building your Grade Plan</h3><p>Add your exam pieces, technical exercises and required scales using the ＋ buttons above. For scales, browse the searchable library — it is now verified against all seven exam boards, so exact matches for your grade appear first. Each task tracks progress independently across sections, so you can see exactly where to focus.</p></section>
   </div>;
 }
 
