@@ -67,6 +67,7 @@ export default async function handler(req,res) {
     if (["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type) && object.mode==="subscription" && object.subscription) {
       const subscription=await stripe().subscriptions.retrieve(typeof object.subscription==="string"?object.subscription:object.subscription.id);
       await persistSubscription(subscription,typeof object.customer==="string"?object.customer:object.customer?.id);
+      if (object.metadata?.discount_code_id) await db.query("UPDATE discount_codes SET redemption_count=redemption_count+1,updated_at=NOW() WHERE id=$1",[object.metadata.discount_code_id]);
     } else if (event.type==="checkout.session.async_payment_failed" && object.mode==="subscription") {
       if (object.client_reference_id) await db.query("UPDATE users SET plan='free',subscription_status='incomplete_expired',pending_plan=NULL,pending_interval=NULL,updated_at=NOW() WHERE firebase_uid=$1",[object.client_reference_id]);
     } else if (["customer.subscription.created","customer.subscription.updated","customer.subscription.deleted"].includes(event.type)) {

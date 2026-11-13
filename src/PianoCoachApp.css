@@ -90,6 +90,18 @@ button{color:inherit}
 .pc-stat-card b{font-family:"Playfair Display",serif;font-size:27px;font-weight:600}
 .pc-stat-card small{font-size:9px;color:var(--pc-muted);line-height:1.4}
 .pc-stat-card>i{font-style:normal;font-family:"Playfair Display",serif;font-size:22px;color:var(--pc-sage-dark);width:32px;height:32px;background:var(--pc-sage-pale);border-radius:10px;display:grid;place-items:center}
+.pc-dashboard-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:20px 0 34px;padding:15px 0;border-top:1px solid var(--pc-line);border-bottom:1px solid var(--pc-line)}
+.pc-dashboard-summary-item{display:flex;flex-direction:column;gap:5px;padding:0 20px;border-right:1px solid var(--pc-line);min-width:0}
+.pc-dashboard-summary-item:first-child{padding-left:0}
+.pc-dashboard-summary-item:last-child{border-right:0}
+.pc-dashboard-summary-item>span,.pc-next-task small{font-size:9px;font-weight:700;letter-spacing:1.25px;color:var(--pc-muted)}
+.pc-dashboard-summary-item>strong{font-family:"Playfair Display",serif;font-size:25px;font-weight:600;line-height:1.15;color:var(--pc-ink)}
+.pc-dashboard-summary-item>strong.pc-dashboard-date{font-size:19px}
+.pc-dashboard-summary-item>small{font-size:10px;color:var(--pc-muted);line-height:1.4}
+.pc-next-task{width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;margin:-10px 0 30px;padding:14px 17px;text-align:left;border:1px solid var(--pc-line);border-radius:11px;background:var(--pc-paper);cursor:pointer}
+.pc-next-task>span:first-child{display:grid;gap:5px}
+.pc-next-task strong{font-family:"Playfair Display",serif;font-size:17px;font-weight:600;color:var(--pc-ink)}
+.pc-next-task-action{font-size:11px;font-weight:700;color:var(--pc-sage-dark);white-space:nowrap}
 .pc-notice-banner{display:flex;flex-direction:column;gap:5px;padding:15px 18px;border:1px solid #ead4b8;background:#fbf2e3;border-radius:10px;margin:-20px 0 30px;color:#614d30}
 .pc-notice-banner strong{font-size:12px}
 .pc-notice-banner span{font-size:11px;line-height:1.5}
