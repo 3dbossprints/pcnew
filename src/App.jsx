@@ -130,9 +130,11 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session_id");
-    if (params.get("checkout") === "complete" && sessionId && !checkoutConfirmationStarted.current) {
+    const checkoutReturned = params.get("checkout") === "complete" && Boolean(sessionId);
+    const portalReturned = params.get("billing") === "returned";
+    if ((checkoutReturned || portalReturned) && !checkoutConfirmationStarted.current) {
       checkoutConfirmationStarted.current = true;
-      api("/api/billing/confirm", { method: "POST", body: { sessionId } })
+      api("/api/billing/confirm", { method: "POST", body: checkoutReturned ? { sessionId } : {} })
         .then(async result => {
           if (result.confirmed) {
             const cleanUrl = window.location.pathname + window.location.hash;
