@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { auth } from "./lib/firebase.js";
 import "./AdminDashboard.css";
 
-async function adminApi(path) {
+async function adminApi(path, options = {}) {
   const user = auth?.currentUser;
   if (!user) throw new Error("Your session has expired. Please sign in again.");
   const token = await user.getIdToken();
-  const response = await fetch(path, { headers: { Authorization: "Bearer " + token } });
+  const response = await fetch(path, {
+    method: options.method || "GET",
+    headers: { Authorization: "Bearer " + token, ...(options.body ? { "Content-Type": "application/json" } : {}) },
+    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+  });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || "Admin request failed.");
   return body;
@@ -27,29 +31,64 @@ function formatDate(value) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
+function formatDiscount(item) {
+  return item.discount_type === "percent" ? Number(item.discount_value) + "%" : "£" + Number(item.discount_value).toFixed(2);
+}
 
 export default function AdminDashboard({ onExit }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("overview");
+  const [search, setSearch] = useState("");
+  const [savingDiscount, setSavingDiscount] = useState(false);
+  const [message, setMessage] = useState("");
+  const [form, setForm] = useState({
+    code: "", discountType: "percent", value: "10", duration: "once",
+    durationInMonths: "3", allowedEmail: "", maxRedemptions: "", expiresAt: "",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    try {
-      setData(await adminApi("/api/admin"));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    try { setData(await adminApi("/api/billing/admin")); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><div className="pc-loading-copy">Loading admin dashboard</div><div className="pc-loading-track"><i /></div></div>;
-  if (error) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><h1>Admin access required</h1><p>{error}</p><button className="pc-button primary" onClick={onExit}>Back to app</button></div>;
+  const filteredUsers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return (data?.recentUsers || []).filter(user => !query || String(user.email || "").toLowerCase().includes(query) || String(user.display_name || "").toLowerCase().includes(query));
+  }, [data?.recentUsers, search]);
+
+  async function createDiscount(event) {
+    event.preventDefault();
+    setSavingDiscount(true);
+    setMessage("");
+    try {
+      await adminApi("/api/billing/admin-discounts", { method: "POST", body: form });
+      setMessage("Discount code created in Stripe and saved.");
+      setForm(current => ({ ...current, code: "", allowedEmail: "", maxRedemptions: "", expiresAt: "" }));
+      await load();
+      setTab("discounts");
+    } catch (err) { setMessage(err.message || "The discount code could not be created."); }
+    finally { setSavingDiscount(false); }
+  }
+
+  async function deactivateDiscount(item) {
+    if (!window.confirm("Deactivate " + item.code + "? It will no longer be accepted at checkout.")) return;
+    setMessage("");
+    try {
+      await adminApi("/api/billing/admin-discount-deactivate", { method: "POST", body: { id: item.id } });
+      setMessage(item.code + " has been deactivated.");
+      await load();
+    } catch (err) { setMessage(err.message || "The discount code could not be deactivated."); }
+  }
+
+  if (loading && !data) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><div className="pc-loading-copy">Loading admin dashboard</div><div className="pc-loading-track"><i /></div></div>;
+  if (error && !data) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><h1>Admin access required</h1><p>{error}</p><button className="pc-button primary" onClick={onExit}>Back to app</button></div>;
 
   const stats = data?.stats || {};
   const users = stats.users || {};
@@ -58,83 +97,91 @@ export default function AdminDashboard({ onExit }) {
   const tasks = stats.tasks || {};
   const planBreakdown = stats.planBreakdown || [];
   const recentUsers = data?.recentUsers || [];
+  const discounts = data?.discountCodes || [];
 
   return <div className="pc-admin">
     <header className="pc-admin-header">
-      <div>
-        <span className="pc-eyebrow">ADMIN</span>
-        <h1>Piano Coach overview</h1>
-        <p>Live figures from the database. Updated each time you open this page.</p>
-      </div>
-      <div className="pc-admin-header-actions">
-        <button className="pc-button outline" onClick={load}>Refresh</button>
-        <button className="pc-button dark" onClick={onExit}>Back to app</button>
-      </div>
+      <div><span className="pc-eyebrow">PIANO COACH · ADMIN</span><h1>Admin dashboard</h1><p>Manage your service and keep an eye on how students are doing.</p></div>
+      <div className="pc-admin-header-actions"><button className="pc-button outline" onClick={load} disabled={loading}>Refresh</button><button className="pc-button dark" onClick={onExit}>Back to app</button></div>
     </header>
 
     <nav className="pc-admin-tabs" aria-label="Admin sections">
       <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>Overview</button>
       <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>Users</button>
+      <button className={tab === "discounts" ? "active" : ""} onClick={() => setTab("discounts")}>Discount codes</button>
     </nav>
+    {message && <p className="pc-admin-message" role="status">{message}</p>}
+    {error && data && <p className="pc-admin-message error" role="alert">{error}</p>}
 
     {tab === "overview" && <div>
       <section className="pc-admin-stat-grid">
         <div className="pc-admin-stat-card"><span>TOTAL USERS</span><b>{users.total || 0}</b><small>{users.new_this_week || 0} joined this week</small></div>
-        <div className="pc-admin-stat-card"><span>PRACTICE SESSIONS</span><b>{sessions.total_sessions || 0}</b><small>{sessions.sessions_this_week || 0} this week</small></div>
-        <div className="pc-admin-stat-card"><span>PRACTICE TIME</span><b>{formatDuration(sessions.total_seconds)}</b><small>Lifetime total</small></div>
-        <div className="pc-admin-stat-card"><span>AVERAGE SCORE</span><b>{Math.round(Number(sessions.avg_score) || 0)}%</b><small>Across scored sessions</small></div>
+        <div className="pc-admin-stat-card"><span>PAID SUBSCRIPTIONS</span><b>{Number(users.basic || 0) + Number(users.pro || 0)}</b><small>{users.basic || 0} Basic · {users.pro || 0} Pro</small></div>
+        <div className="pc-admin-stat-card"><span>PENDING DELETIONS</span><b>{users.pending_deletion || 0}</b><small>Within the 15-day grace period</small></div>
         <div className="pc-admin-stat-card"><span>FILES STORED</span><b>{files.total_files || 0}</b><small>{formatBytes(files.total_bytes)}</small></div>
-        <div className="pc-admin-stat-card"><span>LEARNING TASKS</span><b>{tasks.total_tasks || 0}</b><small>Across all Grade Plans</small></div>
       </section>
-
       <div className="pc-admin-grid">
-        <section className="pc-panel">
-          <div className="pc-panel-heading"><div><span className="pc-eyebrow">SUBSCRIPTIONS</span><h3>Plan breakdown</h3></div></div>
-          <div className="pc-admin-plans">
-            {(planBreakdown.length ? planBreakdown : [
-              { plan: "free", count: users.free || 0, practice_seconds: 0 },
-              { plan: "basic", count: users.basic || 0, practice_seconds: 0 },
-              { plan: "pro", count: users.pro || 0, practice_seconds: 0 },
-            ]).map(row => (
-              <div className="pc-admin-plan-row" key={row.plan}>
-                <span className={"pc-admin-plan-tag " + row.plan}>{String(row.plan).toUpperCase()}</span>
-                <strong>{row.count} {Number(row.count) === 1 ? "user" : "users"}</strong>
-                <small>{formatDuration(row.practice_seconds)} practised</small>
-              </div>
-            ))}
-          </div>
+        <section className="pc-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">SUBSCRIPTIONS</span><h3>Plan breakdown</h3></div></div>
+          <div className="pc-admin-plans">{["free","basic","pro"].map(plan => {
+            const row = planBreakdown.find(item => item.plan === plan) || { count: users[plan] || 0, practice_seconds: 0 };
+            return <div className="pc-admin-plan-row" key={plan}><span className={"pc-admin-plan-tag " + plan}>{plan.toUpperCase()}</span><strong>{row.count || 0} users</strong><small>{formatDuration(row.practice_seconds)} practised</small></div>;
+          })}</div>
         </section>
-
-        <section className="pc-panel">
-          <div className="pc-panel-heading"><div><span className="pc-eyebrow">STORAGE</span><h3>Files</h3></div></div>
-          <div className="pc-admin-files">
-            <div className="pc-admin-file-row"><span>Sheet music</span><b>{files.sheet_files || 0}</b></div>
-            <div className="pc-admin-file-row"><span>Audio recordings</span><b>{files.audio_files || 0}</b></div>
-            <div className="pc-admin-file-row"><span>Total storage</span><b>{formatBytes(files.total_bytes)}</b></div>
-          </div>
+        <section className="pc-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">ACTIVITY</span><h3>Practice & storage</h3></div></div>
+          <div className="pc-admin-files"><div className="pc-admin-file-row"><span>Completed sessions</span><b>{sessions.total_sessions || 0}</b></div><div className="pc-admin-file-row"><span>Total practice time</span><b>{formatDuration(sessions.total_seconds)}</b></div><div className="pc-admin-file-row"><span>Average score</span><b>{Math.round(Number(sessions.avg_score) || 0)}%</b></div><div className="pc-admin-file-row"><span>Sheet music / audio</span><b>{files.sheet_files || 0} / {files.audio_files || 0}</b></div><div className="pc-admin-file-row"><span>Learning tasks</span><b>{tasks.total_tasks || 0}</b></div></div>
         </section>
       </div>
-
-      {users.pending_deletion > 0 && <div className="pc-admin-alert">
-        <strong>{users.pending_deletion} account{users.pending_deletion === 1 ? "" : "s"} pending deletion</strong>
-        <span>These are permanently removed after their 15-day grace period ends.</span>
-      </div>}
+      <div className="pc-admin-grid">
+        <section className="pc-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">ACCESS</span><h3>Administrators</h3></div></div>
+          {(data?.admins || []).map(admin => <div className="pc-admin-file-row" key={admin.email}><span>{admin.email}</span><b>{admin.active ? admin.role : "Disabled"}</b></div>)}
+        </section>
+        <section className="pc-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">ACCOUNT REQUESTS</span><h3>Pending deletions</h3></div></div>
+          {(data?.pendingDeletions || []).length ? data.pendingDeletions.map(item => <div className="pc-admin-file-row" key={item.email}><span><strong>{item.email}</strong><small className="pc-admin-subline">Due {formatDate(item.deletion_scheduled_at)}</small></span><b>Pending</b></div>) : <p className="pc-admin-empty">No accounts are waiting for deletion.</p>}
+        </section>
+      </div>
+      <section className="pc-panel pc-admin-audit"><div className="pc-panel-heading"><div><span className="pc-eyebrow">ADMIN HISTORY</span><h3>Recent actions</h3></div></div>
+        {(data?.auditLog || []).length ? data.auditLog.map((item,index) => <div className="pc-admin-file-row" key={item.entity_id + item.action + index}><span><strong>{item.action.replaceAll("."," ")}</strong><small className="pc-admin-subline">{item.admin_email} · {item.entity_id || item.entity_type}</small></span><small>{formatDate(item.created_at)}</small></div>) : <p className="pc-admin-empty">Admin actions will appear here.</p>}
+      </section>
     </div>}
 
     {tab === "users" && <section className="pc-panel">
-      <div className="pc-panel-heading"><div><span className="pc-eyebrow">RECENT SIGN-UPS</span><h3>Latest 50 accounts</h3></div></div>
+      <div className="pc-panel-heading"><div><span className="pc-eyebrow">STUDENT ACCOUNTS</span><h3>Recent users</h3></div><span>{filteredUsers.length} shown</span></div>
+      <input className="pc-admin-search" type="search" placeholder="Search by name or email" value={search} onChange={event => setSearch(event.target.value)}/>
       <div className="pc-admin-user-table">
-        <div className="pc-admin-user-head"><span>Email</span><span>Plan</span><span>Joined</span><span>Sessions</span><span>Practice</span></div>
-        {recentUsers.map((u, i) => (
-          <div className="pc-admin-user-row" key={u.email + i}>
-            <span className="pc-admin-user-email">{u.email}</span>
-            <span><span className={"pc-admin-plan-tag small " + u.plan}>{u.plan}</span></span>
-            <span>{formatDate(u.created_at)}</span>
-            <span>{u.session_count || 0}</span>
-            <span>{formatDuration(u.practice_seconds)}</span>
-          </div>
-        ))}
+        <div className="pc-admin-user-head"><span>Student</span><span>Plan</span><span>Status</span><span>Joined</span><span>Sessions</span><span>Practice</span></div>
+        {filteredUsers.map((user,index) => <div className="pc-admin-user-row" key={user.email + index}>
+          <span className="pc-admin-user-email"><strong>{user.display_name || "Student"}</strong><small className="pc-admin-subline">{user.email}</small></span>
+          <span><span className={"pc-admin-plan-tag small " + user.plan}>{user.plan}</span></span>
+          <span>{user.subscription_status || "free"}</span><span>{formatDate(user.created_at)}</span><span>{user.session_count || 0}</span><span>{formatDuration(user.practice_seconds)}</span>
+        </div>)}
+        {!filteredUsers.length && <p className="pc-admin-empty">No matching users found.</p>}
       </div>
     </section>}
+
+    {tab === "discounts" && <div className="pc-admin-discounts">
+      <section className="pc-panel">
+        <div className="pc-panel-heading"><div><span className="pc-eyebrow">STRIPE PROMOTION</span><h3>Create a discount code</h3></div></div>
+        <p className="pc-admin-help">Create a real Stripe discount. Leave the email blank to allow anyone to use it.</p>
+        <form className="pc-admin-discount-form" onSubmit={createDiscount}>
+          <label>Code<input value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})} placeholder="WELCOME20" minLength={4} maxLength={24} required/></label>
+          <label>Discount type<select value={form.discountType} onChange={e=>setForm({...form,discountType:e.target.value})}><option value="percent">Percentage</option><option value="amount">Fixed amount (GBP)</option></select></label>
+          <label>{form.discountType==="percent"?"Percentage off":"Amount off (£)"}<input type="number" min="0.01" max={form.discountType==="percent"?"100":"9999.99"} step="0.01" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} required/></label>
+          <label>Duration<select value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})}><option value="once">First payment only</option><option value="repeating">Repeat for a set period</option><option value="forever">For every renewal</option></select></label>
+          {form.duration==="repeating" && <label>Months<input type="number" min="1" max="12" step="1" value={form.durationInMonths} onChange={e=>setForm({...form,durationInMonths:e.target.value})} required/></label>}
+          <label>Allowed email (optional)<input type="email" value={form.allowedEmail} onChange={e=>setForm({...form,allowedEmail:e.target.value})} placeholder="Leave blank for everyone"/></label>
+          <label>Maximum uses (optional)<input type="number" min="1" step="1" value={form.maxRedemptions} onChange={e=>setForm({...form,maxRedemptions:e.target.value})} placeholder="Unlimited"/></label>
+          <label>Expiry date (optional)<input type="date" min={new Date().toISOString().slice(0,10)} value={form.expiresAt} onChange={e=>setForm({...form,expiresAt:e.target.value})}/></label>
+          <div className="pc-admin-form-actions"><button className="pc-button dark" disabled={savingDiscount}>{savingDiscount?"Creating…":"Create discount code"}</button></div>
+        </form>
+      </section>
+      <section className="pc-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">PROMOTION CODES</span><h3>Existing codes</h3></div><span>{discounts.length} total</span></div>
+        <div className="pc-admin-discount-list">{discounts.map(item=><div className="pc-admin-discount-row" key={item.id}>
+          <div><strong>{item.code}</strong><small>{formatDiscount(item)} off · {item.allowed_email || "Everyone"}</small></div>
+          <div><small>{item.duration==="repeating"?item.duration_in_months+" months":item.duration==="forever"?"Every renewal":"First payment"}</small><small>{item.redemption_count || 0}{item.max_redemptions?" / "+item.max_redemptions:""} used</small></div>
+          <div><span className={"pc-admin-status "+(item.active?"active":"inactive")}>{item.active?"Active":"Inactive"}</span>{item.active&&<button className="pc-admin-deactivate" onClick={()=>deactivateDiscount(item)}>Deactivate</button>}</div>
+        </div>)}
+        {!discounts.length && <p className="pc-admin-empty">No discount codes yet. Create your first code above.</p>}</div>
+      </section>
+    </div>}
   </div>;
 }
