@@ -42,3 +42,34 @@
   .pc-admin-stat-card{animation:none;transition:none}
   .pc-admin-stat-card:hover{transform:none}
 }
+
+.pc-admin-message{margin:0 0 18px;padding:11px 14px;border-radius:10px;background:var(--pc-sage-pale);color:var(--pc-sage-dark);font-size:13px}
+.pc-admin-message.error{background:#fbf0e6;color:#79532f}
+.pc-admin-search{width:min(100%,420px);margin:16px 0 6px;padding:11px 13px;border:1px solid var(--pc-line);border-radius:9px;background:var(--pc-paper);color:var(--pc-ink);font:inherit;font-size:13px;box-sizing:border-box}
+.pc-admin-subline{display:block;margin-top:4px;color:var(--pc-muted);font-size:11px;font-weight:400}
+.pc-admin-empty{margin:18px 0 4px;color:var(--pc-muted);font-size:13px}
+.pc-admin-help{margin:8px 0 18px;color:var(--pc-muted);font-size:13px}
+.pc-admin-discounts{display:grid;gap:16px}
+.pc-admin-discount-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.pc-admin-discount-form label{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--pc-ink)}
+.pc-admin-discount-form input,.pc-admin-discount-form select{width:100%;min-width:0;box-sizing:border-box;padding:10px 11px;border:1px solid var(--pc-line);border-radius:8px;background:var(--pc-paper);color:var(--pc-ink);font:inherit;font-size:13px}
+.pc-admin-form-actions{grid-column:1/-1;display:flex;justify-content:flex-end;margin-top:4px}
+.pc-admin-discount-list{margin-top:12px}
+.pc-admin-discount-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(130px,1fr) auto;gap:16px;align-items:center;padding:14px 0;border-top:1px solid var(--pc-line)}
+.pc-admin-discount-row>div{display:grid;gap:4px;min-width:0}
+.pc-admin-discount-row strong{font-size:14px;letter-spacing:.4px}
+.pc-admin-discount-row small{font-size:11px;color:var(--pc-muted);overflow-wrap:anywhere}
+.pc-admin-status{font-size:11px;font-weight:700}
+.pc-admin-status.active{color:var(--pc-sage-dark)}
+.pc-admin-status.inactive{color:var(--pc-muted)}
+.pc-admin-deactivate{justify-self:start;padding:0;border:0;background:none;color:#9a5b3c;font-size:11px;font-weight:700;cursor:pointer}
+.pc-admin-user-head,.pc-admin-user-row{grid-template-columns:minmax(180px,2fr) 75px 95px 95px 70px 90px;min-width:700px}
+.pc-admin-audit{margin-top:16px}
+@media(max-width:640px){
+  .pc-admin{padding:22px 16px}
+  .pc-admin-discount-form{grid-template-columns:1fr}
+  .pc-admin-form-actions{grid-column:auto}
+  .pc-admin-discount-row{grid-template-columns:1fr 1fr;gap:10px}
+  .pc-admin-discount-row>div:last-child{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between}
+  .pc-admin-user-head,.pc-admin-user-row{min-width:720px}
+}
