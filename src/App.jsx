@@ -298,7 +298,7 @@ export default function App() {
         </div>
       </header>
       <div className="pc-content">
-        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onPractice={beginPractice} freeLocked={freeLocked} onRefresh={refresh}/>}
+        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onOpenFile={openFile} onPractice={beginPractice} freeLocked={freeLocked} onRefresh={refresh}/>}
         {page === "home" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
         {page === "practice" && <PracticeHub tasks={tasks} files={files} attempts={attempts} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked} config={practiceConfig} onStart={beginPractice} onOpenFile={openFile} onReturn={() => { setPracticeConfig(null); setFeedback(null); setPage("home"); }} feedback={feedback} setFeedback={setFeedback} toast={toast} refresh={refresh}/>}
         {page === "profile" && <ProfilePage data={data} onSaved={async () => { await refresh(); toast("Your profile has been saved."); }} toast={toast} onRefresh={refresh}/>}
@@ -315,7 +315,7 @@ export default function App() {
   </div>;
 }
 
-function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onPractice, freeLocked, onRefresh }) {
+function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onOpenFile, onPractice, freeLocked, onRefresh }) {
   const user = data?.user || {};
   const summary = data?.practiceSummary || {};
   const now = new Date();
@@ -331,6 +331,7 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const recommendations = recommendNextTask(tasks, data.attempts || []).filter(task => taskHasProgress(task, data.attempts || []));
   const totalTasks = tasks.length;
   const practisedTasks = tasks.filter(task => taskHasProgress(task, data.attempts || [])).length;
+  const sheetMusicFiles = files.filter(file => file.kind === "sheet" && file.metadata?.purpose !== "exam_book");
   return <div className="pc-dashboard">
     <div className="pc-dash-header">
       <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{user.grade || user.exam_board ? [user.grade, user.exam_board].filter(Boolean).join(" · ") : "Welcome to your practice space."}</p></div>
@@ -370,7 +371,9 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
     </div>
     <section className="pc-lower-grid">
       <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">PRACTICE RHYTHM</span><h3>This week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{weekDates.map((date,index) => { const complete = practiced.has(date); const day = WEEKDAYS[(index+1)%7]; return <div key={date} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise 15 minutes a day to keep your streak.</p></div>
-      <div className="pc-panel pc-materials-panel"><div><span className="pc-eyebrow">YOUR COLLECTION</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") : "Keep scores and recordings in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection →</button></div>
+      <div className="pc-panel pc-materials-panel"><div className="pc-materials-head"><div><span className="pc-eyebrow">YOUR COLLECTION</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") : "Keep scores and recordings in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection →</button></div>
+        {sheetMusicFiles.length > 0 && <div className="pc-materials-recent">{sheetMusicFiles.slice(0,3).map(file=><button key={file.id} className="pc-materials-file" onClick={()=>onOpenFile(file)}><span className="pc-file-icon">{isMusicXml(file)?"♫":isPdf(file)?"▤":isEpub(file)?"▤":"♪"}</span><span className="pc-materials-file-info"><strong>{file.original_name}</strong><small>{isMusicXml(file)?"MusicXML":isPdf(file)?"PDF":isEpub(file)?"EPUB":file.kind==="audio"?"Audio":"Score"}</small></span><b>↗</b></button>)}</div>}
+      </div>
     </section>
   </div>;
 }
@@ -528,12 +531,18 @@ function LibraryModal({ files, busy, onClose, onOpen, onUpload, onRefresh, toast
   const [category,setCategory]=useState("pieces");
   const [purpose,setPurpose]=useState("library");
   const [error,setError]=useState("");
+  const [search,setSearch]=useState("");
+  const [activeTab,setActiveTab]=useState("all");
   const groups=[
     {id:"pieces",label:"Sheet music",filter:file=>file.kind==="sheet"&&file.metadata?.purpose!=="exam_book"},
     {id:"recordings",label:"Recordings",filter:file=>file.kind==="audio"},
     {id:"images",label:"Images",filter:file=>file.kind==="image"},
     {id:"books",label:"Exam ebook",filter:file=>file.metadata?.purpose==="exam_book"},
   ];
+  const tabs=[{id:"all",label:"All"},...groups];
+  const tabbedFiles=activeTab==="all"?files:files.filter(groups.find(group=>group.id===activeTab)?.filter||(()=>false));
+  const filteredFiles=search.trim()?tabbedFiles.filter(file=>file.original_name.toLowerCase().includes(search.trim().toLowerCase())):tabbedFiles;
+  const fileMatchesSearch=(file)=>!search.trim()||file.original_name.toLowerCase().includes(search.trim().toLowerCase());
   async function upload(file) {
     if(!file)return;
     setUploading(true);setError("");
@@ -551,12 +560,17 @@ function LibraryModal({ files, busy, onClose, onOpen, onUpload, onRefresh, toast
   }
   return <div className="pc-overlay"><section className="pc-modal pc-library-modal" role="dialog" aria-modal="true" aria-label="Sheet music collection">
     <button className="pc-modal-close" onClick={onClose}>×</button><span className="pc-eyebrow">YOUR MUSIC</span><h2>Sheet music collection</h2><p>Your scores, books and recordings, together in one place.</p>
+    <div className="pc-library-toolbar">
+      <label className="pc-scale-search pc-library-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by filename…"/></label>
+      <div className="pc-scale-filters pc-library-tabs">{tabs.map(tab=><button type="button" key={tab.id} className={activeTab===tab.id?"active":""} onClick={()=>setActiveTab(tab.id)}>{tab.label}</button>)}</div>
+    </div>
     <div className="pc-library-upload-row"><label className="pc-select-label"><span>Save under</span><select value={category} onChange={e=>setCategory(e.target.value)}><option value="pieces">Pieces</option><option value="exercises">Exercises</option><option value="scales">Scales</option><option value="recordings">Recordings</option><option value="other">Other</option></select></label>
       <label className="pc-select-label"><span>Collection</span><select value={purpose} onChange={e=>setPurpose(e.target.value)}><option value="library">My library</option>{plan==="pro"&&<option value="personal_piece">Pro Extras</option>}</select></label>
       <label className="pc-button dark pc-upload-button">{uploading?"Uploading…":"＋ Add a file"}<input type="file" accept=".pdf,.epub,.xml,.musicxml,.mid,.midi,.png,.jpg,.jpeg,.mp3,.m4a,.mp4,.webm,.wav" disabled={uploading} onChange={e=>{upload(e.target.files[0]);e.target.value="";}}/></label>
     </div>
     {error&&<p className="pc-form-error" role="alert">{error}</p>}
-    <div className="pc-library-groups">{groups.map(group=>{const list=files.filter(group.filter);return <section key={group.id}><header><strong>{group.label}</strong><small>{list.length}</small></header>{list.length ? list.map(file=><div className="pc-file-row" key={file.id}><span className={"pc-file-icon "+(file.kind||"")}>{file.kind==="audio"?"◉":file.kind==="image"?"▧":isEpub(file)?"▤":"♫"}</span><button className="pc-file-info" onClick={()=>onOpen(file)}><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras · ":""}{Math.max(1,Math.round(Number(file.size_bytes||0)/1024))} KB</small></button><button className="pc-file-open" onClick={()=>onOpen(file)}>Open ↗</button><button className="pc-file-delete" onClick={()=>remove(file)} aria-label={"Delete "+file.original_name}>×</button></div>):<p className="pc-file-empty">Nothing saved here yet.</p>}</section>;})}</div>
+    {activeTab==="all"&&!search.trim() ? <div className="pc-library-groups">{groups.map(group=>{const list=files.filter(group.filter);return <section key={group.id}><header><strong>{group.label}</strong><small>{list.length}</small></header>{list.length ? list.map(file=><div className="pc-file-row" key={file.id}><span className={"pc-file-icon "+(file.kind||"")}>{file.kind==="audio"?"◉":file.kind==="image"?"▧":isEpub(file)?"▤":"♫"}</span><button className="pc-file-info" onClick={()=>onOpen(file)}><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras · ":""}{Math.max(1,Math.round(Number(file.size_bytes||0)/1024))} KB</small></button><button className="pc-file-open" onClick={()=>onOpen(file)}>Open ↗</button><button className="pc-file-delete" onClick={()=>remove(file)} aria-label={"Delete "+file.original_name}>×</button></div>):<p className="pc-file-empty">Nothing saved here yet.</p>}</section>;})}</div>
+    : <div className="pc-library-search-results"><div className="pc-library-results-header"><span>{filteredFiles.length} {filteredFiles.length===1?"file":"files"}{search.trim()?" matching \""+search.trim()+"\"":""}</span></div>{filteredFiles.length ? filteredFiles.map(file=><div className="pc-file-row" key={file.id}><span className={"pc-file-icon "+(file.kind||"")}>{file.kind==="audio"?"◉":file.kind==="image"?"▧":isEpub(file)?"▤":"♫"}</span><button className="pc-file-info" onClick={()=>onOpen(file)}><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras · ":""}{Math.max(1,Math.round(Number(file.size_bytes||0)/1024))} KB</small></button><button className="pc-file-open" onClick={()=>onOpen(file)}>Open ↗</button><button className="pc-file-delete" onClick={()=>remove(file)} aria-label={"Delete "+file.original_name}>×</button></div>):<p className="pc-file-empty">No files match your search.</p>}</div>}
     <div className="pc-modal-actions"><button className="pc-button outline" onClick={onClose} disabled={busy}>Done</button></div>
   </section></div>;
 }
