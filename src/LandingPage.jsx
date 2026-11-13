@@ -55,12 +55,59 @@ const STEPS = [
   { num: "04", title: "Track your progress", desc: "Watch your streaks grow, your scores improve and your Grade Plan come together." },
 ];
 
-const PIANO_HERO = "https://images.pexels.com/photos/13217040/pexels-photo-13217040.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
-const PIANO_STRINGS = "https://images.pexels.com/photos/11662076/pexels-photo-11662076.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
-const PIANO_HANDS = "https://images.pexels.com/photos/32921115/pexels-photo-32921115.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
-const PIANO_KEYS_CLOSE = "https://images.pexels.com/photos/33122736/pexels-photo-33122736.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
-const SHEET_MUSIC = "https://images.pexels.com/photos/210764/pexels-photo-210764.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
-const PIANO_DIGITAL = "https://images.pexels.com/photos/28708838/pexels-photo-28708838.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+const STAFF_LINES = [22, 30, 38, 46, 54];
+const STAFF_NOTES = [
+  { x: 78, y: 50 }, { x: 120, y: 45 }, { x: 162, y: 40 },
+  { x: 204, y: 35 }, { x: 246, y: 40 }, { x: 288, y: 45 },
+];
+const MISTAKES = [
+  { bar: 4, x: 60, noteIndex: 1, note: "E♭ played as E natural" },
+  { bar: 9, x: 146, noteIndex: 3, note: "Left hand rushed the offbeat" },
+  { bar: 14, x: 232, noteIndex: 5, note: "G♯ released too early" },
+];
+
+function StaffPreview({ highlightX = null, missedIndex = null }) {
+  return (
+    <svg className="lp-staff" viewBox="0 0 330 80" aria-hidden="true">
+      {highlightX !== null && <rect x={highlightX} y="6" width="84" height="68" rx="10" className="lp-staff-highlight" />}
+      {STAFF_LINES.map((y) => <line key={y} x1="14" x2="318" y1={y} y2={y} className="lp-staff-line" />)}
+      <text x="16" y="60" className="lp-staff-clef">𝄞</text>
+      {STAFF_NOTES.map((note, i) => (
+        <g key={i} className={i === missedIndex ? "lp-staff-note is-miss" : "lp-staff-note"}>
+          <line x1={note.x + 5} x2={note.x + 5} y1={note.y} y2={note.y - 24} />
+          <ellipse cx={note.x} cy={note.y} rx="5.5" ry="4" transform={"rotate(-20 " + note.x + " " + note.y + ")"} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function FeedbackPreview() {
+  const [active, setActive] = useState(0);
+  const mistake = MISTAKES[active];
+  return (
+    <div className="lp-feedback">
+      <div className="lp-feedback-head">
+        <div><small>SESSION SCORE</small><strong>86%</strong></div>
+        <div className="lp-feedback-nav">
+          <button type="button" aria-label="Previous mistake" onClick={() => setActive((i) => Math.max(0, i - 1))} disabled={active === 0}>‹</button>
+          <span>{active + 1} / {MISTAKES.length}</span>
+          <button type="button" aria-label="Next mistake" onClick={() => setActive((i) => Math.min(MISTAKES.length - 1, i + 1))} disabled={active === MISTAKES.length - 1}>›</button>
+        </div>
+      </div>
+      <StaffPreview highlightX={mistake.x} missedIndex={mistake.noteIndex} />
+      <ul>
+        {MISTAKES.map((item, i) => (
+          <li key={item.bar}>
+            <button type="button" className={i === active ? "active" : ""} onClick={() => setActive(i)}>
+              <b>Bar {item.bar}</b><span>{item.note}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function passwordIsValid(value) {
   return value.length >= 8 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value);
@@ -207,9 +254,15 @@ export default function LandingPage({ onAuthed }) {
           </div>
         </div>
         <div className="lp-hero-visual lp-reveal lp-reveal-delay-1">
-          <div className="lp-hero-image-wrap">
-            <img src={PIANO_HERO} alt="Close-up of piano keys" className="lp-hero-image" loading="eager" />
-            <div className="lp-hero-image-glow" />
+          <div className="lp-stage">
+            <div className="lp-device">
+              <div className="lp-device-bar"><span>Assisted Practice · Bar 4</span><span className="lp-live"><i />Listening</span></div>
+              <StaffPreview highlightX={146} missedIndex={3} />
+              <div className="lp-device-footer">
+                <div><small>Current section</small><strong>Bars 1–8</strong></div>
+                <div className="lp-score-ring" style={{ "--p": "92%" }}><div><strong>92</strong><small>%</small></div></div>
+              </div>
+            </div>
           </div>
           <div className="lp-hero-floating-card lp-float-card-1">
             <span className="lp-float-icon">♪</span>
@@ -254,7 +307,11 @@ export default function LandingPage({ onAuthed }) {
       <section className="lp-showcase lp-reveal">
         <div className="lp-showcase-grid">
           <div className="lp-showcase-image-col">
-            <img src={PIANO_HANDS} alt="Pianist's hands playing piano" className="lp-showcase-image" loading="lazy" />
+            <div className="lp-tilt-card">
+              <span className="lp-card-label">Assisted Practice · Bar 6 detected</span>
+              <StaffPreview highlightX={204} />
+              <StaffPreview />
+            </div>
           </div>
           <div className="lp-showcase-text">
             <span className="lp-eyebrow">ASSISTED PRACTICE</span>
@@ -272,7 +329,7 @@ export default function LandingPage({ onAuthed }) {
       <section className="lp-showcase lp-showcase-alt lp-reveal">
         <div className="lp-showcase-grid lp-showcase-reverse">
           <div className="lp-showcase-image-col">
-            <img src={SHEET_MUSIC} alt="Sheet music on a piano" className="lp-showcase-image" loading="lazy" />
+            <FeedbackPreview />
           </div>
           <div className="lp-showcase-text">
             <span className="lp-eyebrow">MISTAKE FEEDBACK</span>

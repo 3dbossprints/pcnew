@@ -12,6 +12,10 @@
       "destination": "/api/billing/[action]"
     },
     {
+      "source": "/api/practice/:action",
+      "destination": "/api/practice/[action]"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }
