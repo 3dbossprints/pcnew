@@ -18,6 +18,20 @@ function priceFor(plan, interval) {
   if (!price) throw new Error("The selected subscription price is not configured.");
   return price;
 }
+function planDetailsForSubscription(subscription) {
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const configuredPrices = [
+    ["STRIPE_PRICE_BASIC_MONTHLY", "basic", "monthly"],
+    ["STRIPE_PRICE_BASIC_ANNUAL", "basic", "annual"],
+    ["STRIPE_PRICE_PRO_MONTHLY", "pro", "monthly"],
+    ["STRIPE_PRICE_PRO_ANNUAL", "pro", "annual"],
+  ];
+  const match = configuredPrices.find(([key]) => process.env[key] && process.env[key] === priceId);
+  if (match) return { plan: match[1], interval: match[2], priceId };
+  const metadataPlan = ["basic", "pro"].includes(subscription.metadata?.plan) ? subscription.metadata.plan : "basic";
+  const metadataInterval = ["monthly", "annual"].includes(subscription.metadata?.interval) ? subscription.metadata.interval : "monthly";
+  return { plan: metadataPlan, interval: metadataInterval, priceId };
+}
 async function checkout(req,res) {
   const user = await requireUser(req,res);
   if (!user) return;
@@ -111,11 +125,10 @@ async function confirm(req,res) {
       return sendJson(res,202,{pending:true,message:"Your subscription is still being activated by Stripe."});
     }
     const item=subscription.items?.data?.[0];
-    const priceId=item?.price?.id || null;
     const periodEnd=subscription.current_period_end || item?.current_period_end || null;
-    const proPrices=[process.env.STRIPE_PRICE_PRO_MONTHLY,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean);
-    const selectedPlan=subscription.metadata?.plan || (proPrices.includes(priceId) ? "pro" : "basic");
-    const interval=subscription.metadata?.interval || ([process.env.STRIPE_PRICE_BASIC_ANNUAL,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean).includes(priceId) ? "annual" : "monthly");
+    // The active Stripe Price is authoritative: subscription metadata is not
+    // automatically rewritten when a customer changes plans in the portal.
+    const {plan:selectedPlan,interval,priceId}=planDetailsForSubscription(subscription);
     const result=await database().query(
       "UPDATE users SET stripe_customer_id=COALESCE($2,stripe_customer_id),stripe_subscription_id=$3,stripe_price_id=$4,plan=$5,subscription_status=$6,subscription_current_period_end=$7,cancel_at_period_end=$8,subscription_interval=$9,onboarding_completed=TRUE,pending_plan=NULL,pending_interval=NULL,updated_at=NOW() WHERE firebase_uid=$1 RETURNING firebase_uid,onboarding_completed,plan,subscription_status",
       [user.uid,customerId,subscription.id,priceId,selectedPlan,subscription.status,periodEnd?new Date(periodEnd*1000):null,Boolean(subscription.cancel_at_period_end),interval],
