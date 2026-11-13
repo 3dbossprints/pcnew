@@ -315,7 +315,7 @@ export default function App() {
   </div>;
 }
 
-function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onOpenFile, onPractice, freeLocked, onRefresh }) {
+function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onOpenFile, onPractice, freeLocked }) {
   const user = data?.user || {};
   const summary = data?.practiceSummary || {};
   const now = new Date();
@@ -323,43 +323,28 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const today = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   const todaySeconds = Number(summary.todaySeconds || 0);
   const remaining = Math.max(0, 900 - todaySeconds);
-  const demoRemaining = Math.max(0, 3600 - Number(user.demo_seconds_used || 0));
   const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));
-  const weekDates = currentWeekDateKeys();
-  const practiced = new Set(summary.practiceDays || []);
-  const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, data.attempts || []), 0) / tasks.length) : null;
-  const recommendations = recommendNextTask(tasks, data.attempts || []).filter(task => taskHasProgress(task, data.attempts || []));
-  const totalTasks = tasks.length;
-  const practisedTasks = tasks.filter(task => taskHasProgress(task, data.attempts || [])).length;
+  const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, attempts), 0) / tasks.length) : null;
+  const recommendations = recommendNextTask(tasks, attempts).filter(task => taskHasProgress(task, attempts));
+  const nextTask = recommendations[0] || null;
+  const examDate = user.target_date ? formatDate(user.target_date) : "Not set";
   const sheetMusicFiles = files.filter(file => file.kind === "sheet" && file.metadata?.purpose !== "exam_book");
   return <div className="pc-dashboard">
     <div className="pc-dash-header">
-      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{user.grade || user.exam_board ? [user.grade, user.exam_board].filter(Boolean).join(" · ") : "Welcome to your practice space."}</p></div>
+      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[user.grade, user.exam_board].filter(Boolean).join(" · ") || "Your musical journey starts here."}</p></div>
       <div className="pc-dash-actions">
         <button className="pc-button primary" onClick={() => onPractice(null)}>Start practice <span>→</span></button>
         <button className="pc-button outline" onClick={onOpenLibrary}>Sheet music</button>
       </div>
     </div>
-    <section className="pc-stat-row">
-      <StatCard label="THIS WEEK" value={formatDuration(summary.weeklySeconds)} note="Recorded practice" icon="◷"/>
-      <StatCard label="SESSIONS" value={String(summary.sessionsThisWeek || 0)} note="This week" icon="♫"/>
-      <StatCard label="DAILY STREAK" value={String(summary.streakDays || 0) + " days"} note={remaining ? formatDuration(remaining) + " to today's 15-min goal" : "15-min goal reached"} icon="✧"/>
-      <StatCard label={user.plan === "free" ? "DEMO LEFT" : "PROGRESS"} value={user.plan === "free" ? formatDuration(demoRemaining) : avg === null ? "—" : avg + "%"} note={user.plan === "free" ? "Lifetime allowance" : practisedTasks + "/" + totalTasks + " tasks started"} icon="◎"/>
+    <section className="pc-dashboard-summary" aria-label="Your progress">
+      <div className="pc-dashboard-summary-item"><span>OVERALL PROGRESS</span><strong>{avg === null ? "—" : avg + "%"}</strong><small>{tasks.length ? tasks.length + " learning tasks" : "Add your first learning task"}</small></div>
+      <div className="pc-dashboard-summary-item"><span>DAILY STREAK</span><strong>{Number(summary.streakDays || 0)} days</strong><small>{remaining ? formatDuration(remaining) + " to your 15-minute goal" : "15-minute goal reached today"}</small></div>
+      <div className="pc-dashboard-summary-item"><span>TARGET EXAM DATE</span><strong className="pc-dashboard-date">{examDate}</strong><small>{user.target_date ? "Your planned completion date" : "Add a date in your profile"}</small></div>
     </section>
     {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Your progress and account remain here. Choose a plan from Profile to continue learning.</span></div>}
     {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Upload your exam-board ebook.</strong><span>Add your own exam-board PDF or EPUB to your sheet music collection to unlock graded learning.</span></div>}
-    {recommendations.length > 0 && <section className="pc-recommend-panel">
-      <div className="pc-section-heading"><div><span className="pc-eyebrow">RECOMMENDED</span><h2>What to practise next</h2></div></div>
-      <div className="pc-recommend-grid">{recommendations.map(task => {
-        const progress = taskProgress(task, data.attempts || []);
-        const lowSections = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => sectionScore(task, data.attempts || [], index + 1)).filter(score => score !== null && score < 80);
-        return <button key={task.id} className="pc-recommend-card" onClick={() => onOpenTask(task)}>
-          <span className="pc-recommend-icon">{task.category === "pieces" ? "♫" : task.category === "exercises" ? "⌁" : "♬"}</span>
-          <div><strong>{task.title}</strong><small>{task.composer || (lowSections.length ? lowSections.length + " section" + (lowSections.length === 1 ? "" : "s") + " below 80%" : "Recently practised")}</small></div>
-          <span className="pc-recommend-score">{progress}%</span>
-        </button>;
-      })}</div>
-    </section>}
+    {nextTask && <button className="pc-next-task" onClick={() => onOpenTask(nextTask)}><span><small>RECOMMENDED NEXT</small><strong>{nextTask.title}</strong></span><span className="pc-next-task-action">View task ↗</span></button>}
     <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>Pieces, exercises & scales</h2></div></div>
     <div className="pc-learning-grid">
       {categories.map(category => <section className="pc-learning-card" key={category.id}>
@@ -369,18 +354,9 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
         </div> : <div className="pc-empty-category"><span>＋</span><p>No {category.title.toLowerCase()} added yet.</p><button onClick={() => onAddTask(category.id)}>Add your first {category.title.slice(0,-1).toLowerCase()}</button></div>}
       </section>)}
     </div>
-    <section className="pc-lower-grid">
-      <div className="pc-panel pc-week-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">PRACTICE RHYTHM</span><h3>This week</h3></div><span>{summary.practiceDaysThisWeek || 0}/7 days</span></div><div className="pc-week-days">{weekDates.map((date,index) => { const complete = practiced.has(date); const day = WEEKDAYS[(index+1)%7]; return <div key={date} className={complete ? "done" : ""}><span>{day.slice(0,1)}</span><i>{complete ? "✓" : ""}</i></div>; })}</div><p>Practise 15 minutes a day to keep your streak.</p></div>
-      <div className="pc-panel pc-materials-panel"><div className="pc-materials-head"><div><span className="pc-eyebrow">YOUR COLLECTION</span><h3>Sheet music & recordings</h3><p>{files.length ? files.length + " saved " + (files.length === 1 ? "file" : "files") : "Keep scores and recordings in one place."}</p></div><button className="pc-button outline" onClick={onOpenLibrary}>Open collection →</button></div>
-        {sheetMusicFiles.length > 0 && <div className="pc-materials-recent">{sheetMusicFiles.slice(0,3).map(file=><button key={file.id} className="pc-materials-file" onClick={()=>onOpenFile(file)}><span className="pc-file-icon">{isMusicXml(file)?"♫":isPdf(file)?"▤":isEpub(file)?"▤":"♪"}</span><span className="pc-materials-file-info"><strong>{file.original_name}</strong><small>{isMusicXml(file)?"MusicXML":isPdf(file)?"PDF":isEpub(file)?"EPUB":file.kind==="audio"?"Audio":"Score"}</small></span><b>↗</b></button>)}</div>}
-      </div>
-    </section>
   </div>;
 }
 
-function StatCard({ label, value, note, icon }) {
-  return <div className="pc-stat-card"><div><span>{label}</span><b>{value}</b><small>{note}</small></div><i>{icon}</i></div>;
-}
 function TaskRow({ task, attempts, onClick }) {
   const progress = taskProgress(task, attempts);
   const hasProgress = taskHasProgress(task, attempts);
@@ -1055,6 +1031,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [scheduleEnabled,setScheduleEnabled]=useState(false);
   const [checkoutPlan,setCheckoutPlan]=useState(user.plan==="pro"?"pro":"basic");
   const [checkoutInterval,setCheckoutInterval]=useState("monthly");
+  const [discountCode,setDiscountCode]=useState("");
   const [checkoutSecret,setCheckoutSecret]=useState("");
   const [deletionStep,setDeletionStep]=useState("idle");
   const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");
@@ -1104,7 +1081,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
     try{
       const selected=checkoutPlan;
       await api("/api/profile",{method:"PATCH",body:{examBoard:user.exam_board,grade:user.grade,plan:selected,interval:checkoutInterval,targetDate,bookSources:Array.isArray(user.book_sources)?user.book_sources:[],examBookSkipped:!user.exam_book_file_id}});
-      const checkout=await api("/api/billing/checkout",{method:"POST",body:{plan:selected,interval:checkoutInterval}});
+      const checkout=await api("/api/billing/checkout",{method:"POST",body:{plan:selected,interval:checkoutInterval,discountCode:discountCode.trim()||undefined}});
       setCheckoutSecret(checkout.clientSecret);
     }catch(error){setAccountMessage(error.message||"Checkout could not be opened.");}
   }
@@ -1209,7 +1186,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
         )}
       </section>
       <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">06 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?(user.subscription_interval==="annual"?"Pro · billed annually":"£19.99 per month"):plan==="basic"?(user.subscription_interval==="annual"?"Basic · billed annually":"£9.99 per month"):"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
-        {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic</option><option value="pro">Pro</option></select></label><label>Billing interval<select value={checkoutInterval} onChange={e=>setCheckoutInterval(e.target.value)}><option value="monthly">Monthly</option><option value="annual">Annual</option></select></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
+        {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic</option><option value="pro">Pro</option></select></label><label>Billing interval<select value={checkoutInterval} onChange={e=>setCheckoutInterval(e.target.value)}><option value="monthly">Monthly</option><option value="annual">Annual</option></select></label><label>Discount code (optional)<input value={discountCode} onChange={e=>setDiscountCode(e.target.value.toUpperCase())} placeholder="Enter code" autoComplete="off"/></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
         <p className="pc-muted-small">Plan and billing interval changes are managed securely through Stripe. Piano Coach updates your account when Stripe confirms the change.</p>
       </section>
       {accountMessage&&<p className="pc-form-error" role="alert">{accountMessage}</p>}
