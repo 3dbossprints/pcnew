@@ -9,6 +9,20 @@ function stripe() {
   if (!stripeClient) stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
   return stripeClient;
 }
+function planDetailsForSubscription(subscription) {
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const configuredPrices = [
+    ["STRIPE_PRICE_BASIC_MONTHLY", "basic", "monthly"],
+    ["STRIPE_PRICE_BASIC_ANNUAL", "basic", "annual"],
+    ["STRIPE_PRICE_PRO_MONTHLY", "pro", "monthly"],
+    ["STRIPE_PRICE_PRO_ANNUAL", "pro", "annual"],
+  ];
+  const match = configuredPrices.find(([key]) => process.env[key] && process.env[key] === priceId);
+  if (match) return { plan: match[1], interval: match[2], priceId };
+  const metadataPlan = ["basic", "pro"].includes(subscription.metadata?.plan) ? subscription.metadata.plan : "basic";
+  const metadataInterval = ["monthly", "annual"].includes(subscription.metadata?.interval) ? subscription.metadata.interval : "monthly";
+  return { plan: metadataPlan, interval: metadataInterval, priceId };
+}
 async function rawBody(req) {
   const chunks=[];
   for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk));
@@ -24,12 +38,10 @@ async function persistSubscription(subscription, customerId) {
   }
   if (!targetUid) throw new Error("Stripe subscription is not linked to a Piano Coach user.");
   const item=subscription.items?.data?.[0];
-  const priceId=item?.price?.id || null;
   const periodEnd=subscription.current_period_end || item?.current_period_end || null;
-  const proPrices=[process.env.STRIPE_PRICE_PRO_MONTHLY,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean);
-  const selectedPlan=subscription.metadata?.plan || (proPrices.includes(priceId) ? "pro" : "basic");
+  // Stripe Price IDs remain correct when metadata is stale after a portal update.
+  const {plan:selectedPlan,interval,priceId}=planDetailsForSubscription(subscription);
   const plan=["active","trialing","past_due"].includes(subscription.status) ? selectedPlan : "free";
-  const interval=subscription.metadata?.interval || ([process.env.STRIPE_PRICE_BASIC_ANNUAL,process.env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean).includes(priceId) ? "annual" : "monthly");
   await database().query(
     "UPDATE users SET stripe_customer_id=COALESCE($2,stripe_customer_id),stripe_subscription_id=$3,stripe_price_id=$4,plan=$5,subscription_status=$6,subscription_current_period_end=$7,cancel_at_period_end=$8,subscription_interval=$9,onboarding_completed=CASE WHEN $6 IN ('active','trialing','past_due') THEN TRUE ELSE onboarding_completed END,pending_plan=CASE WHEN $6 IN ('active','trialing','past_due') THEN NULL ELSE pending_plan END,pending_interval=CASE WHEN $6 IN ('active','trialing','past_due') THEN NULL ELSE pending_interval END,updated_at=NOW() WHERE firebase_uid=$1",
     [targetUid,customer,subscription.id,priceId,plan,subscription.status,periodEnd?new Date(periodEnd*1000):null,Boolean(subscription.cancel_at_period_end),interval],
