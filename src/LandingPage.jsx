@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -55,8 +55,54 @@ const STEPS = [
   { num: "04", title: "Track your progress", desc: "Watch your streaks grow, your scores improve and your Grade Plan come together." },
 ];
 
+const PIANO_HERO = "https://images.pexels.com/photos/13217040/pexels-photo-13217040.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+const PIANO_STRINGS = "https://images.pexels.com/photos/11662076/pexels-photo-11662076.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+const PIANO_HANDS = "https://images.pexels.com/photos/32921115/pexels-photo-32921115.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+const PIANO_KEYS_CLOSE = "https://images.pexels.com/photos/33122736/pexels-photo-33122736.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+const SHEET_MUSIC = "https://images.pexels.com/photos/210764/pexels-photo-210764.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+const PIANO_DIGITAL = "https://images.pexels.com/photos/28708838/pexels-photo-28708838.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+
 function passwordIsValid(value) {
   return value.length >= 8 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value);
+}
+
+function useScrollReveal() {
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("lp-revealed");
+            observer.unobserve(entry.target);
+          }
+        }
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -60px 0px" }
+    );
+    document.querySelectorAll(".lp-reveal").forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+}
+
+function useParallax() {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    function onScroll() {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!ref.current) return;
+        const rect = ref.current.getBoundingClientRect();
+        const progress = Math.max(-1, Math.min(1, rect.top / window.innerHeight));
+        ref.current.style.setProperty("--lp-parallax", String(progress));
+      });
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
+  }, []);
+  return ref;
 }
 
 export default function LandingPage({ onAuthed }) {
@@ -66,6 +112,17 @@ export default function LandingPage({ onAuthed }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const heroRef = useParallax();
+  const [navScrolled, setNavScrolled] = useState(false);
+
+  useScrollReveal();
+
+  useEffect(() => {
+    function onScroll() { setNavScrolled(window.scrollY > 20); }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -114,16 +171,12 @@ export default function LandingPage({ onAuthed }) {
   }
 
   function pickPlan(planId) {
-    if (planId === "free") {
-      openAuth("signup");
-    } else {
-      openAuth("signup");
-    }
+    openAuth("signup");
   }
 
   return (
     <div className="lp-shell">
-      <nav className="lp-nav">
+      <nav className={"lp-nav" + (navScrolled ? " scrolled" : "")}>
         <div className="lp-nav-brand">
           <span className="lp-nav-mark">𝄞</span>
           <strong>Piano <em>Coach</em></strong>
@@ -139,8 +192,8 @@ export default function LandingPage({ onAuthed }) {
         </div>
       </nav>
 
-      <section className="lp-hero">
-        <div className="lp-hero-copy">
+      <section className="lp-hero" ref={heroRef}>
+        <div className="lp-hero-copy lp-reveal">
           <span className="lp-eyebrow">YOUR MUSICAL JOURNEY</span>
           <h1>Practice piano<br/>with a coach<br/><em>who listens.</em></h1>
           <p>Real-time feedback, grade-aware practice plans and a library that follows you. Piano Coach turns every session into progress.</p>
@@ -153,36 +206,43 @@ export default function LandingPage({ onAuthed }) {
             <span><strong>No card</strong> needed to start</span>
           </div>
         </div>
-        <div className="lp-piano-card" aria-hidden="true">
-          <div className="lp-piano-card-glow" />
-          <div className="lp-orbit lp-orbit-one" />
-          <div className="lp-orbit lp-orbit-two" />
-          <div className="lp-piano-keys">
-            {Array.from({ length: 14 }).map((_, i) => (
-              <div key={i} className="lp-piano-key" style={{ animationDelay: (i * 0.3) + "s" }}>
-                {i === 2 || i === 6 || i === 9 || i === 13 ? <span className="lp-piano-black" /> : null}
-              </div>
-            ))}
+        <div className="lp-hero-visual lp-reveal lp-reveal-delay-1">
+          <div className="lp-hero-image-wrap">
+            <img src={PIANO_HERO} alt="Close-up of piano keys" className="lp-hero-image" loading="eager" />
+            <div className="lp-hero-image-glow" />
           </div>
-          <div className="lp-falling-notes">
-            <span style={{ animationDelay: "0s" }}>♪</span>
-            <span style={{ animationDelay: "1.2s" }}>♫</span>
-            <span style={{ animationDelay: "2.4s" }}>♩</span>
-            <span style={{ animationDelay: "3.6s" }}>♬</span>
-            <span style={{ animationDelay: "0.6s" }}>♪</span>
+          <div className="lp-hero-floating-card lp-float-card-1">
+            <span className="lp-float-icon">♪</span>
+            <div><strong>Assisted Practice</strong><small>Real-time note detection</small></div>
+          </div>
+          <div className="lp-hero-floating-card lp-float-card-2">
+            <span className="lp-float-icon">◎</span>
+            <div><strong>Grade Plan</strong><small>Track your syllabus</small></div>
           </div>
         </div>
       </section>
 
+      <section className="lp-trust-strip lp-reveal">
+        <div className="lp-trust-inner">
+          <span>ABRSM</span>
+          <span>Trinity College London</span>
+          <span>RSL Awards</span>
+          <span>LCME</span>
+          <span>MTB</span>
+          <span>VCM</span>
+          <span>NCM</span>
+        </div>
+      </section>
+
       <section className="lp-features" id="features">
-        <div className="lp-section-head">
+        <div className="lp-section-head lp-reveal">
           <span className="lp-eyebrow">EVERYTHING YOU NEED</span>
           <h2>Built for serious piano students.</h2>
           <p>From your first scale to your grade exam, Piano Coach guides every minute of practice.</p>
         </div>
         <div className="lp-features-grid">
-          {FEATURES.map((feature) => (
-            <div className="lp-feature-card" key={feature.title}>
+          {FEATURES.map((feature, i) => (
+            <div className={"lp-feature-card lp-reveal" + (i > 0 ? " lp-reveal-delay-" + Math.min(i % 3, 3) : "")} key={feature.title}>
               <span className="lp-feature-icon">{feature.icon}</span>
               <h3>{feature.title}</h3>
               <p>{feature.desc}</p>
@@ -191,14 +251,50 @@ export default function LandingPage({ onAuthed }) {
         </div>
       </section>
 
+      <section className="lp-showcase lp-reveal">
+        <div className="lp-showcase-grid">
+          <div className="lp-showcase-image-col">
+            <img src={PIANO_HANDS} alt="Pianist's hands playing piano" className="lp-showcase-image" loading="lazy" />
+          </div>
+          <div className="lp-showcase-text">
+            <span className="lp-eyebrow">ASSISTED PRACTICE</span>
+            <h2>Falling notes.<br/>Real-time feedback.</h2>
+            <p>A piano keyboard appears automatically, sized to the required octaves. Falling notes show the correct notes in the correct order. The AI listens and checks whether you play them right — quietly, without interrupting.</p>
+            <ul className="lp-showcase-list">
+              <li><span>✓</span>Microphone or MIDI input</li>
+              <li><span>✓</span>Play 2 bars to preview the next passage</li>
+              <li><span>✓</span>Single-line score with current bar highlighted</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="lp-showcase lp-showcase-alt lp-reveal">
+        <div className="lp-showcase-grid lp-showcase-reverse">
+          <div className="lp-showcase-image-col">
+            <img src={SHEET_MUSIC} alt="Sheet music on a piano" className="lp-showcase-image" loading="lazy" />
+          </div>
+          <div className="lp-showcase-text">
+            <span className="lp-eyebrow">MISTAKE FEEDBACK</span>
+            <h2>Know exactly where<br/>to focus next.</h2>
+            <p>After each session, see which bars and notes need attention. Listen to recordings of the passages where mistakes happened. Orange highlights on your score show every trouble spot, with arrows to navigate between them.</p>
+            <ul className="lp-showcase-list">
+              <li><span>✓</span>Bar-level mistake highlights</li>
+              <li><span>✓</span>Audio clips of each mistake</li>
+              <li><span>✓</span>Left/right arrows to navigate</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <section className="lp-how" id="how">
-        <div className="lp-section-head">
+        <div className="lp-section-head lp-reveal">
           <span className="lp-eyebrow">HOW IT WORKS</span>
           <h2>From sign-up to standing ovation.</h2>
         </div>
         <div className="lp-steps-grid">
-          {STEPS.map((step) => (
-            <div className="lp-step-card" key={step.num}>
+          {STEPS.map((step, i) => (
+            <div className={"lp-step-card lp-reveal" + (i > 0 ? " lp-reveal-delay-" + Math.min(i, 3) : "")} key={step.num}>
               <span className="lp-step-num">{step.num}</span>
               <h3>{step.title}</h3>
               <p>{step.desc}</p>
@@ -208,14 +304,14 @@ export default function LandingPage({ onAuthed }) {
       </section>
 
       <section className="lp-pricing" id="pricing">
-        <div className="lp-section-head">
+        <div className="lp-section-head lp-reveal">
           <span className="lp-eyebrow">SIMPLE PRICING</span>
           <h2>Choose your plan.</h2>
           <p>Start free, upgrade when you're ready. Cancel anytime.</p>
         </div>
         <div className="lp-plans-grid">
-          {PLANS.map((plan) => (
-            <div className={"lp-plan-card" + (plan.highlight ? " highlighted" : "")} key={plan.id}>
+          {PLANS.map((plan, i) => (
+            <div className={"lp-plan-card lp-reveal" + (plan.highlight ? " highlighted" : "") + (i > 0 ? " lp-reveal-delay-" + Math.min(i, 3) : "")} key={plan.id}>
               {plan.highlight && <span className="lp-plan-badge">Most popular</span>}
               <h3>{plan.name}</h3>
               <div className="lp-plan-price">
@@ -239,7 +335,7 @@ export default function LandingPage({ onAuthed }) {
         </div>
       </section>
 
-      <section className="lp-cta-strip">
+      <section className="lp-cta-strip lp-reveal">
         <div className="lp-cta-content">
           <h2>Ready to make music?</h2>
           <p>Your first 60 minutes are on us. No card, no commitment.</p>
