@@ -292,6 +292,10 @@ export default function LandingPage({ onAuthed }) {
         </div>
       </section>
 
+      <div className="lp-marquee" aria-label="Piano Coach capabilities">
+        <div className="lp-marquee-track"><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i></div>
+      </div>
+
       <section className="lp-features" id="features">
         <div className="lp-section-head lp-reveal">
           <span className="lp-eyebrow">EVERYTHING YOU NEED</span>
@@ -309,7 +313,7 @@ export default function LandingPage({ onAuthed }) {
         </div>
       </section>
 
-      <section className="lp-showcase lp-reveal">
+      <section className="lp-showcase lp-showcase-first lp-reveal">
         <div className="lp-showcase-grid">
           <div className="lp-showcase-image-col">
             <div className="lp-tilt-card">

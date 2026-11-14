@@ -1098,7 +1098,7 @@ button{color:inherit}
 .lp-shell{background:#f7f2e9;color:#1d2822;perspective:1800px}
 .lp-nav{background:rgba(247,242,233,.72);border-bottom-color:rgba(112,126,105,.18);box-shadow:0 1px 0 rgba(255,255,255,.6) inset}
 .lp-nav-brand{min-width:170px}
-.lp-brand-logo{display:block;width:154px;height:auto;max-height:42px;object-fit:contain;object-position:left center}
+.lp-brand-logo{display:block;width:154px;height:auto;max-height:42px;object-fit:contain;object-position:left center;filter:brightness(0) saturate(100%) invert(17%) sepia(11%) saturate(912%) hue-rotate(92deg) brightness(91%) contrast(90%)}
 .lp-nav-mark{display:none}
 .lp-nav-links a{color:#67766a}
 .lp-nav-links a:hover{color:#1d2822}
@@ -1170,7 +1170,7 @@ button{color:inherit}
 .lp-footer p{color:#c5d0c4}.lp-footer-legal{color:#92a191}.lp-footer-legal a{color:#92a191}.lp-footer-legal a:hover{color:#fffaf2}
 .lp-parent-brand{display:flex;align-items:center;gap:10px;color:#92a191;font-size:10px;letter-spacing:1px;text-transform:uppercase}.lp-parent-brand img{width:132px;height:auto;filter:brightness(0) invert(1);opacity:.8}
 .lp-auth-card{background:#fffdf8;border-color:rgba(112,126,105,.25)}
-.lp-auth-logo{display:block;width:150px;height:auto;max-height:48px;object-fit:contain;margin:0 auto 18px}
+.lp-auth-logo{display:block;width:150px;height:auto;max-height:48px;object-fit:contain;margin:0 auto 18px;filter:brightness(0) saturate(100%) invert(17%) sepia(11%) saturate(912%) hue-rotate(92deg) brightness(91%) contrast(90%)}
 @keyframes lp-stage-drift{0%,100%{transform:rotateY(calc(-14deg + var(--lp-parallax,0) * 16deg)) rotateX(calc(7deg - var(--lp-parallax,0) * 4deg)) rotateZ(-1deg) translateY(0)}50%{transform:rotateY(calc(-12deg + var(--lp-parallax,0) * 16deg)) rotateX(calc(8deg - var(--lp-parallax,0) * 4deg)) rotateZ(0deg) translateY(-9px)}}
 @keyframes lp-floor-breathe{0%,100%{opacity:.55;transform:translateZ(-60px) rotateX(70deg) scale(.96)}50%{opacity:.85;transform:translateZ(-60px) rotateX(70deg) scale(1.04)}}
 @keyframes lp-orbit-spin{to{transform:rotateX(67deg) rotateZ(342deg)}}
@@ -1184,3 +1184,11 @@ button{color:inherit}
   .lp-brand-logo{width:130px}.lp-nav{padding-inline:16px}.lp-nav-cta{padding:10px 15px;font-size:11px}.lp-hero{padding-top:44px;min-height:0}.lp-hero-copy h1{font-size:clamp(43px,14vw,64px);letter-spacing:-2.4px}.lp-hero-visual{min-height:280px}.lp-device{padding:15px;border-radius:18px}.orbit-one{width:320px;height:120px}.orbit-two{width:250px;height:95px}.lp-hero-chip,.lp-hero-note{display:none}.lp-stage{animation:none}.lp-footer-logo{width:145px}.lp-parent-brand{flex-wrap:wrap;justify-content:center}
 }
 @media(prefers-reduced-motion:reduce){.lp-stage,.lp-orbit,.lp-hero-note,.lp-hero-chip,.lp-stage-floor{animation:none}.lp-stage{transform:none}}
+.lp-marquee{overflow:hidden;border-top:1px solid rgba(112,126,105,.18);border-bottom:1px solid rgba(112,126,105,.18);background:#dfe9dc;color:#506352;padding:13px 0;white-space:nowrap}
+.lp-marquee-track{display:flex;align-items:center;justify-content:center;gap:24px;width:max-content;min-width:100%;font-size:10px;font-weight:700;letter-spacing:2.4px;animation:lp-marquee 28s linear infinite}
+.lp-marquee-track i{font-style:normal;color:#b67d45;font-size:15px}
+.lp-showcase-first{padding-top:clamp(80px,10vw,140px)}
+.lp-showcase-first .lp-tilt-card{transform-style:preserve-3d}
+@keyframes lp-marquee{to{transform:translateX(-25%)}}
+@media(max-width:600px){.lp-marquee-track{justify-content:flex-start;min-width:max-content;gap:18px;font-size:9px}}
+@media(prefers-reduced-motion:reduce){.lp-marquee-track{animation:none}}
