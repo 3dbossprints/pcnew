@@ -5,6 +5,7 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth, googleProvider } from "./lib/firebase.js";
+import LandingScene from "./LandingScene.jsx";
 import "./landing-depth.css";
 
 const PLANS = [
@@ -287,6 +288,7 @@ export default function LandingPage({ onAuthed }) {
           </div>
         </div>
         <div ref={visualRef} className="lp-hero-visual lp-reveal lp-reveal-delay-1">
+          <LandingScene />
           <div className="lp-orbit orbit-one" aria-hidden="true" />
           <div className="lp-orbit orbit-two" aria-hidden="true" />
           <div className="lp-hero-note note-a" aria-hidden="true">♪</div>
