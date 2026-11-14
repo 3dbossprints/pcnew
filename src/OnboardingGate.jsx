@@ -180,11 +180,11 @@ export default function OnboardingGate({ children }) {
     finally { setSaving(false); }
   }
 
-  if (loading) return <main className="auth-screen"><section className="auth-card"><div className="auth-mark">𝄞</div><p>Preparing your musical journey…</p></section></main>;
+  if (loading) return <main className="auth-screen"><section className="auth-card"><img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><p>Preparing your musical journey…</p></section></main>;
   if (profile?.onboarding_completed) return children;
 
   if (checkoutClientSecret) return <main className="onboarding-screen">
-    <header className="onboarding-brand"><div className="auth-mark">𝄞</div><div><strong>Piano <em>Coach</em></strong><small>SECURE CHECKOUT</small></div></header>
+    <header className="onboarding-brand"><img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><small>SECURE CHECKOUT</small></header>
     <section className="onboarding-card checkout-card">
       <p className="eyebrow">ALMOST THERE</p><h1>Complete your subscription.</h1>
       <p className="onboarding-intro">Your selected {plan === "pro" ? "Pro" : "Basic"} subscription is ready. Payment details are handled securely by Stripe.</p>
@@ -197,7 +197,7 @@ export default function OnboardingGate({ children }) {
   </main>;
 
   return <main className="onboarding-screen">
-    <header className="onboarding-brand"><div className="auth-mark">𝄞</div><div><strong>Piano <em>Coach</em></strong><small>YOUR MUSICAL JOURNEY</small></div></header>
+    <header className="onboarding-brand"><img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><small>YOUR MUSICAL JOURNEY</small></header>
     <section className="onboarding-card">
       <div className="onboarding-progress"><span>GETTING STARTED</span><strong>STEP {step + 1} OF 4</strong></div>
       <div className="onboarding-track"><i style={{width:((step+1)*25)+"%"}}/></div>

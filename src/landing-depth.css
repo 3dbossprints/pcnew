@@ -1,0 +1,36 @@
+.lp-hero-visual > * {
+  transition: translate 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lp-hero-visual > :not(.lp-orbit):not(.lp-hero-floating-card) {
+  translate: calc(var(--lp-tx, 0) * 10px) calc(var(--lp-ty, 0) * 8px);
+}
+
+.lp-hero-visual .lp-orbit {
+  translate: calc(var(--lp-tx, 0) * -20px) calc(var(--lp-ty, 0) * -16px);
+}
+
+.lp-hero-visual .lp-float-card-1 {
+  translate: calc(var(--lp-tx, 0) * -30px) calc(var(--lp-ty, 0) * -22px);
+}
+
+.lp-hero-visual .lp-float-card-2 {
+  translate: calc(var(--lp-tx, 0) * 26px) calc(var(--lp-ty, 0) * 20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-hero-visual > *,
+  .lp-hero-visual .lp-orbit,
+  .lp-hero-visual .lp-hero-floating-card {
+    translate: none;
+    transition: none;
+  }
+}
+
+@media (hover: none) {
+  .lp-hero-visual > *,
+  .lp-hero-visual .lp-orbit,
+  .lp-hero-visual .lp-hero-floating-card {
+    translate: none;
+  }
+}

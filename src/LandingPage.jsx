@@ -5,6 +5,7 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth, googleProvider } from "./lib/firebase.js";
+import "./landing-depth.css";
 
 const PLANS = [
   {
@@ -152,6 +153,38 @@ function useParallax() {
   return ref;
 }
 
+function usePointerDepth() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || window.matchMedia("(prefers-reduced-motion: reduce)").matches || window.matchMedia("(hover: none)").matches) return;
+    let raf = 0;
+    function onMove(event) {
+      const rect = node.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width - 0.5;
+      const y = (event.clientY - rect.top) / rect.height - 0.5;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        node.style.setProperty("--lp-tx", x.toFixed(3));
+        node.style.setProperty("--lp-ty", y.toFixed(3));
+      });
+    }
+    function onLeave() {
+      cancelAnimationFrame(raf);
+      node.style.setProperty("--lp-tx", "0");
+      node.style.setProperty("--lp-ty", "0");
+    }
+    node.addEventListener("pointermove", onMove);
+    node.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      node.removeEventListener("pointermove", onMove);
+      node.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
+  return ref;
+}
+
 export default function LandingPage({ onAuthed }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [mode, setMode] = useState("signup");
@@ -160,6 +193,7 @@ export default function LandingPage({ onAuthed }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const heroRef = useParallax();
+  const visualRef = usePointerDepth();
   const [navScrolled, setNavScrolled] = useState(false);
 
   useScrollReveal();
@@ -225,7 +259,7 @@ export default function LandingPage({ onAuthed }) {
     <div className="lp-shell">
       <nav className={"lp-nav" + (navScrolled ? " scrolled" : "")}>
         <div className="lp-nav-brand">
-          <img className="lp-brand-logo" src="/assets/images/Piano_Coach.png" alt="Piano Coach" />
+          <img className="lp-brand-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach" />
         </div>
         <div className="lp-nav-links">
           <a href="#features">Features</a>
@@ -252,7 +286,7 @@ export default function LandingPage({ onAuthed }) {
             <span><strong>No card</strong> needed to start</span>
           </div>
         </div>
-        <div className="lp-hero-visual lp-reveal lp-reveal-delay-1">
+        <div ref={visualRef} className="lp-hero-visual lp-reveal lp-reveal-delay-1">
           <div className="lp-orbit orbit-one" aria-hidden="true" />
           <div className="lp-orbit orbit-two" aria-hidden="true" />
           <div className="lp-hero-note note-a" aria-hidden="true">♪</div>
@@ -412,14 +446,14 @@ export default function LandingPage({ onAuthed }) {
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
-            <img className="lp-footer-logo" src="/assets/images/Piano_Coach.png" alt="Piano Coach" />
+            <img className="lp-footer-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach" />
           </div>
           <p>Piano Coach helps students prepare for graded piano exams with real-time feedback and structured practice plans.</p>
-          <div className="lp-parent-brand"><span>Part of</span><img src="/assets/images/Music_Coach.png" alt="Music Coach" /></div>
+          <div className="lp-parent-brand"><span>Part of</span><img src="/assets/logos/music-coach-white.svg" alt="Music Coach" /></div>
           <div className="lp-footer-legal">
             <span>© {new Date().getFullYear()} Piano Coach</span>
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
           </div>
         </div>
       </footer>
@@ -428,7 +462,7 @@ export default function LandingPage({ onAuthed }) {
         <div className="lp-auth-overlay" onClick={(e) => { if (e.target === e.currentTarget) setOverlayOpen(false); }}>
           <div className="lp-auth-card">
             <button className="lp-auth-close" onClick={() => setOverlayOpen(false)}>×</button>
-            <img className="lp-auth-logo" src="/assets/images/Piano_Coach.png" alt="Piano Coach" />
+            <img className="lp-auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach" />
             <span className="lp-eyebrow">{mode === "signup" ? "BEGIN YOUR JOURNEY" : "WELCOME BACK"}</span>
             <h2>{mode === "signup" ? "Create your account." : "Sign in to Piano Coach."}</h2>
             <p>{mode === "signup" ? "Start your free 60-minute demo. No card required." : "Continue your musical progress."}</p>

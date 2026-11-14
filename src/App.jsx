@@ -274,12 +274,12 @@ export default function App() {
     setPage("practice");
   }
 
-  if (loading) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><div className="pc-loading-copy">Preparing your musical space</div><div className="pc-loading-track"><i /></div></div>;
-  if (loadError) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><h1>Your account needs attention.</h1><p>{loadError}</p><button className="pc-button primary" onClick={() => window.location.reload()}>Try again</button></div>;
+  if (loading) return <div className="pc-loading-screen"><img className="pc-loading-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><div className="pc-loading-copy">Preparing your musical space</div><div className="pc-loading-track"><i /></div></div>;
+  if (loadError) return <div className="pc-loading-screen"><img className="pc-loading-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><h1>Your account needs attention.</h1><p>{loadError}</p><button className="pc-button primary" onClick={() => window.location.reload()}>Try again</button></div>;
 
   return <div className="pc-app">
     <aside className="pc-sidebar">
-      <div className="pc-brand"><span className="pc-brand-mark">𝄞</span><div><strong>Piano <em>Coach</em></strong><small>YOUR MUSICAL JOURNEY</small></div></div>
+      <div className="pc-brand"><img className="pc-brand-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><small>YOUR MUSICAL JOURNEY</small></div>
       <div className="pc-sidebar-label">YOUR SPACE</div>
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Home</span></button>

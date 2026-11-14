@@ -2,6 +2,8 @@ import Stripe from "stripe";
 import { requireUser } from "../_lib/auth.js";
 import { database } from "../_lib/db.js";
 import { requireMethod, sendJson } from "../_lib/http.js";
+import { requireAdmin } from "../_lib/admin.js";
+import { listSitePagesForAdmin, readSitePage, saveSitePage } from "../_lib/site-pages.js";
 
 let stripeClient;
 function stripe() {
@@ -178,25 +180,6 @@ async function portal(req,res) {
   }
 }
 
-async function requireAdmin(req,res) {
-  const user = await requireUser(req,res);
-  if (!user) return null;
-  if (!user.emailVerified) { sendJson(res,403,{error:"Verify your email first."}); return null; }
-  let result;
-  try {
-    result = await database().query(
-      "SELECT role FROM admin_users WHERE lower(email)=lower($1) AND active=TRUE LIMIT 1",
-      [user.email],
-    );
-  } catch (error) {
-    console.error("Admin access lookup failed:",error.message);
-    sendJson(res,503,{error:"Admin access is not set up yet. Review and apply database migration 014."});
-    return null;
-  }
-  if (!result.rowCount) { sendJson(res,403,{error:"Admin access required."}); return null; }
-  return user;
-}
-
 async function adminOverview(req,res) {
   const admin = await requireAdmin(req,res);
   if (!admin) return;
@@ -306,5 +289,7 @@ export default async function handler(req,res) {
   if (action==="admin") { if (!requireMethod(req,res,"GET")) return; return adminOverview(req,res); }
   if (action==="admin-discounts") { if (req.method==="GET") return adminOverview(req,res); if (!requireMethod(req,res,"POST")) return; return createAdminDiscount(req,res); }
   if (action==="admin-discount-deactivate") { if (!requireMethod(req,res,"POST")) return; return deactivateAdminDiscount(req,res); }
+  if (action==="site-page") { if (!requireMethod(req,res,"GET")) return; return readSitePage(req,res); }
+  if (action==="admin-site-pages") { if (req.method==="GET") return listSitePagesForAdmin(req,res); if (!requireMethod(req,res,"PUT")) return; return saveSitePage(req,res); }
   return sendJson(res,404,{error:"Billing action not found."});
 }

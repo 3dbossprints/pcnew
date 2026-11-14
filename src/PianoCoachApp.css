@@ -1005,6 +1005,12 @@ button{color:inherit}
   .pc-mistake-recording-target{min-height:48px;padding:6px 0}
 }
 
+.pc-brand{align-items:flex-start;gap:0;flex-direction:column;padding-inline:10px}
+.pc-brand-logo{display:block;width:170px;height:auto;max-height:48px;object-fit:contain;object-position:left center}
+.pc-brand small{margin-top:8px;padding-left:2px}
+.pc-loading-logo{display:block;width:180px;height:auto;max-height:56px;object-fit:contain;filter:brightness(0) saturate(100%) invert(17%) sepia(11%) saturate(912%) hue-rotate(92deg) brightness(91%) contrast(90%)}
+@media(max-width:600px){.pc-brand-logo{width:145px}}
+
 /* Mobile bottom-nav safe area and keyboard-aware layout */
 @media(max-width:600px){
   .pc-sidebar{

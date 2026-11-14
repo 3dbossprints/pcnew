@@ -1,20 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { auth } from "./lib/firebase.js";
+import { adminApi } from "./lib/admin-api.js";
+import AdminLegalPages from "./AdminLegalPages.jsx";
 import "./AdminDashboard.css";
-
-async function adminApi(path, options = {}) {
-  const user = auth?.currentUser;
-  if (!user) throw new Error("Your session has expired. Please sign in again.");
-  const token = await user.getIdToken();
-  const response = await fetch(path, {
-    method: options.method || "GET",
-    headers: { Authorization: "Bearer " + token, ...(options.body ? { "Content-Type": "application/json" } : {}) },
-    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || "Admin request failed.");
-  return body;
-}
 
 function formatBytes(bytes) {
   const mb = Number(bytes || 0) / (1024 * 1024);
@@ -87,8 +74,8 @@ export default function AdminDashboard({ onExit }) {
     } catch (err) { setMessage(err.message || "The discount code could not be deactivated."); }
   }
 
-  if (loading && !data) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><div className="pc-loading-copy">Loading admin dashboard</div><div className="pc-loading-track"><i /></div></div>;
-  if (error && !data) return <div className="pc-loading-screen"><div className="pc-loading-mark">𝄞</div><h1>Admin access required</h1><p>{error}</p><button className="pc-button primary" onClick={onExit}>Back to app</button></div>;
+  if (loading && !data) return <div className="pc-loading-screen"><img className="pc-loading-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><div className="pc-loading-copy">Loading admin dashboard</div><div className="pc-loading-track"><i /></div></div>;
+  if (error && !data) return <div className="pc-loading-screen"><img className="pc-loading-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><h1>Admin access required</h1><p>{error}</p><button className="pc-button primary" onClick={onExit}>Back to app</button></div>;
 
   const stats = data?.stats || {};
   const users = stats.users || {};
@@ -109,6 +96,7 @@ export default function AdminDashboard({ onExit }) {
       <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>Overview</button>
       <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>Users</button>
       <button className={tab === "discounts" ? "active" : ""} onClick={() => setTab("discounts")}>Discount codes</button>
+      <button className={tab === "legal" ? "active" : ""} onClick={() => setTab("legal")}>Legal pages</button>
     </nav>
     {message && <p className="pc-admin-message" role="status">{message}</p>}
     {error && data && <p className="pc-admin-message error" role="alert">{error}</p>}
@@ -183,5 +171,6 @@ export default function AdminDashboard({ onExit }) {
         {!discounts.length && <p className="pc-admin-empty">No discount codes yet. Create your first code above.</p>}</div>
       </section>
     </div>}
+    {tab === "legal" && <AdminLegalPages />}
   </div>;
 }

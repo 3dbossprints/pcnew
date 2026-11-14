@@ -73,11 +73,11 @@ export default function AuthGate({ children }) {
     return () => { active = false; };
   }, [checking, verifyToken]);
 
-  if (!firebaseConfigured) return <main className="auth-screen"><section className="auth-card"><div className="auth-mark">𝄞</div><p className="eyebrow">PIANO COACH SETUP</p><h1>One last connection.</h1><p>Firebase sign-in is ready in the project, but its public web configuration still needs to be added to the Vercel environment.</p><p className="auth-help">No passwords or secret keys belong in the website code. Add the VITE_FIREBASE settings in Vercel to enable sign-in.</p></section></main>;
-  if (checking) return <main className="auth-screen"><section className="auth-card"><div className="auth-mark">𝄞</div><p>Preparing your musical space…</p></section></main>;
+  if (!firebaseConfigured) return <main className="auth-screen"><section className="auth-card"><img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><p className="eyebrow">PIANO COACH SETUP</p><h1>One last connection.</h1><p>Firebase sign-in is ready in the project, but its public web configuration still needs to be added to the Vercel environment.</p><p className="auth-help">No passwords or secret keys belong in the website code. Add the VITE_FIREBASE settings in Vercel to enable sign-in.</p></section></main>;
+  if (checking) return <main className="auth-screen"><section className="auth-card"><img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><p>Preparing your musical space…</p></section></main>;
 
   if (user && !user.emailVerified) return <main className="auth-screen"><section className="auth-card">
-    <div className="auth-mark">𝄞</div><p className="eyebrow">CHECK YOUR INBOX</p><h1>Verify your email.</h1>
+    <img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><p className="eyebrow">CHECK YOUR INBOX</p><h1>Verify your email.</h1>
     <p>We sent a verification link and a six-digit code to <strong>{user.email}</strong>. Both expire after five minutes.</p>
     {message && <p className="auth-message" role="alert">{message}</p>}
     <form className="auth-form" onSubmit={async event => {
@@ -155,7 +155,7 @@ export default function AuthGate({ children }) {
   if (!hasResetToken && mode === "signin") return <LandingPage />;
 
   return <main className="auth-screen"><section className="auth-card">
-    <div className="auth-mark">𝄞</div><p className="eyebrow">YOUR MUSICAL JOURNEY</p>
+    <img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><p className="eyebrow">YOUR MUSICAL JOURNEY</p>
     <h1>{mode === "signup" ? "A lovely place to begin." : mode === "forgot" ? "Reset your password." : "Welcome back."}</h1>
     <p>{mode === "signup" ? "Create your account and start making music." : mode === "forgot" ? resetToken ? "Choose a new password to finish resetting your account." : resetRequested ? "Enter the six-digit code from your email and choose a new password." : "We will email you a secure reset link and a six-digit code." : "Sign in to continue your progress."}</p>
     <form onSubmit={submit} className="auth-form">
