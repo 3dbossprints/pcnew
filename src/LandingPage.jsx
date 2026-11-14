@@ -225,8 +225,7 @@ export default function LandingPage({ onAuthed }) {
     <div className="lp-shell">
       <nav className={"lp-nav" + (navScrolled ? " scrolled" : "")}>
         <div className="lp-nav-brand">
-          <span className="lp-nav-mark">𝄞</span>
-          <strong>Piano <em>Coach</em></strong>
+          <img className="lp-brand-logo" src="/assets/images/Piano_Coach.png" alt="Piano Coach" />
         </div>
         <div className="lp-nav-links">
           <a href="#features">Features</a>
@@ -254,7 +253,12 @@ export default function LandingPage({ onAuthed }) {
           </div>
         </div>
         <div className="lp-hero-visual lp-reveal lp-reveal-delay-1">
+          <div className="lp-orbit orbit-one" aria-hidden="true" />
+          <div className="lp-orbit orbit-two" aria-hidden="true" />
+          <div className="lp-hero-note note-a" aria-hidden="true">♪</div>
+          <div className="lp-hero-note note-b" aria-hidden="true">♫</div>
           <div className="lp-stage">
+            <div className="lp-stage-floor" aria-hidden="true" />
             <div className="lp-device">
               <div className="lp-device-bar"><span>Assisted Practice · Bar 4</span><span className="lp-live"><i />Listening</span></div>
               <StaffPreview highlightX={146} missedIndex={3} />
@@ -272,6 +276,7 @@ export default function LandingPage({ onAuthed }) {
             <span className="lp-float-icon">◎</span>
             <div><strong>Grade Plan</strong><small>Track your syllabus</small></div>
           </div>
+          <div className="lp-hero-chip lp-chip-score" aria-hidden="true"><span>+12</span><small>bars improved</small></div>
         </div>
       </section>
 
@@ -403,10 +408,10 @@ export default function LandingPage({ onAuthed }) {
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
-            <span className="lp-nav-mark">𝄞</span>
-            <strong>Piano <em>Coach</em></strong>
+            <img className="lp-footer-logo" src="/assets/images/Piano_Coach.png" alt="Piano Coach" />
           </div>
           <p>Piano Coach helps students prepare for graded piano exams with real-time feedback and structured practice plans.</p>
+          <div className="lp-parent-brand"><span>Part of</span><img src="/assets/images/Music_Coach.png" alt="Music Coach" /></div>
           <div className="lp-footer-legal">
             <span>© {new Date().getFullYear()} Piano Coach</span>
             <a href="#">Privacy</a>
@@ -419,7 +424,7 @@ export default function LandingPage({ onAuthed }) {
         <div className="lp-auth-overlay" onClick={(e) => { if (e.target === e.currentTarget) setOverlayOpen(false); }}>
           <div className="lp-auth-card">
             <button className="lp-auth-close" onClick={() => setOverlayOpen(false)}>×</button>
-            <div className="lp-auth-mark">𝄞</div>
+            <img className="lp-auth-logo" src="/assets/images/Piano_Coach.png" alt="Piano Coach" />
             <span className="lp-eyebrow">{mode === "signup" ? "BEGIN YOUR JOURNEY" : "WELCOME BACK"}</span>
             <h2>{mode === "signup" ? "Create your account." : "Sign in to Piano Coach."}</h2>
             <p>{mode === "signup" ? "Start your free 60-minute demo. No card required." : "Continue your musical progress."}</p>
