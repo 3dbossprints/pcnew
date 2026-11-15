@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, updateProfile } from "firebase/auth";
+import { EmailAuthProvider, OAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, signOut, updatePassword, updateProfile } from "firebase/auth";
 import { auth, googleProvider } from "./lib/firebase.js";
 import { buildKeystoneTimeline, parseKeystoneMusicXML } from "./keystone-engine.js";
 import { searchScales } from "./scale-library.js";
@@ -98,7 +98,7 @@ function recommendNextTask(tasks, attempts) {
   scored.sort((a, b) => b.priority - a.priority);
   return scored.filter(item => item.lastAttempted > 0 || item.task).slice(0, 3).map(item => item.task);
 }
-function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }
+function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }\nfunction formatPromoCodeInput(value) { const code = String(value || "").replace(/\\s+/g, "").toUpperCase(); return /^[A-Z0-9]{0,8}$/.test(code) && code.length > 4 ? code.slice(0, 4) + " " + code.slice(4) : code; }
 
 export default function App() {
   const [page, setPage] = useState("home");
@@ -1034,7 +1034,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [discountCode,setDiscountCode]=useState("");
   const [checkoutSecret,setCheckoutSecret]=useState("");
   const [deletionStep,setDeletionStep]=useState("idle");
-  const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");
+  const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");\n  const [deletionCode,setDeletionCode]=useState("");\n  const [discountBusy,setDiscountBusy]=useState(false);\n  const [discountMessage,setDiscountMessage]=useState("");
   const [deletionBusy,setDeletionBusy]=useState(false);
   const [deletionMessage,setDeletionMessage]=useState("");
   const plan=user.plan||"free";
@@ -1091,22 +1091,49 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
     setDeletionMessage("");
     try{
       const current=auth.currentUser;
-      const emailProvider=(current.providerData||[]).some(p=>p.providerId==="password");
-      if(emailProvider){
+      const passwordProvider=(current.providerData||[]).some(p=>p.providerId==="password");
+      if(passwordProvider){
         if(!deletionConfirmPassword)throw new Error("Enter your password to confirm your identity.");
         const credential=EmailAuthProvider.credential(current.email,deletionConfirmPassword);
         await reauthenticateWithCredential(current,credential);
       }else{
-        await reauthenticateWithPopup(current,googleProvider);
+        const connectedProvider=(current.providerData||[]).find(p=>p.providerId!=="password");
+        if(!connectedProvider)throw new Error("Reconnect your sign-in service before deleting your account.");
+        const provider=connectedProvider.providerId==="google.com"?googleProvider:new OAuthProvider(connectedProvider.providerId);
+        await reauthenticateWithPopup(current,provider);
       }
-      await api("/api/profile",{method:"PATCH",body:{deletionAction:{action:"request"}}});
-      await onRefresh();
-      setDeletionStep("requested");
+      const result=await api("/api/profile",{method:"PATCH",body:{deletionAction:{action:"send-code"}}});
+      setDeletionStep("code");
+      setDeletionCode("");
       setDeletionConfirmPassword("");
-      setDeletionMessage("Your deletion request has been received. You have 15 days to cancel.");
+      setDeletionMessage(result.message||"A six-digit confirmation code has been emailed to you.");
     }catch(error){
       setDeletionMessage(error.message||"We could not verify your identity. Please try again.");
     }finally{setDeletionBusy(false);}
+  }
+  async function confirmDeletion(event){
+    event.preventDefault();
+    setDeletionBusy(true);
+    setDeletionMessage("");
+    try{
+      await api("/api/profile",{method:"PATCH",body:{deletionAction:{action:"verify-code",code:deletionCode}}});
+      await onRefresh();
+      setDeletionStep("requested");
+      setDeletionCode("");
+      setDeletionMessage("Your code is confirmed. Your account is scheduled for deletion in 15 days. You can cancel during that period.");
+    }catch(error){
+      setDeletionMessage(error.message||"That confirmation code could not be verified.");
+    }finally{setDeletionBusy(false);}
+  }
+  async function applyCurrentDiscount(){
+    setDiscountBusy(true);
+    setDiscountMessage("");
+    try{
+      const result=await api("/api/billing/apply-discount",{method:"POST",body:{discountCode:discountCode.replace(/\\s/g,"")}});
+      setDiscountMessage(result.message||"Your discount has been applied.");
+      setDiscountCode("");
+    }catch(error){setDiscountMessage(error.message||"The discount could not be applied.");}
+    finally{setDiscountBusy(false);}
   }
   async function cancelDeletion(){
     setDeletionBusy(true);
@@ -1151,7 +1178,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
         {interfaceOpen&&<div className="pc-interface-settings"><label>Appearance<select value={theme} onChange={e=>setTheme(e.target.value)}><option value="light">Light</option><option value="dark">Dark</option><option value="contrast">High contrast</option></select></label><label>Text size<select value={fontSize} onChange={e=>setFontSize(e.target.value)}><option value="normal">Standard</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><p>Changes are applied in this browser and saved with your profile.</p></div>}
       </section>
       <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">04 · SECURITY</span><h2>Change password</h2><div className="pc-profile-fields"><label>Current password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder={connected.includes("password")?"Current password":"Not needed for Google sign-in"}/></label><label>New password<input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} autoComplete="new-password"/></label></div><button type="button" className="pc-button outline" disabled={passwordBusy||!newPassword} onClick={changePassword}>{passwordBusy?"Updating…":"Update password"}</button><p className="pc-muted-small">At least 8 characters, including uppercase, lowercase and a number.</p></section>
-      <section className="pc-panel pc-profile-section pc-delete-note">
+      <div className="pc-profile-logout"><button type="button" className="pc-button outline" onClick={async()=>{try{await signOut(auth);window.location.assign("/");}catch(error){setAccountMessage(error.message||"You could not be signed out.");}}}>Log out</button></div>\n      <section className="pc-panel pc-profile-section pc-delete-note">
         <span className="pc-eyebrow">05 · ACCOUNT DELETION</span>
         <h2>Leaving Piano Coach?</h2>
         {deletionActive ? (
@@ -1171,14 +1198,26 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
             <p>Requesting account deletion will verify your identity, cancel any active subscription, and start a <strong>15-day grace period</strong>. During that time you can cancel the request and keep your account. After 15 days, all of your data is permanently deleted.</p>
             <button type="button" className="pc-button danger" onClick={()=>{setDeletionStep("confirm");setDeletionMessage("");}}>Request account deletion</button>
           </>
+        ) : deletionStep==="code" ? (
+          <>
+            <p className="pc-deletion-warning">Enter the six-digit code we emailed to your account. The code expires after 10 minutes.</p>
+            <form onSubmit={confirmDeletion} className="pc-deletion-form">
+              <label className="field"><span>Email confirmation code</span><input inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={deletionCode} onChange={e=>setDeletionCode(e.target.value.replace(/[^0-9]/g,"").slice(0,6))} required/></label>
+              {deletionMessage&&<p className="pc-form-error" role="alert">{deletionMessage}</p>}
+              <div className="pc-deletion-buttons">
+                <button type="submit" className="pc-button danger" disabled={deletionBusy||deletionCode.length!==6}>{deletionBusy?"Checking…":"Verify code and continue"}</button>
+                <button type="button" className="pc-button outline" disabled={deletionBusy} onClick={()=>{setDeletionStep("confirm");setDeletionCode("");setDeletionMessage("");}}>Back</button>
+              </div>
+            </form>
+          </>
         ) : (
           <>
-            <p className="pc-deletion-warning">To confirm your identity, please {connected.includes("password")?"enter your password":"re-authenticate with Google"} below. This is required before a deletion request can be submitted.</p>
+            <p className="pc-deletion-warning">To confirm your identity, please {connected.includes("password")?"enter your password":"sign in again with your connected service"} below. We will then email you a six-digit confirmation code.</p>
             <form onSubmit={requestDeletion} className="pc-deletion-form">
               {connected.includes("password")&&<label className="field"><span>Your password</span><input type="password" autoComplete="current-password" value={deletionConfirmPassword} onChange={e=>setDeletionConfirmPassword(e.target.value)} required/></label>}
               {deletionMessage&&<p className="pc-form-error" role="alert">{deletionMessage}</p>}
               <div className="pc-deletion-buttons">
-                <button type="submit" className="pc-button danger" disabled={deletionBusy}>{deletionBusy?"Verifying…":"Confirm deletion request"}</button>
+                <button type="submit" className="pc-button danger" disabled={deletionBusy}>{deletionBusy?"Verifying…":"Continue"}</button>
                 <button type="button" className="pc-button outline" disabled={deletionBusy} onClick={()=>{setDeletionStep("idle");setDeletionConfirmPassword("");setDeletionMessage("");}}>Back</button>
               </div>
             </form>
@@ -1186,7 +1225,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
         )}
       </section>
       <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">06 · SUBSCRIPTION</span><div className="pc-billing-heading"><div><h2>{plan==="pro"?"Piano Coach Pro":plan==="basic"?"Piano Coach Basic":"Free demo"}</h2><p>{plan==="pro"?(user.subscription_interval==="annual"?"Pro · billed annually":"£19.99 per month"):plan==="basic"?(user.subscription_interval==="annual"?"Basic · billed annually":"£9.99 per month"):"60 lifetime practice minutes"}</p></div><span className="pc-plan-tag">{String(user.subscription_status||"free").replace("_"," ").toUpperCase()}</span></div>
-        {user.stripe_customer_id?<button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic</option><option value="pro">Pro</option></select></label><label>Billing interval<select value={checkoutInterval} onChange={e=>setCheckoutInterval(e.target.value)}><option value="monthly">Monthly</option><option value="annual">Annual</option></select></label><label>Discount code (optional)<input value={discountCode} onChange={e=>setDiscountCode(e.target.value.toUpperCase())} placeholder="Enter code" autoComplete="off"/></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
+        {user.stripe_customer_id?<><button type="button" className="pc-button outline" onClick={openPortal}>Manage subscription ↗</button>{user.stripe_subscription_id&&["active","trialing","past_due"].includes(user.subscription_status)&&<div className="pc-upgrade-row pc-existing-discount"><label>Apply a discount code<input value={discountCode} onChange={e=>setDiscountCode(formatPromoCodeInput(e.target.value))} placeholder="XXXX XXXX" autoComplete="off" maxLength={25}/></label><button type="button" className="pc-button dark" onClick={applyCurrentDiscount} disabled={discountBusy||!discountCode.trim()}>{discountBusy?"Applying…":"Apply code"}</button>{discountMessage&&<p className="pc-muted-small" role="status">{discountMessage}</p>}</div>}</>:<div className="pc-upgrade-row"><label>Choose plan<select value={checkoutPlan} onChange={e=>setCheckoutPlan(e.target.value)}><option value="basic">Basic</option><option value="pro">Pro</option></select></label><label>Billing interval<select value={checkoutInterval} onChange={e=>setCheckoutInterval(e.target.value)}><option value="monthly">Monthly</option><option value="annual">Annual</option></select></label><label>Discount code (optional)<input value={discountCode} onChange={e=>setDiscountCode(formatPromoCodeInput(e.target.value))} placeholder="XXXX XXXX" autoComplete="off" maxLength={25}/></label><button type="button" className="pc-button dark" onClick={startCheckout}>Continue to Stripe ↗</button></div>}
         <p className="pc-muted-small">Plan and billing interval changes are managed securely through Stripe. Piano Coach updates your account when Stripe confirms the change.</p>
       </section>
       {accountMessage&&<p className="pc-form-error" role="alert">{accountMessage}</p>}
