@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import PianoLoader from "./PianoLoader.jsx";
+import LandingSoundToggle from "./LandingSoundToggle.jsx";
 import LandingScene from "./LandingScene.jsx";
 import LandingAssetGallery from "./LandingAssetGallery.jsx";
 import "./landing-depth.css";
@@ -220,7 +221,7 @@ export default function LandingPage({ onAuthed }) {
           <a href="#3d-elements">3D elements</a>
           <a href="#pricing">Pricing</a>
         </div>
-        <div className="lp-nav-actions">
+        <div className="lp-nav-actions">\n          <LandingSoundToggle />
           <button className="lp-nav-signin" onClick={() => openAuth("signin")}>Sign in</button>
           <button className="lp-nav-cta" onClick={() => openAuth("signup")}>Start free</button>
         </div>
