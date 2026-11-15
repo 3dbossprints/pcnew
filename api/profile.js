@@ -185,7 +185,11 @@ export default async function handler(req, res) {
   }
 
   if (body.deletionAction) {
-    try { return await handleDeletion(req, res, user, body); }
+    try {
+      if (body.deletionAction.action === "send-code") return await sendDeletionCode(req, res, user);
+      if (body.deletionAction.action === "verify-code") return await verifyDeletionCode(req, res, user, body);
+      return await handleDeletion(req, res, user, body);
+    }
     catch (error) {
       console.error("PATCH /api/profile deletion action failed:", error.message);
       return sendJson(res, 503, { error: "The account deletion request could not be completed." });
