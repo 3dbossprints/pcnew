@@ -190,6 +190,7 @@ export default function LandingPage({ onAuthed }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [mode, setMode] = useState("signup");
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -213,8 +214,11 @@ export default function LandingPage({ onAuthed }) {
     try {
       if (mode === "signup") {
         if (!passwordIsValid(password)) throw new Error("Use at least 8 characters, including uppercase, lowercase and a number.");
+        const cleanName = name.trim();
+        if (!cleanName || cleanName.length > 100) throw new Error("Enter your name (up to 100 characters).");
         const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const token = await credential.user.getIdToken();
+        await updateProfile(credential.user, { displayName: cleanName });
+        const token = await credential.user.getIdToken(true);
         await fetch("/api/auth/email-code", { method: "POST", headers: { Authorization: "Bearer " + token } });
         setMessage("Check your inbox for a verification link and code.");
       } else {
@@ -469,6 +473,10 @@ export default function LandingPage({ onAuthed }) {
             <h2>{mode === "signup" ? "Create your account." : "Sign in to Piano Coach."}</h2>
             <p>{mode === "signup" ? "Start your free 60-minute demo. No card required." : "Continue your musical progress."}</p>
             <form className="lp-auth-form" onSubmit={submit}>
+              {mode === "signup" && <label className="lp-field">
+                <span>Your name</span>
+                <input type="text" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required />
+              </label>}
               <label className="lp-field">
                 <span>Email address</span>
                 <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -485,7 +493,7 @@ export default function LandingPage({ onAuthed }) {
             <button className="lp-button-outline" disabled={busy} onClick={googleSignIn}>Continue with Google</button>
             <p className="lp-auth-switch">
               {mode === "signup" ? "Already have an account?" : "New to Piano Coach?"}
-              <button onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setMessage(""); }}>
+              <button onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setMessage(""); setName(""); }}>
                 {mode === "signup" ? "Sign in" : "Create an account"}
               </button>
             </p>
