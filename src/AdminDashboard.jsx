@@ -18,6 +18,8 @@ function formatDate(value) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
+function formatCode(value) { const code = String(value || "").replace(/\s+/g, "").toUpperCase(); return /^[A-Z0-9]{8}$/.test(code) ? code.slice(0, 4) + " " + code.slice(4) : code; }
+function formatCodeInput(value) { const code = String(value || "").replace(/\s+/g, "").toUpperCase(); return /^[A-Z0-9]{0,8}$/.test(code) && code.length > 4 ? code.slice(0, 4) + " " + code.slice(4) : code; }
 function formatDiscount(item) {
   return item.discount_type === "percent" ? Number(item.discount_value) + "%" : "£" + Number(item.discount_value).toFixed(2);
 }
@@ -39,7 +41,7 @@ export default function AdminDashboard({ onExit }) {
     setLoading(true);
     setError("");
     try { setData(await adminApi("/api/billing/admin")); }
-    catch (err) { setError(err.message); }
+    catch (err) { if (err.status === 403) { window.location.replace("/"); return; } setError(err.message); }
     finally { setLoading(false); }
   }, []);
 
@@ -55,8 +57,9 @@ export default function AdminDashboard({ onExit }) {
     setSavingDiscount(true);
     setMessage("");
     try {
-      await adminApi("/api/billing/admin-discounts", { method: "POST", body: form });
-      setMessage("Discount code created in Stripe and saved.");
+      const result = await adminApi("/api/billing/admin-discounts", { method: "POST", body: { ...form, code: form.code.replace(/\\s+/g, "") } });
+      const createdCode = result.discountCode?.code;
+      setMessage(createdCode ? "Discount created. Share this code: " + formatCode(createdCode) : "Discount code created in Stripe and saved.");
       setForm(current => ({ ...current, code: "", allowedEmail: "", maxRedemptions: "", expiresAt: "" }));
       await load();
       setTab("discounts");
@@ -153,7 +156,7 @@ export default function AdminDashboard({ onExit }) {
         <div className="pc-panel-heading"><div><span className="pc-eyebrow">STRIPE PROMOTION</span><h3>Create a discount code</h3></div></div>
         <p className="pc-admin-help">Create a real Stripe discount. Leave the email blank to allow anyone to use it.</p>
         <form className="pc-admin-discount-form" onSubmit={createDiscount}>
-          <label>Code<input value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})} placeholder="WELCOME20" minLength={4} maxLength={24} required/></label>
+          <label>Code<input value={form.code} onChange={e=>setForm({...form,code:formatCodeInput(e.target.value)})} placeholder={form.allowedEmail ? "Auto-generated for this email" : "WELCOME20"} minLength={4} maxLength={25} required={!form.allowedEmail}/><small>{form.allowedEmail ? "Leave blank to generate a unique 8-character code for this email." : "Use 4–24 letters, numbers, hyphens or underscores."}</small></label>
           <label>Discount type<select value={form.discountType} onChange={e=>setForm({...form,discountType:e.target.value})}><option value="percent">Percentage</option><option value="amount">Fixed amount (GBP)</option></select></label>
           <label>{form.discountType==="percent"?"Percentage off":"Amount off (£)"}<input type="number" min="0.01" max={form.discountType==="percent"?"100":"9999.99"} step="0.01" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} required/></label>
           <label>Duration<select value={form.duration} onChange={e=>setForm({...form,duration:e.target.value})}><option value="once">First payment only</option><option value="repeating">Repeat for a set period</option><option value="forever">For every renewal</option></select></label>
@@ -166,7 +169,7 @@ export default function AdminDashboard({ onExit }) {
       </section>
       <section className="pc-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">PROMOTION CODES</span><h3>Existing codes</h3></div><span>{discounts.length} total</span></div>
         <div className="pc-admin-discount-list">{discounts.map(item=><div className="pc-admin-discount-row" key={item.id}>
-          <div><strong>{item.code}</strong><small>{formatDiscount(item)} off · {item.allowed_email || "Everyone"}</small></div>
+          <div><strong>{formatCode(item.code)}</strong><small>{formatDiscount(item)} off · {item.allowed_email || "Everyone"}</small></div>
           <div><small>{item.duration==="repeating"?item.duration_in_months+" months":item.duration==="forever"?"Every renewal":"First payment"}</small><small>{item.redemption_count || 0}{item.max_redemptions?" / "+item.max_redemptions:""} used</small></div>
           <div><span className={"pc-admin-status "+(item.active?"active":"inactive")}>{item.active?"Active":"Inactive"}</span>{item.active&&<button className="pc-admin-deactivate" onClick={()=>deactivateDiscount(item)}>Deactivate</button>}</div>
         </div>)}
