@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { randomInt } from "node:crypto";
 import { requireUser } from "../_lib/auth.js";
 import { database } from "../_lib/db.js";
 import { requireMethod, sendJson } from "../_lib/http.js";
@@ -10,6 +11,10 @@ function stripe() {
   if (!process.env.STRIPE_SECRET_KEY) throw new Error("Stripe is not configured.");
   if (!stripeClient) stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
   return stripeClient;
+}
+function generatedDiscountCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 8 }, () => alphabet[randomInt(0, alphabet.length)]).join("");
 }
 function appUrl() {
   return (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\/+$/, "");
@@ -53,7 +58,7 @@ async function checkout(req,res) {
       return sendJson(res,409,{error:"You already have a subscription. Manage it from Account & billing."});
     }
     let appliedDiscount = null;
-    const discountCode = String(req.body?.discountCode || "").trim().toUpperCase();
+    const discountCode = String(req.body?.discountCode || "").replace(/\s+/g, "").trim().toUpperCase();
     if (discountCode) {
       const discountResult = await db.query(
         "SELECT id,code,allowed_email,stripe_promotion_code_id,active,expires_at,max_redemptions,redemption_count FROM discount_codes WHERE code=$1 LIMIT 1",
@@ -180,18 +185,61 @@ async function portal(req,res) {
   }
 }
 
+async function applyDiscount(req,res) {
+  const user = await requireUser(req,res);
+  if (!user) return;
+  if (!user.emailVerified) return sendJson(res,403,{error:"Verify your email before applying a discount."});
+  const code = String(req.body?.discountCode || "").replace(/\s+/g,"").trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{4,24}$/.test(code)) return sendJson(res,400,{error:"Enter a valid discount code."});
+  try {
+    const db = database();
+    const account = await db.query("SELECT stripe_subscription_id,subscription_status FROM users WHERE firebase_uid=$1",[user.uid]);
+    if (!account.rowCount) return sendJson(res,404,{error:"Your Piano Coach profile could not be found."});
+    const { stripe_subscription_id: subscriptionId, subscription_status: status } = account.rows[0];
+    if (!subscriptionId || !["active","trialing","past_due"].includes(status)) {
+      return sendJson(res,409,{error:"There is no active subscription to apply a discount to. Use the checkout discount field when choosing a plan."});
+    }
+    const found = await db.query(
+      "SELECT id,code,allowed_email,stripe_promotion_code_id,active,expires_at,max_redemptions,redemption_count FROM discount_codes WHERE code=$1 LIMIT 1",
+      [code],
+    );
+    const discount = found.rows[0];
+    if (!discount || !discount.active) return sendJson(res,400,{error:"That discount code is not valid."});
+    if (discount.allowed_email && discount.allowed_email.toLowerCase() !== String(user.email || "").toLowerCase()) {
+      return sendJson(res,403,{error:"That discount code is for a different email address."});
+    }
+    if (discount.expires_at && new Date(discount.expires_at).getTime() <= Date.now()) return sendJson(res,400,{error:"That discount code has expired."});
+    if (discount.max_redemptions && Number(discount.redemption_count) >= Number(discount.max_redemptions)) return sendJson(res,400,{error:"That discount code has reached its redemption limit."});
+    const stripeApi = stripe();
+    const subscription = await stripeApi.subscriptions.retrieve(subscriptionId);
+    if (subscription.metadata?.firebase_uid !== user.uid) return sendJson(res,403,{error:"This subscription does not belong to your account."});
+    if (subscription.discount || (Array.isArray(subscription.discounts) && subscription.discounts.length)) {
+      return sendJson(res,409,{error:"This subscription already has a discount applied. Contact support if you need it changed."});
+    }
+    await stripeApi.subscriptions.update(subscriptionId,{
+      discounts:[{promotion_code:discount.stripe_promotion_code_id}],
+      proration_behavior:"none",
+    });
+    await db.query("UPDATE discount_codes SET redemption_count=redemption_count+1,updated_at=NOW() WHERE id=$1",[discount.id]);
+    return sendJson(res,200,{applied:true,message:"Discount applied. It will be reflected on your next invoice."});
+  } catch(error) {
+    console.error("POST /api/billing/apply-discount failed:",error.message);
+    return sendJson(res,400,{error:"The discount could not be applied. Check the code and subscription status, then try again."});
+  }
+}
+
 async function adminOverview(req,res) {
   const admin = await requireAdmin(req,res);
   if (!admin) return;
   try {
     const db = database();
     const [users,sessions,plans,files,tasks,recent,admins,discounts,pendingDeletions,audit] = await Promise.all([
-      db.query("SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE plan='free')::int AS free, COUNT(*) FILTER (WHERE plan='basic')::int AS basic, COUNT(*) FILTER (WHERE plan='pro')::int AS pro, COUNT(*) FILTER (WHERE created_at >= NOW()-INTERVAL '7 days')::int AS new_this_week, COUNT(*) FILTER (WHERE deletion_requested_at IS NOT NULL AND deletion_scheduled_at>NOW())::int AS pending_deletion FROM users"),
+      db.query("SELECT COUNT(DISTINCT lower(email))::int AS total, COUNT(DISTINCT lower(email)) FILTER (WHERE plan='free')::int AS free, COUNT(DISTINCT lower(email)) FILTER (WHERE plan='basic')::int AS basic, COUNT(DISTINCT lower(email)) FILTER (WHERE plan='pro')::int AS pro, COUNT(DISTINCT lower(email)) FILTER (WHERE plan IN ('basic','pro') AND subscription_status IN ('active','trialing','past_due'))::int AS paid_students, COUNT(DISTINCT lower(email)) FILTER (WHERE created_at >= NOW()-INTERVAL '7 days')::int AS new_this_week, COUNT(DISTINCT lower(email)) FILTER (WHERE deletion_requested_at IS NOT NULL AND deletion_scheduled_at>NOW())::int AS pending_deletion, (COUNT(*)-COUNT(DISTINCT lower(email)))::int AS duplicate_profiles FROM users"),
       db.query("SELECT COUNT(*)::int AS total_sessions, COALESCE(SUM(duration_seconds),0)::int AS total_seconds, COUNT(*) FILTER (WHERE started_at>=NOW()-INTERVAL '7 days')::int AS sessions_this_week, COALESCE(AVG(score) FILTER (WHERE score IS NOT NULL),0)::float AS avg_score FROM practice_sessions WHERE ended_at IS NOT NULL"),
-      db.query("SELECT u.plan,COUNT(DISTINCT u.firebase_uid)::int AS count,COALESCE(SUM(ps.duration_seconds),0)::int AS practice_seconds FROM users u LEFT JOIN practice_sessions ps ON ps.firebase_uid=u.firebase_uid AND ps.ended_at IS NOT NULL GROUP BY u.plan ORDER BY u.plan"),
+      db.query("SELECT u.plan,COUNT(DISTINCT lower(u.email))::int AS count,COALESCE(SUM(ps.duration_seconds),0)::int AS practice_seconds FROM users u LEFT JOIN practice_sessions ps ON ps.firebase_uid=u.firebase_uid AND ps.ended_at IS NOT NULL GROUP BY u.plan ORDER BY u.plan"),
       db.query("SELECT COUNT(*)::int AS total_files,COALESCE(SUM(size_bytes),0)::bigint AS total_bytes,COUNT(*) FILTER (WHERE kind='sheet')::int AS sheet_files,COUNT(*) FILTER (WHERE kind='audio')::int AS audio_files FROM user_files WHERE status='ready'"),
       db.query("SELECT COUNT(*)::int AS total_tasks FROM practice_tasks WHERE is_archived=FALSE"),
-      db.query("SELECT u.email,u.display_name,u.plan,u.subscription_status,u.created_at,COALESCE(SUM(ps.duration_seconds),0)::int AS practice_seconds,COUNT(ps.id)::int AS session_count FROM users u LEFT JOIN practice_sessions ps ON ps.firebase_uid=u.firebase_uid AND ps.ended_at IS NOT NULL GROUP BY u.email,u.display_name,u.plan,u.subscription_status,u.created_at ORDER BY u.created_at DESC LIMIT 100"),
+      db.query("WITH practice_by_user AS (SELECT firebase_uid,COALESCE(SUM(duration_seconds),0)::int AS practice_seconds,COUNT(*)::int AS session_count FROM practice_sessions WHERE ended_at IS NOT NULL GROUP BY firebase_uid), profile_activity AS (SELECT u.firebase_uid,u.email,u.display_name,u.plan,u.subscription_status,u.created_at,u.stripe_subscription_id,COALESCE(p.practice_seconds,0)::int AS practice_seconds,COALESCE(p.session_count,0)::int AS session_count FROM users u LEFT JOIN practice_by_user p ON p.firebase_uid=u.firebase_uid) SELECT lower(email) AS email,COALESCE(MAX(NULLIF(display_name,'')),'Student') AS display_name,CASE WHEN COUNT(*)>1 THEN 'multiple' ELSE MAX(plan) END AS plan,string_agg(DISTINCT upper(plan),' + ' ORDER BY upper(plan)) AS plan_summary,CASE WHEN COUNT(*)>1 THEN 'multiple profiles' ELSE COALESCE(MAX(subscription_status),'free') END AS subscription_status,MIN(created_at) AS created_at,SUM(practice_seconds)::int AS practice_seconds,SUM(session_count)::int AS session_count,COUNT(*)::int AS profile_count,COUNT(DISTINCT stripe_subscription_id) FILTER (WHERE stripe_subscription_id IS NOT NULL AND subscription_status IN ('active','trialing','past_due'))::int AS active_subscriptions FROM profile_activity GROUP BY lower(email) ORDER BY MIN(created_at) DESC LIMIT 100"),
       db.query("SELECT email,role,active,created_at FROM admin_users ORDER BY created_at"),
       db.query("SELECT id,code,discount_type,discount_value,duration,duration_in_months,allowed_email,max_redemptions,redemption_count,expires_at,active,created_at FROM discount_codes ORDER BY created_at DESC LIMIT 100"),
       db.query("SELECT email,display_name,deletion_requested_at,deletion_scheduled_at FROM users WHERE deletion_requested_at IS NOT NULL AND deletion_scheduled_at>NOW() ORDER BY deletion_scheduled_at"),
@@ -211,11 +259,12 @@ async function createAdminDiscount(req,res) {
   const admin = await requireAdmin(req,res);
   if (!admin) return;
   const body = req.body || {};
-  const code = String(body.code || "").trim().toUpperCase();
+  const requestedCode = String(body.code || "").replace(/\s+/g, "").trim().toUpperCase();
   const discountType = body.discountType;
   const value = Number(body.value);
   const duration = body.duration || "once";
   const allowedEmail = body.allowedEmail ? String(body.allowedEmail).trim().toLowerCase() : null;
+  const code = allowedEmail ? generatedDiscountCode() : requestedCode;
   const months = Number(body.durationInMonths || 0);
   const maxRedemptions = body.maxRedemptions === "" || body.maxRedemptions == null ? null : Number(body.maxRedemptions);
   const expiry = body.expiresAt ? new Date(String(body.expiresAt) + "T23:59:59Z") : null;
@@ -285,6 +334,7 @@ export default async function handler(req,res) {
   const action=req.query?.action;
   if (action==="checkout") { if (!requireMethod(req,res,"POST")) return; return checkout(req,res); }
   if (action==="portal") { if (!requireMethod(req,res,"POST")) return; return portal(req,res); }
+  if (action==="apply-discount") { if (!requireMethod(req,res,"POST")) return; return applyDiscount(req,res); }
   if (action==="confirm") { if (!requireMethod(req,res,"POST")) return; return confirm(req,res); }
   if (action==="admin") { if (!requireMethod(req,res,"GET")) return; return adminOverview(req,res); }
   if (action==="admin-discounts") { if (req.method==="GET") return adminOverview(req,res); if (!requireMethod(req,res,"POST")) return; return createAdminDiscount(req,res); }
