@@ -224,7 +224,7 @@ export default function LandingAssetGallery() {
     };
   }, []);
 
-  return <section className="lp-asset-gallery-scroll" ref={sectionRef} aria-label="Explore the visual world of Piano Coach">
+  return <div className="lp-asset-gallery-scroll" ref={sectionRef} aria-label="Explore the visual world of Piano Coach">
     <div className="lp-asset-story">
       <div className="lp-asset-heading">
         <span className="lp-eyebrow">A WORLD OF ITS OWN</span>
@@ -245,5 +245,5 @@ export default function LandingAssetGallery() {
       <div className="lp-asset-stage-mark" aria-hidden="true">PC—3D</div>
       <div className="lp-asset-stage-counter"><span>SCROLL TO EXPLORE</span><b>0{active + 1}</b></div>
     </div>
-  </section>;
+  </div>;
 }
