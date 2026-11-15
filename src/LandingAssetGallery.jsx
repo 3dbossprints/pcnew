@@ -110,7 +110,7 @@ export default function LandingAssetGallery() {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(3.1, .012, 8, 160), new THREE.MeshBasicMaterial({ color: 0xb89a70, transparent: true, opacity: .45 }));
     ring.rotation.x = Math.PI / 2.7; ring.position.z = -1.5; scene.add(ring);
     const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
-    let frame = 0;
+    let frame = 0;\n    let visible = true;
     function onPointer(event) {
       const rect = host.getBoundingClientRect();
       pointer.tx = ((event.clientX - rect.left) / rect.width - .5) * 2;
@@ -121,7 +121,7 @@ export default function LandingAssetGallery() {
       if (!w || !h) return;
       renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     }
-    const observer = new ResizeObserver(resize); observer.observe(host); resize();
+    const observer = new ResizeObserver(resize); observer.observe(host); resize();\n    const visibilityObserver = new IntersectionObserver(entries => {\n      visible = entries[0]?.isIntersecting ?? true;\n      if (visible && !reduced && !frame) frame = requestAnimationFrame(render);\n      if (!visible && frame) { cancelAnimationFrame(frame); frame = 0; }\n    }, { threshold: 0.01 });\n    visibilityObserver.observe(host);
     host.addEventListener("pointermove", onPointer);
     const clock = new THREE.Clock();
     function render() {
@@ -143,11 +143,11 @@ export default function LandingAssetGallery() {
       camera.position.x = pointer.x * .18;
       camera.lookAt(0, 0, 0);
       renderer.render(scene, camera);
-      if (!reduced) frame = requestAnimationFrame(render);
+      if (!reduced && visible) frame = requestAnimationFrame(render);
     }
     render();
     return () => {
-      cancelAnimationFrame(frame); observer.disconnect(); host.removeEventListener("pointermove", onPointer);
+      cancelAnimationFrame(frame); observer.disconnect(); visibilityObserver.disconnect(); host.removeEventListener("pointermove", onPointer);
       assets.root.traverse(object => { if (object.isMesh) object.geometry.dispose(); });
       assets.materials.forEach(material => material.dispose());
       ring.geometry.dispose(); ring.material.dispose();
