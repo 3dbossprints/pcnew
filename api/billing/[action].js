@@ -15,7 +15,8 @@ function stripe() {
 function generatedDiscountCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 8 }, () => alphabet[randomInt(0, alphabet.length)]).join("");
-}\nfunction appUrl() {
+}
+function appUrl() {
   return (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\/+$/, "");
 }
 function priceFor(plan, interval) {
