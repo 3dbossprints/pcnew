@@ -12,7 +12,10 @@ function stripe() {
   if (!stripeClient) stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
   return stripeClient;
 }
-function generatedDiscountCode() {\n  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";\n  return Array.from({ length: 8 }, () => alphabet[randomInt(0, alphabet.length)]).join("");\n}\nfunction appUrl() {
+function generatedDiscountCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 8 }, () => alphabet[randomInt(0, alphabet.length)]).join("");
+}\nfunction appUrl() {
   return (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\/+$/, "");
 }
 function priceFor(plan, interval) {
@@ -54,7 +57,7 @@ async function checkout(req,res) {
       return sendJson(res,409,{error:"You already have a subscription. Manage it from Account & billing."});
     }
     let appliedDiscount = null;
-    const discountCode = String(req.body?.discountCode || "").trim().toUpperCase();
+    const discountCode = String(req.body?.discountCode || "").replace(/\s+/g, "").trim().toUpperCase();
     if (discountCode) {
       const discountResult = await db.query(
         "SELECT id,code,allowed_email,stripe_promotion_code_id,active,expires_at,max_redemptions,redemption_count FROM discount_codes WHERE code=$1 LIMIT 1",
@@ -259,7 +262,8 @@ async function createAdminDiscount(req,res) {
   const discountType = body.discountType;
   const value = Number(body.value);
   const duration = body.duration || "once";
-  const allowedEmail = body.allowedEmail ? String(body.allowedEmail).trim().toLowerCase() : null;\n  const code = allowedEmail ? generatedDiscountCode() : requestedCode;
+  const allowedEmail = body.allowedEmail ? String(body.allowedEmail).trim().toLowerCase() : null;
+  const code = allowedEmail ? generatedDiscountCode() : requestedCode;
   const months = Number(body.durationInMonths || 0);
   const maxRedemptions = body.maxRedemptions === "" || body.maxRedemptions == null ? null : Number(body.maxRedemptions);
   const expiry = body.expiresAt ? new Date(String(body.expiresAt) + "T23:59:59Z") : null;
