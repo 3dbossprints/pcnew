@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import Stripe from "stripe";
 import { requireUser } from "./_lib/auth.js";
 import { database } from "./_lib/db.js";
 import { requireMethod, sendJson } from "./_lib/http.js";
+import { sendEmail } from "./_lib/email.js";
 
 let stripeClient;
 function stripe() {
@@ -71,9 +72,69 @@ async function saveTask(req, res, user, body) {
   return sendJson(res, 200, { task: result.rows[0] });
 }
 
-async function handleDeletion(req, res, user, body) {
+function deletionCodeDigest(uid, code) {
+  const secret = process.env.ACCOUNT_DELETION_CODE_SECRET || process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!secret) throw new Error("Account deletion code signing is not configured.");
+  return createHmac("sha256", secret).update(uid + ":" + code).digest("hex");
+}
+
+async function sendDeletionCode(req, res, user) {
+  if (!user.email) return sendJson(res, 400, { error: "Your account needs a verified email address before deletion." });
+  const db = database();
+  const current = await db.query("SELECT deletion_scheduled_at FROM users WHERE firebase_uid=$1", [user.uid]);
+  if (!current.rowCount) return sendJson(res, 404, { error: "Your Piano Coach profile could not be found." });
+  if (current.rows[0].deletion_scheduled_at) return sendJson(res, 409, { error: "Account deletion has already been requested." });
+  const code = String(randomInt(0, 1000000)).padStart(6, "0");
+  const digest = deletionCodeDigest(user.uid, code);
+  await db.query("DELETE FROM account_deletion_codes WHERE firebase_uid=$1 AND consumed_at IS NULL", [user.uid]);
+  const saved = await db.query(
+    "INSERT INTO account_deletion_codes(firebase_uid,code_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '10 minutes') RETURNING id",
+    [user.uid, digest],
+  );
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: "Your Piano Coach account deletion code",
+      text: "Your account deletion confirmation code is " + code + ". It expires in 10 minutes. If you did not request this, you can ignore this email.",
+      html: "<div style=\"font-family:Arial,sans-serif;color:#242423;max-width:520px;margin:auto;padding:28px\"><p style=\"color:#526d4c;font-weight:700;letter-spacing:.12em\">PIANO COACH</p><h1 style=\"font-size:24px\">Confirm account deletion</h1><p>Enter this six-digit code in Piano Coach to confirm your request.</p><p style=\"font-size:32px;font-weight:700;letter-spacing:8px;padding:16px 0\">" + code + "</p><p>This code expires in 10 minutes. If you did not request this, ignore this email.</p></div>",
+    });
+  } catch (error) {
+    await db.query("UPDATE account_deletion_codes SET consumed_at=NOW() WHERE id=$1", [saved.rows[0].id]);
+    throw error;
+  }
+  return sendJson(res, 200, { codeSent: true, message: "A six-digit confirmation code has been emailed to " + user.email + ". It expires in 10 minutes." });
+}
+
+async function verifyDeletionCode(req, res, user, body) {
+  const code = String(body.deletionAction?.code || "").replace(/\s/g, "");
+  if (!/^\d{6}$/.test(code)) return sendJson(res, 400, { error: "Enter the six-digit code from your email." });
+  const db = database();
+  const found = await db.query(
+    "SELECT id,code_hash,expires_at,attempts FROM account_deletion_codes WHERE firebase_uid=$1 AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1",
+    [user.uid],
+  );
+  if (!found.rowCount) return sendJson(res, 404, { error: "Request a new confirmation code first." });
+  const saved = found.rows[0];
+  if (new Date(saved.expires_at).getTime() <= Date.now()) return sendJson(res, 410, { error: "That code has expired. Request a new one." });
+  if (Number(saved.attempts) >= 5) return sendJson(res, 429, { error: "Too many incorrect attempts. Request a new code." });
+  const supplied = Buffer.from(deletionCodeDigest(user.uid, code), "hex");
+  const expected = Buffer.from(saved.code_hash, "hex");
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    await db.query("UPDATE account_deletion_codes SET attempts=attempts+1 WHERE id=$1", [saved.id]);
+    return sendJson(res, 400, { error: "That code is incorrect. Please check your email and try again." });
+  }
+  const consumed = await db.query(
+    "UPDATE account_deletion_codes SET consumed_at=NOW() WHERE id=$1 AND consumed_at IS NULL AND expires_at>NOW() AND attempts<5 RETURNING id",
+    [saved.id],
+  );
+  if (!consumed.rowCount) return sendJson(res, 409, { error: "That code has already been used or has expired. Request a new one." });
+  return handleDeletion(req, res, user, { deletionAction: { action: "request" } }, true);
+}
+
+async function handleDeletion(req, res, user, body, codeVerified = false) {
   const action = body.deletionAction?.action;
   if (!["request", "cancel"].includes(action)) return sendJson(res, 400, { error: "Choose a valid deletion action." });
+  if (action === "request" && !codeVerified) return sendJson(res, 403, { error: "Confirm your email code before requesting account deletion." });
   const db = database();
   const current = await db.query("SELECT deletion_requested_at, deletion_scheduled_at, stripe_subscription_id, subscription_status FROM users WHERE firebase_uid=$1", [user.uid]);
   if (!current.rowCount) return sendJson(res, 404, { error: "Your Piano Coach profile could not be found." });
@@ -124,7 +185,11 @@ export default async function handler(req, res) {
   }
 
   if (body.deletionAction) {
-    try { return await handleDeletion(req, res, user, body); }
+    try {
+      if (body.deletionAction.action === "send-code") return await sendDeletionCode(req, res, user);
+      if (body.deletionAction.action === "verify-code") return await verifyDeletionCode(req, res, user, body);
+      return await handleDeletion(req, res, user, body);
+    }
     catch (error) {
       console.error("PATCH /api/profile deletion action failed:", error.message);
       return sendJson(res, 503, { error: "The account deletion request could not be completed." });
