@@ -131,9 +131,10 @@ async function verifyDeletionCode(req, res, user, body) {
   return handleDeletion(req, res, user, { deletionAction: { action: "request" } }, true);
 }
 
-async function handleDeletion(req, res, user, body) {
+async function handleDeletion(req, res, user, body, codeVerified = false) {
   const action = body.deletionAction?.action;
   if (!["request", "cancel"].includes(action)) return sendJson(res, 400, { error: "Choose a valid deletion action." });
+  if (action === "request" && !codeVerified) return sendJson(res, 403, { error: "Confirm your email code before requesting account deletion." });
   const db = database();
   const current = await db.query("SELECT deletion_requested_at, deletion_scheduled_at, stripe_subscription_id, subscription_status FROM users WHERE firebase_uid=$1", [user.uid]);
   if (!current.rowCount) return sendJson(res, 404, { error: "Your Piano Coach profile could not be found." });
