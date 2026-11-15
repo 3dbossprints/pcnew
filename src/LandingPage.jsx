@@ -279,7 +279,7 @@ export default function LandingPage({ onAuthed }) {
         <div className="lp-marquee-track"><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i></div>
       </div>
 
-      <section className="lp-features" id="features">
+      <section className="lp-asset-section" id="3d-elements"><LandingAssetGallery /></section>\n\n      <section className="lp-features" id="features">
         <div className="lp-section-head lp-reveal">
           <span className="lp-eyebrow">EVERYTHING YOU NEED</span>
           <h2>Built for serious piano students.</h2>
