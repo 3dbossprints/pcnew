@@ -217,10 +217,6 @@ async function applyDiscount(req,res) {
       proration_behavior:"none",
     });
     await db.query("UPDATE discount_codes SET redemption_count=redemption_count+1,updated_at=NOW() WHERE id=$1",[discount.id]);
-    await db.query(
-      "INSERT INTO admin_audit_logs(admin_email,action,entity_type,entity_id,details) SELECT email,'discount.applied','discount_code',$2,$3::jsonb FROM users WHERE firebase_uid=$1 AND EXISTS(SELECT 1 FROM admin_users WHERE lower(admin_users.email)=lower(users.email) AND active=TRUE)",
-      [user.uid,discount.id,JSON.stringify({code:discount.code,subscriptionId})],
-    ).catch(()=>{});
     return sendJson(res,200,{applied:true,message:"Discount applied. It will be reflected on your next invoice."});
   } catch(error) {
     console.error("POST /api/billing/apply-discount failed:",error.message);
