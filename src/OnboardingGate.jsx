@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { auth } from "./lib/firebase.js";
+import PianoLoader from "./PianoLoader.jsx";
 
 const boards = ["RSL Awards", "ABRSM", "LCME", "Trinity College London", "MTB", "VCM", "NCM"];
 const grades = ["Initial", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"];
@@ -180,7 +181,7 @@ export default function OnboardingGate({ children }) {
     finally { setSaving(false); }
   }
 
-  if (loading) return <main className="auth-screen"><section className="auth-card"><img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><p>Preparing your musical journey…</p></section></main>;
+  if (loading) return <PianoLoader variant="loading" />;
   if (profile?.onboarding_completed) return children;
 
   if (checkoutClientSecret) return <main className="onboarding-screen">

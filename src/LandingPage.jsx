@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import PianoLoader from "./PianoLoader.jsx";
+import LandingSoundToggle from "./LandingSoundToggle.jsx";
 import LandingScene from "./LandingScene.jsx";
 import LandingAssetGallery from "./LandingAssetGallery.jsx";
 import "./landing-depth.css";
@@ -185,6 +187,8 @@ export default function LandingPage({ onAuthed }) {
   const heroRef = useParallax();
   const visualRef = usePointerDepth();
   const [navScrolled, setNavScrolled] = useState(false);
+  const [showIntro, setShowIntro] = useState(() => { try { return !sessionStorage.getItem("pc-intro-seen"); } catch { return false; } });
+  const finishIntro = useCallback(() => { try { sessionStorage.setItem("pc-intro-seen", "1"); } catch {} setShowIntro(false); }, []);
 
   useScrollReveal();
 
@@ -194,6 +198,8 @@ export default function LandingPage({ onAuthed }) {
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  if (showIntro) return <PianoLoader variant="intro" onComplete={finishIntro} />;
 
   function openAuth(authMode) {
     window.location.assign(authMode === "signin" ? "/signin" : "/signup");
@@ -216,6 +222,7 @@ export default function LandingPage({ onAuthed }) {
           <a href="#pricing">Pricing</a>
         </div>
         <div className="lp-nav-actions">
+          <LandingSoundToggle />
           <button className="lp-nav-signin" onClick={() => openAuth("signin")}>Sign in</button>
           <button className="lp-nav-cta" onClick={() => openAuth("signup")}>Start free</button>
         </div>
