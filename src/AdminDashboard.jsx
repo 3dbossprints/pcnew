@@ -104,10 +104,11 @@ export default function AdminDashboard({ onExit }) {
     {tab === "overview" && <div>
       <section className="pc-admin-stat-grid">
         <div className="pc-admin-stat-card"><span>TOTAL USERS</span><b>{users.total || 0}</b><small>{users.new_this_week || 0} joined this week</small></div>
-        <div className="pc-admin-stat-card"><span>PAID SUBSCRIPTIONS</span><b>{Number(users.basic || 0) + Number(users.pro || 0)}</b><small>{users.basic || 0} Basic · {users.pro || 0} Pro</small></div>
+        <div className="pc-admin-stat-card"><span>PAID STUDENTS</span><b>{users.paid_students || 0}</b><small>{users.basic || 0} Basic · {users.pro || 0} Pro</small></div>
         <div className="pc-admin-stat-card"><span>PENDING DELETIONS</span><b>{users.pending_deletion || 0}</b><small>Within the 15-day grace period</small></div>
         <div className="pc-admin-stat-card"><span>FILES STORED</span><b>{files.total_files || 0}</b><small>{formatBytes(files.total_bytes)}</small></div>
       </section>
+      {Number(users.duplicate_profiles || 0) > 0 && <p className="pc-admin-message error">{users.duplicate_profiles} extra Firebase profile record(s) share an existing student email. They are grouped below for clarity; subscriptions and learning data have not been merged.</p>}
       <div className="pc-admin-grid">
         <section className="pc-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">SUBSCRIPTIONS</span><h3>Plan breakdown</h3></div></div>
           <div className="pc-admin-plans">{["free","basic","pro"].map(plan => {
@@ -137,10 +138,11 @@ export default function AdminDashboard({ onExit }) {
       <input className="pc-admin-search" type="search" placeholder="Search by name or email" value={search} onChange={event => setSearch(event.target.value)}/>
       <div className="pc-admin-user-table">
         <div className="pc-admin-user-head"><span>Student</span><span>Plan</span><span>Status</span><span>Joined</span><span>Sessions</span><span>Practice</span></div>
-        {filteredUsers.map((user,index) => <div className="pc-admin-user-row" key={user.email + index}>
+        {filteredUsers.map(user => <div className="pc-admin-user-row" key={user.email}>
           <span className="pc-admin-user-email"><strong>{user.display_name || "Student"}</strong><small className="pc-admin-subline">{user.email}</small></span>
-          <span><span className={"pc-admin-plan-tag small " + user.plan}>{user.plan}</span></span>
-          <span>{user.subscription_status || "free"}</span><span>{formatDate(user.created_at)}</span><span>{user.session_count || 0}</span><span>{formatDuration(user.practice_seconds)}</span>
+          <span><span className={"pc-admin-plan-tag small " + (user.profile_count > 1 ? "multiple" : user.plan)}>{user.plan_summary || user.plan}</span></span>
+          <span>{user.profile_count > 1 ? <><strong>Multiple profiles</strong><small className="pc-admin-subline">{user.profile_count} Firebase accounts · {user.active_subscriptions || 0} active subscriptions</small></> : user.subscription_status || "free"}</span>
+          <span>{formatDate(user.created_at)}</span><span>{user.session_count || 0}</span><span>{formatDuration(user.practice_seconds)}</span>
         </div>)}
         {!filteredUsers.length && <p className="pc-admin-empty">No matching users found.</p>}
       </div>
