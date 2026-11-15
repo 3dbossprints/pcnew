@@ -187,6 +187,7 @@ export default function LandingPage({ onAuthed }) {
   const heroRef = useParallax();
   const visualRef = usePointerDepth();
   const [navScrolled, setNavScrolled] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
   const finishIntro = useCallback(() => setShowIntro(false), []);
 
@@ -215,16 +216,17 @@ export default function LandingPage({ onAuthed }) {
         <div className="lp-nav-brand">
           <img className="lp-brand-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach" />
         </div>
-        <div className="lp-nav-links">
-          <a href="#features">Features</a>
-          <a href="#how">How it works</a>
-          <a href="#3d-elements">3D elements</a>
-          <a href="#pricing">Pricing</a>
+        <div id="lp-mobile-navigation" className={"lp-nav-links" + (mobileNavOpen ? " is-open" : "")}>
+          <a href="#features" onClick={() => setMobileNavOpen(false)}>Features</a>
+          <a href="#how" onClick={() => setMobileNavOpen(false)}>How it works</a>
+          <a href="#3d-elements" onClick={() => setMobileNavOpen(false)}>3D elements</a>
+          <a href="#pricing" onClick={() => setMobileNavOpen(false)}>Pricing</a>
         </div>
+        <button className="lp-mobile-menu-toggle" type="button" aria-controls="lp-mobile-navigation" aria-expanded={mobileNavOpen} aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"} onClick={() => setMobileNavOpen(open => !open)}><span/><span/><span/></button>
         <div className="lp-nav-actions">
           <LandingSoundToggle />
-          <button className="lp-nav-signin" onClick={() => openAuth("signin")}>Sign in</button>
-          <button className="lp-nav-cta" onClick={() => openAuth("signup")}>Start free</button>
+          <button className="lp-nav-signin" onClick={() => { setMobileNavOpen(false); openAuth("signin"); }}>Sign in</button>
+          <button className="lp-nav-cta" onClick={() => { setMobileNavOpen(false); openAuth("signup"); }}>Start free</button>
         </div>
       </nav>
 
