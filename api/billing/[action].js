@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { randomInt } from "node:crypto";
 import { requireUser } from "../_lib/auth.js";
 import { database } from "../_lib/db.js";
 import { requireMethod, sendJson } from "../_lib/http.js";
@@ -11,7 +12,7 @@ function stripe() {
   if (!stripeClient) stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
   return stripeClient;
 }
-function appUrl() {
+function generatedDiscountCode() {\n  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";\n  return Array.from({ length: 8 }, () => alphabet[randomInt(0, alphabet.length)]).join("");\n}\nfunction appUrl() {
   return (process.env.PUBLIC_APP_URL || (process.env.VERCEL_ENV === "production" ? "https://pianocoach.cc.cd" : process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : "https://pianocoach.cc.cd")).replace(/\/+$/, "");
 }
 function priceFor(plan, interval) {
@@ -180,6 +181,53 @@ async function portal(req,res) {
   }
 }
 
+async function applyDiscount(req,res) {
+  const user = await requireUser(req,res);
+  if (!user) return;
+  if (!user.emailVerified) return sendJson(res,403,{error:"Verify your email before applying a discount."});
+  const code = String(req.body?.discountCode || "").replace(/\\s+/g,"").trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{4,24}$/.test(code)) return sendJson(res,400,{error:"Enter a valid discount code."});
+  try {
+    const db = database();
+    const account = await db.query("SELECT stripe_subscription_id,subscription_status FROM users WHERE firebase_uid=$1",[user.uid]);
+    if (!account.rowCount) return sendJson(res,404,{error:"Your Piano Coach profile could not be found."});
+    const { stripe_subscription_id: subscriptionId, subscription_status: status } = account.rows[0];
+    if (!subscriptionId || !["active","trialing","past_due"].includes(status)) {
+      return sendJson(res,409,{error:"There is no active subscription to apply a discount to. Use the checkout discount field when choosing a plan."});
+    }
+    const found = await db.query(
+      "SELECT id,code,allowed_email,stripe_promotion_code_id,active,expires_at,max_redemptions,redemption_count FROM discount_codes WHERE code=$1 LIMIT 1",
+      [code],
+    );
+    const discount = found.rows[0];
+    if (!discount || !discount.active) return sendJson(res,400,{error:"That discount code is not valid."});
+    if (discount.allowed_email && discount.allowed_email.toLowerCase() !== String(user.email || "").toLowerCase()) {
+      return sendJson(res,403,{error:"That discount code is for a different email address."});
+    }
+    if (discount.expires_at && new Date(discount.expires_at).getTime() <= Date.now()) return sendJson(res,400,{error:"That discount code has expired."});
+    if (discount.max_redemptions && Number(discount.redemption_count) >= Number(discount.max_redemptions)) return sendJson(res,400,{error:"That discount code has reached its redemption limit."});
+    const stripeApi = stripe();
+    const subscription = await stripeApi.subscriptions.retrieve(subscriptionId);
+    if (subscription.metadata?.firebase_uid !== user.uid) return sendJson(res,403,{error:"This subscription does not belong to your account."});
+    if (subscription.discount || (Array.isArray(subscription.discounts) && subscription.discounts.length)) {
+      return sendJson(res,409,{error:"This subscription already has a discount applied. Contact support if you need it changed."});
+    }
+    await stripeApi.subscriptions.update(subscriptionId,{
+      discounts:[{promotion_code:discount.stripe_promotion_code_id}],
+      proration_behavior:"none",
+    });
+    await db.query("UPDATE discount_codes SET redemption_count=redemption_count+1,updated_at=NOW() WHERE id=$1",[discount.id]);
+    await db.query(
+      "INSERT INTO admin_audit_logs(admin_email,action,entity_type,entity_id,details) SELECT email,'discount.applied','discount_code',$2,$3::jsonb FROM users WHERE firebase_uid=$1 AND EXISTS(SELECT 1 FROM admin_users WHERE lower(admin_users.email)=lower(users.email) AND active=TRUE)",
+      [user.uid,discount.id,JSON.stringify({code:discount.code,subscriptionId})],
+    ).catch(()=>{});
+    return sendJson(res,200,{applied:true,message:"Discount applied. It will be reflected on your next invoice."});
+  } catch(error) {
+    console.error("POST /api/billing/apply-discount failed:",error.message);
+    return sendJson(res,400,{error:"The discount could not be applied. Check the code and subscription status, then try again."});
+  }
+}
+
 async function adminOverview(req,res) {
   const admin = await requireAdmin(req,res);
   if (!admin) return;
@@ -211,7 +259,7 @@ async function createAdminDiscount(req,res) {
   const admin = await requireAdmin(req,res);
   if (!admin) return;
   const body = req.body || {};
-  const code = String(body.code || "").trim().toUpperCase();
+  const code = (String(body.code || "").replace(/\\s+/g, "").trim().toUpperCase() || (body.allowedEmail ? generatedDiscountCode() : ""));
   const discountType = body.discountType;
   const value = Number(body.value);
   const duration = body.duration || "once";
@@ -284,7 +332,7 @@ async function deactivateAdminDiscount(req,res) {
 export default async function handler(req,res) {
   const action=req.query?.action;
   if (action==="checkout") { if (!requireMethod(req,res,"POST")) return; return checkout(req,res); }
-  if (action==="portal") { if (!requireMethod(req,res,"POST")) return; return portal(req,res); }
+  if (action==="portal") { if (!requireMethod(req,res,"POST")) return; return portal(req,res); }\n  if (action==="apply-discount") { if (!requireMethod(req,res,"POST")) return; return applyDiscount(req,res); }
   if (action==="confirm") { if (!requireMethod(req,res,"POST")) return; return confirm(req,res); }
   if (action==="admin") { if (!requireMethod(req,res,"GET")) return; return adminOverview(req,res); }
   if (action==="admin-discounts") { if (req.method==="GET") return adminOverview(req,res); if (!requireMethod(req,res,"POST")) return; return createAdminDiscount(req,res); }
