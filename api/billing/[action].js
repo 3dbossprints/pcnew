@@ -185,7 +185,7 @@ async function applyDiscount(req,res) {
   const user = await requireUser(req,res);
   if (!user) return;
   if (!user.emailVerified) return sendJson(res,403,{error:"Verify your email before applying a discount."});
-  const code = String(req.body?.discountCode || "").replace(/\\s+/g,"").trim().toUpperCase();
+  const code = String(req.body?.discountCode || "").replace(/\s+/g,"").trim().toUpperCase();
   if (!/^[A-Z0-9_-]{4,24}$/.test(code)) return sendJson(res,400,{error:"Enter a valid discount code."});
   try {
     const db = database();
@@ -255,11 +255,11 @@ async function createAdminDiscount(req,res) {
   const admin = await requireAdmin(req,res);
   if (!admin) return;
   const body = req.body || {};
-  const code = (String(body.code || "").replace(/\\s+/g, "").trim().toUpperCase() || (body.allowedEmail ? generatedDiscountCode() : ""));
+  const requestedCode = String(body.code || "").replace(/\s+/g, "").trim().toUpperCase();
   const discountType = body.discountType;
   const value = Number(body.value);
   const duration = body.duration || "once";
-  const allowedEmail = body.allowedEmail ? String(body.allowedEmail).trim().toLowerCase() : null;
+  const allowedEmail = body.allowedEmail ? String(body.allowedEmail).trim().toLowerCase() : null;\n  const code = allowedEmail ? generatedDiscountCode() : requestedCode;
   const months = Number(body.durationInMonths || 0);
   const maxRedemptions = body.maxRedemptions === "" || body.maxRedemptions == null ? null : Number(body.maxRedemptions);
   const expiry = body.expiresAt ? new Date(String(body.expiresAt) + "T23:59:59Z") : null;
