@@ -251,9 +251,7 @@ export default function LandingPage({ onAuthed }) {
   }
 
   function openAuth(authMode) {
-    setMode(authMode);
-    setMessage("");
-    setOverlayOpen(true);
+    window.location.assign(authMode === "signin" ? "/signin" : "/signup");
   }
 
   function pickPlan(planId) {
@@ -432,7 +430,7 @@ export default function LandingPage({ onAuthed }) {
               </ul>
               <button
                 className={plan.highlight ? "lp-button-primary" : "lp-button-outline"}
-                onClick={() => pickPlan(plan.id)}
+                onClick={() => window.location.assign("/signup?plan=" + encodeURIComponent(plan.id))}
               >
                 {plan.cta}
               </button>
