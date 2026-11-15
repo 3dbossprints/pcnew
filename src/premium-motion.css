@@ -68,7 +68,7 @@ button, input, select, textarea { font: inherit; }
 .pc-intro-content h1 em{font-weight:500;color:#b9ceaa}
 .pc-intro-status{margin:16px 0 22px;color:#d1d8cb;font-size:13px;letter-spacing:.03em}
 .pc-intro-progress{width:min(280px,70%);height:1px;background:rgba(239,239,224,.2);overflow:hidden}
-.pc-intro-progress span{display:block;width:100%;height:100%;background:#c5d8b5;transform:scaleX(0);transform-origin:left;animation:pc-intro-progress 2.8s cubic-bezier(.2,.7,.2,1) forwards}
+.pc-intro-progress span{display:block;width:100%;height:100%;background:#c5d8b5;transform:scaleX(0);transform-origin:left;animation:pc-intro-progress 4.2s cubic-bezier(.2,.7,.2,1) forwards}
 .pc-intro-bottom{position:absolute;top:calc(100% + 64px);left:0;right:0;display:flex;justify-content:space-between;align-items:center;gap:14px;color:#aebba9;font-size:8px;letter-spacing:.15em;white-space:nowrap}
 .pc-intro-bottom i{font-style:normal;color:#c7d7b9;padding:0 5px}
 .pc-intro-sound{display:flex;align-items:center;gap:8px;border:1px solid rgba(232,238,224,.28);padding:8px 10px;background:rgba(255,255,255,.035);color:#e9ecdf;font-size:9px;letter-spacing:.05em;cursor:pointer}

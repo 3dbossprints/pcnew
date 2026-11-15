@@ -187,8 +187,8 @@ export default function LandingPage({ onAuthed }) {
   const heroRef = useParallax();
   const visualRef = usePointerDepth();
   const [navScrolled, setNavScrolled] = useState(false);
-  const [showIntro, setShowIntro] = useState(() => { try { return !sessionStorage.getItem("pc-intro-seen"); } catch { return false; } });
-  const finishIntro = useCallback(() => { try { sessionStorage.setItem("pc-intro-seen", "1"); } catch {} setShowIntro(false); }, []);
+  const [showIntro, setShowIntro] = useState(true);
+  const finishIntro = useCallback(() => setShowIntro(false), []);
 
   useScrollReveal();
 
