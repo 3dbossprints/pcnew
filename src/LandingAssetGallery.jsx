@@ -95,7 +95,7 @@ export default function LandingAssetGallery() {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
-    host.appendChild(renderer.domElement); host.dataset.webglReady = "true";
+    host.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(34, 1, .1, 100);
@@ -197,7 +197,7 @@ export default function LandingAssetGallery() {
       camera.position.x = pointer.x * .16;
       camera.position.y = .15 + pointer.y * .08 + scrollProgress * .24;
       camera.lookAt(0, 0, 0);
-      renderer.render(scene, camera);
+      renderer.render(scene, camera); host.dataset.webglReady = "true";
       if (!reduced && visible) frame = requestAnimationFrame(render);
     }
     render();
