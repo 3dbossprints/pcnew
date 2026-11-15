@@ -88,7 +88,7 @@ export default function LandingAssetGallery() {
     if (!host || !section) return undefined;
     let renderer;
     try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" }); }
-    catch { return undefined; }
+    catch { host.dataset.webglFailed = "true"; return undefined; }
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
@@ -197,7 +197,7 @@ export default function LandingAssetGallery() {
       camera.position.x = pointer.x * .16;
       camera.position.y = .15 + pointer.y * .08 + scrollProgress * .24;
       camera.lookAt(0, 0, 0);
-      renderer.render(scene, camera);
+      renderer.render(scene, camera); host.dataset.webglReady = "true";
       if (!reduced && visible) frame = requestAnimationFrame(render);
     }
     render();
@@ -220,7 +220,7 @@ export default function LandingAssetGallery() {
       objects.materials.forEach(material => material.dispose());
       backdrop.geometry.dispose(); waveMaterial.dispose();
       particleGeometry.dispose(); particleMaterial.dispose();
-      renderer.dispose(); renderer.domElement.remove();
+      renderer.dispose(); renderer.domElement.remove(); delete host.dataset.webglReady;
     };
   }, []);
 
@@ -241,6 +241,16 @@ export default function LandingAssetGallery() {
     <div className="lp-asset-sticky">
       <div className="lp-asset-stage-top"><span>PIANO COACH / OBJECT STUDIES</span><span>0{active + 1} — 04</span></div>
       <div ref={hostRef} className="lp-asset-canvas" aria-label={ASSETS[active].label + " interactive three-dimensional artwork"} />
+      <div className={"lp-asset-fallback asset-" + ASSETS[active].id} aria-hidden="true">
+        <svg viewBox="0 0 640 460">
+          <defs><linearGradient id="pc-object-metal" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#e4c79d"/><stop offset="1" stopColor="#8c6846"/></linearGradient><linearGradient id="pc-object-ivory" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#fffdf5"/><stop offset="1" stopColor="#cfcabb"/></linearGradient></defs>
+          <ellipse cx="320" cy="375" rx="210" ry="26" fill="#9dc183" opacity=".12"/>
+          {active===0&&<g transform="translate(100 180) skewX(-12)"><rect width="440" height="115" rx="10" fill="#202920" stroke="url(#pc-object-metal)" strokeWidth="4"/>{Array.from({length:14},(_,i)=><rect key={i} x={8+i*30.3} y="8" width="28" height="98" rx="3" fill="url(#pc-object-ivory)" stroke="#9b988d"/>)}{[1,2,4,5,6,8,9,11,12].map(i=><rect key={i} x={29+i*30.3} y="8" width="17" height="61" rx="2" fill="#202920"/>)}</g>}
+          {active===1&&<g><path d="M320 350 L245 350 L270 170 L370 170 L395 350 Z" fill="#9dc183" stroke="#c49b69" strokeWidth="5"/><path d="M320 175 V65" stroke="url(#pc-object-metal)" strokeWidth="7"/><circle cx="320" cy="70" r="18" fill="#c49b69"/><path d="M320 65 L405 90" stroke="#d9bd91" strokeWidth="5"/><circle cx="405" cy="90" r="13" fill="#d9bd91"/></g>}
+          {active===2&&<g transform="rotate(-7 320 230)"><rect x="170" y="75" width="300" height="330" rx="7" fill="#f2eee3" stroke="#c49b69" strokeWidth="5"/>{[0,1,2,3,4].map(i=><path key={i} d={`M205 ${190+i*28} H435`} stroke="#64735d" strokeWidth="3"/>)}{[0,1,2,3,4,5].map(i=><g key={i} fill={i%2?"#c49b69":"#202920"}><ellipse cx={230+i*36} cy={178+(i%4)*27} rx="9" ry="6"/><path d={`M238 ${178+(i%4)*27} v-58`} stroke="#202920" strokeWidth="4"/></g>)}</g>}
+          {active===3&&<g><ellipse cx="320" cy="235" rx="118" ry="155" fill="#9dc183" opacity=".75" transform="rotate(28 320 235)"/><ellipse cx="320" cy="235" rx="160" ry="95" fill="none" stroke="url(#pc-object-metal)" strokeWidth="7" transform="rotate(-35 320 235)"/><circle cx="390" cy="145" r="38" fill="#f2eee3"/><path d="M390 110 V50" stroke="#c49b69" strokeWidth="9"/></g>}
+        </svg>
+      </div>
       <div className="lp-asset-stage-caption"><strong>{ASSETS[active].label}</strong><span>{ASSETS[active].detail}</span></div>
       <div className="lp-asset-stage-mark" aria-hidden="true">PC—3D</div>
       <div className="lp-asset-stage-counter"><span>SCROLL TO EXPLORE</span><b>0{active + 1}</b></div>

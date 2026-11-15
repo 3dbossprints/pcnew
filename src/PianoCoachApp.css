@@ -1318,3 +1318,68 @@ button{color:inherit}
   .lp-hero-visual::before { animation: none; }
   .lp-feature-card, .lp-plan-card, .lp-step-card { transition: none; }
 }
+
+/* Mobile dashboard: prevent compressed three-column summaries and undersized controls. */
+.pc-app,.pc-main,.pc-content,.pc-dashboard{min-width:0;max-width:100%}
+.pc-dashboard-summary-item,.pc-learning-card,.pc-task-row{min-width:0}
+.pc-task-name strong,.pc-task-name small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc-dashboard-summary-item strong{overflow-wrap:anywhere}
+@media(max-width:760px){
+  .pc-sidebar{position:fixed;inset:auto 0 0;width:100%;height:68px;padding:6px 12px;background:var(--pc-paper);border-right:0;border-top:1px solid var(--pc-line);display:flex;flex-direction:row;align-items:center;justify-content:center;z-index:40}
+  .pc-brand,.pc-sidebar-label,.pc-sidebar-spacer,.pc-sidebar-profile,.pc-sidebar-encouragement{display:none!important}
+  .pc-nav{width:100%;display:flex;align-items:center;justify-content:center;gap:10px}
+  .pc-nav button{width:auto;min-width:0;flex:1 1 0;display:flex;gap:8px;align-items:center;justify-content:center;padding:10px 8px;border-radius:10px}
+  .pc-nav button span{display:inline;font-size:11px}
+  .pc-nav button .pc-icon{font-size:18px;width:auto}
+  .pc-main{margin-left:0;padding-bottom:76px;min-width:0;width:100%}
+  .pc-topbar{height:58px;padding:0 14px;gap:8px}
+  .pc-breadcrumb{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .pc-breadcrumb span{display:none}
+  .pc-topbar-actions{gap:7px;flex:0 0 auto}
+  .pc-profile-trigger>span:nth-child(2){display:none}
+  .pc-profile-trigger{padding:0}
+  .pc-content{width:100%;padding:22px 14px 34px}
+  .pc-dash-header{flex-direction:column;align-items:stretch;gap:14px}
+  .pc-dash-greeting h1{font-size:clamp(25px,7vw,34px);overflow-wrap:anywhere}
+  .pc-dash-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pc-dash-actions .pc-button{min-width:0;width:100%;justify-content:center;padding:12px 9px;font-size:10px}
+  .pc-dashboard-summary{grid-template-columns:1fr;gap:0;margin:16px 0 26px;padding:0;border:1px solid var(--pc-line);border-radius:12px;overflow:hidden;background:var(--pc-paper)}
+  .pc-dashboard-summary-item,.pc-dashboard-summary-item:first-child,.pc-dashboard-summary-item:last-child{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 12px;padding:13px 14px;border:0;border-bottom:1px solid var(--pc-line)}
+  .pc-dashboard-summary-item:last-child{border-bottom:0}
+  .pc-dashboard-summary-item>span{font-size:8px;letter-spacing:.09em}
+  .pc-dashboard-summary-item>strong{font-size:19px;text-align:right}
+  .pc-dashboard-summary-item>small{grid-column:1/-1;font-size:10px;line-height:1.4}
+  .pc-learning-grid{grid-template-columns:minmax(0,1fr);gap:12px}
+  .pc-learning-card{padding:16px 14px;min-height:0}
+  .pc-learning-card>header{gap:9px}
+  .pc-learning-card>header>div{min-width:0;flex:1}
+  .pc-learning-card>header h3{font-size:16px}
+  .pc-task-row{gap:7px;padding:12px 0}
+  .pc-task-name strong{font-size:11px;white-space:normal;overflow-wrap:anywhere}
+  .pc-task-name small{font-size:9px}
+  .pc-task-score{flex:0 0 auto}
+  .pc-row-arrow{flex:0 0 auto}
+  .pc-section-heading{align-items:flex-start;gap:10px;flex-wrap:wrap}
+  .pc-detail-title-row,.pc-detail-grid{min-width:0}
+  .pc-panel{min-width:0;padding:16px}
+  .pc-profile-fields{grid-template-columns:minmax(0,1fr)}
+  .pc-upgrade-row{align-items:stretch;flex-direction:column}
+  .pc-upgrade-row label{min-width:0;width:100%}
+  .pc-upgrade-row input,.pc-upgrade-row select{width:100%;max-width:100%}
+  .pc-modal{width:min(100% - 20px,560px);max-height:calc(100svh - 24px);overflow:auto;padding:22px 16px}
+}
+@media(max-width:420px){
+  .pc-content{padding-left:12px;padding-right:12px}
+  .pc-topbar{padding-left:11px;padding-right:11px}
+  .pc-plan-tag{font-size:8px;padding:5px 7px}
+  .pc-dash-actions{grid-template-columns:1fr}
+  .pc-dash-actions .pc-button{min-height:42px}
+  .pc-nav{gap:6px}
+  .pc-nav button{padding:9px 5px}
+  .pc-nav button span{font-size:10px}
+  .pc-nav button .pc-icon{font-size:17px}
+  .pc-dashboard-summary-item>strong{font-size:17px}
+}
+@media(prefers-reduced-motion:reduce){
+  .pc-sidebar,.pc-main,.pc-content{scroll-behavior:auto!important}
+}

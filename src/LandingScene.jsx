@@ -35,7 +35,7 @@ export default function LandingScene({ className = "" }) {
   useEffect(()=>{
     const host=hostRef.current;if(!host)return;
     let renderer;
-    try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:"high-performance"});}catch{return;}
+    try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:"high-performance"});}catch{host.dataset.webglFailed="true";return;}
     const reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
     renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -89,10 +89,26 @@ export default function LandingScene({ className = "" }) {
       ringGroup.rotation.y=t*.055+scroll*.2;ringGroup.rotation.z=t*.018;
       particles.rotation.y=t*.012+pointer.x*.04;
       camera.position.x=pointer.x*.35;camera.position.y=3.6+scroll*.3+pointer.y*.2;camera.lookAt(0,-.1,0);
-      renderer.render(scene,camera);if(!reduced)frame=requestAnimationFrame(render);
+      renderer.render(scene,camera);host.dataset.webglReady="true";if(!reduced)frame=requestAnimationFrame(render);
     }
     render();
-    return()=>{cancelAnimationFrame(frame);observer.disconnect();host.removeEventListener("pointermove",onPointer);window.removeEventListener("scroll",onScroll);piano.geometries.forEach(g=>g.dispose());piano.materials.forEach(m=>m.dispose());ringGroup.children.forEach(m=>m.geometry.dispose());ringMat.dispose();staff.traverse(o=>{if(o.isMesh){o.geometry.dispose();}});lineGeo.dispose();lineMat.dispose();noteMat.forEach(m=>m.dispose());particleGeo.dispose();particleMat.dispose();renderer.dispose();renderer.domElement.remove();};
+    return()=>{cancelAnimationFrame(frame);observer.disconnect();host.removeEventListener("pointermove",onPointer);window.removeEventListener("scroll",onScroll);piano.geometries.forEach(g=>g.dispose());piano.materials.forEach(m=>m.dispose());ringGroup.children.forEach(m=>m.geometry.dispose());ringMat.dispose();staff.traverse(o=>{if(o.isMesh){o.geometry.dispose();}});lineGeo.dispose();lineMat.dispose();noteMat.forEach(m=>m.dispose());particleGeo.dispose();particleMat.dispose();renderer.dispose();renderer.domElement.remove();delete host.dataset.webglReady;};
   },[]);
-  return <div ref={hostRef} className={"lp-scene "+className} aria-hidden="true"/>;
+  return <div ref={hostRef} className={"lp-scene "+className} aria-hidden="true">
+    <div className="lp-scene-fallback">
+      <svg viewBox="0 0 760 560" role="presentation">
+        <defs><radialGradient id="pc-glow"><stop offset="0" stopColor="#9dc183" stopOpacity=".34"/><stop offset="1" stopColor="#9dc183" stopOpacity="0"/></radialGradient><linearGradient id="pc-keyboard"><stop stopColor="#fffdf7"/><stop offset="1" stopColor="#d9d4c7"/></linearGradient></defs>
+        <ellipse cx="380" cy="265" rx="300" ry="230" fill="url(#pc-glow)"/>
+        <g fill="none" stroke="#c9b18d" strokeOpacity=".6"><ellipse cx="380" cy="270" rx="265" ry="92" transform="rotate(-17 380 270)"/><ellipse cx="380" cy="270" rx="290" ry="110" transform="rotate(17 380 270)"/></g>
+        <g stroke="#d4c9b4" strokeOpacity=".55" strokeWidth="2">{[0,1,2,3,4].map(i=><path key={i} d={`M145 ${125+i*17} H615`}/>)}</g>
+        <g fill="#c9d8b6">{[0,1,2,3,4,5,6,7].map(i=><ellipse key={i} cx={210+i*48} cy={112+(i%3)*19} rx="9" ry="6" transform={`rotate(-22 ${210+i*48} ${112+(i%3)*19})`}/>)}</g>
+        <g transform="translate(105 350) skewX(-12)">
+          <rect x="0" y="0" width="550" height="100" rx="9" fill="#151d17" stroke="#c9b18d" strokeWidth="3"/>
+          {Array.from({length:21},(_,i)=><rect key={i} x={8+i*25.8} y="9" width="24" height="82" rx="3" fill="url(#pc-keyboard)" stroke="#b6b0a4"/>)}
+          {[1,2,4,5,6,8,9,11,12,13,15,16,18,19].map(i=><rect key={i} x={26+i*25.8} y="8" width="14" height="51" rx="2" fill="#202720"/>)}
+        </g>
+        <g fill="#d4b88e" fontFamily="Georgia,serif" fontSize="38"><text x="105" y="190">♪</text><text x="615" y="220">♫</text><text x="570" y="110">♬</text></g>
+      </svg>
+    </div>
+  </div>;
 }

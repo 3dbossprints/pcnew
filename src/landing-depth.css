@@ -70,7 +70,7 @@
 .lp-reveal-delay-1{transition-delay:.08s}.lp-reveal-delay-2{transition-delay:.16s}.lp-reveal-delay-3{transition-delay:.24s}
 @media(max-width:900px){.lp-hero{grid-template-columns:1fr;padding-top:64px}.lp-hero-visual{min-height:520px}.lp-hero-copy h1{font-size:clamp(52px,11vw,88px)}}
 @media(max-width:600px){.lp-nav{padding:13px 18px}.lp-nav-links{display:none}.lp-hero{padding:48px 20px 64px;gap:34px}.lp-hero-visual{min-height:390px}.lp-device{width:88%;right:3%;bottom:7%;padding:12px}.lp-features,.lp-how,.lp-pricing,.lp-showcase{padding:76px 20px}.lp-trust-inner{flex-wrap:wrap;justify-content:center}.lp-plan-card{padding:24px}.lp-auth-card{padding:26px 22px}}
-@media(prefers-reduced-motion:reduce){.lp-reveal{opacity:1;transform:none;filter:none;transition:none}.lp-scene canvas{display:none}}
+@media(prefers-reduced-motion:reduce){.lp-reveal{opacity:1;transform:none;filter:none;transition:none}.lp-scene canvas{display:block!important}}
 
 
 /* Immersive Piano Coach experience */
@@ -237,3 +237,58 @@
   .lp-mobile-menu-toggle{width:36px;height:36px;flex-basis:36px}
 }
 @media(prefers-reduced-motion:reduce){.pc-intro-progress span{animation:none;transform:scaleX(1)}}
+
+/* Keep the 3D scene visible when reduced-motion is enabled. The scene renders one still frame. */
+@media(prefers-reduced-motion:reduce){
+  .lp-reveal{opacity:1!important;transform:none!important;filter:none!important;transition:none!important}
+  .lp-scene canvas,.lp-asset-canvas canvas{display:block!important}
+  .lp-asset-chapter{opacity:1;transform:none;transition:none}
+}
+/* A real, visible illustration remains when WebGL is unavailable or blocked. */
+.lp-scene-fallback{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:1}
+.lp-scene-fallback svg{width:100%;height:100%;display:block;overflow:visible}
+.lp-scene[data-webgl-ready="true"] .lp-scene-fallback{display:none}
+.lp-asset-fallback{position:absolute;inset:52px 0 76px;display:grid;place-items:center;pointer-events:none;z-index:1}
+.lp-asset-fallback svg{width:min(100%,620px);height:100%;max-height:100%;display:block;filter:drop-shadow(0 22px 40px rgba(0,0,0,.22))}
+.lp-asset-canvas[data-webgl-ready="true"]+.lp-asset-fallback{display:none}
+.lp-asset-canvas canvas{position:relative;z-index:2;display:block;width:100%;height:100%}
+@media(max-width:760px){
+  .lp-hero{display:grid;grid-template-columns:minmax(0,1fr);gap:28px;padding:42px 18px 54px;min-height:0}
+  .lp-hero-copy h1{font-size:clamp(43px,11vw,64px);line-height:.98;overflow-wrap:anywhere}
+  .lp-hero-copy>p{font-size:15px;line-height:1.7}
+  .lp-hero-actions{display:flex;flex-wrap:wrap;gap:10px}
+  .lp-hero-actions>*{max-width:100%}
+  .lp-hero-visual{width:100%;min-width:0;min-height:340px;height:clamp(340px,95vw,460px);overflow:hidden}
+  .lp-device{width:90%;right:5%;bottom:8%;padding:10px;transform:rotate(-2deg)}
+  .lp-device-bar{font-size:8px}
+  .lp-hero-floating-card{display:none}
+  .lp-hero-chip{display:none}
+  .lp-hero-note{font-size:30px}
+  .lp-asset-gallery-scroll{display:flex;flex-direction:column;gap:18px}
+  .lp-asset-sticky{position:sticky;top:62px;order:0;width:100%;height:clamp(280px,52svh,420px);min-height:280px;z-index:4}
+  .lp-asset-story{order:1;width:100%}
+  .lp-asset-heading{min-height:0;padding:32px 0 28px}
+  .lp-asset-heading h2{font-size:clamp(42px,11vw,64px)}
+  .lp-asset-heading>p{font-size:14px}
+  .lp-asset-chapter{min-height:48svh;max-width:none;padding:36px 0;opacity:.72;transform:none}
+  .lp-asset-chapter.active{opacity:1}
+  .lp-asset-chapter h3{font-size:clamp(30px,8vw,44px)}
+  .lp-asset-chapter p{font-size:14px;line-height:1.7}
+  .lp-asset-stage-top{left:16px;right:16px;top:18px;font-size:8px}
+  .lp-asset-stage-caption{left:16px;right:16px;bottom:16px;gap:8px;align-items:flex-start;flex-direction:column;padding-top:10px}
+  .lp-asset-stage-caption strong{font-size:21px}
+  .lp-asset-stage-caption span{text-align:left;max-width:none;font-size:10px}
+  .lp-asset-canvas,.lp-asset-fallback{inset:42px 0 78px}
+  .lp-asset-stage-mark{display:none}
+}
+@media(max-width:420px){
+  .lp-nav{gap:6px;padding:10px 12px}
+  .lp-brand-logo{width:100px}
+  .lp-nav-actions{gap:6px}
+  .lp-nav-signin{font-size:9px}
+  .lp-nav-cta{font-size:8px;padding:8px 9px}
+  .lp-mobile-menu-toggle{width:34px;height:34px;flex-basis:34px}
+  .lp-hero-actions .lp-button-primary,.lp-hero-actions .lp-button-ghost{font-size:10px;padding:12px 14px}
+  .lp-hero-meta{gap:10px;flex-wrap:wrap}
+  .lp-hero-meta span{font-size:9px}
+}
