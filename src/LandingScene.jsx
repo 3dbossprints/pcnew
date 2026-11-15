@@ -57,7 +57,7 @@ export default function LandingScene({ className = "" }) {
     }
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.appendChild(renderer.domElement);
@@ -88,6 +88,42 @@ export default function LandingScene({ className = "" }) {
     ring.rotation.x = Math.PI / 2.4;
     ring.position.z = -1.2;
     scene.add(ring);
+
+    // A suspended, translucent score plane and gently drifting 3D notation
+    // give the hero a recognisable musical focal point without loading media.
+    const scoreGroup = new THREE.Group();
+    scoreGroup.position.set(0, 1.45, -1.8);
+    scoreGroup.rotation.x = -0.08;
+    scene.add(scoreGroup);
+    const staffGeometry = new THREE.BoxGeometry(5.9, 0.012, 0.012);
+    const staffMaterial = new THREE.MeshStandardMaterial({ color: 0x9b9a88, transparent: true, opacity: 0.48 });
+    const staffLines = [];
+    for (let i = 0; i < 5; i += 1) {
+      const line = new THREE.Mesh(staffGeometry, staffMaterial);
+      line.position.y = (i - 2) * 0.28;
+      scoreGroup.add(line);
+      staffLines.push(line);
+    }
+    const noteHeadGeometry = new THREE.SphereGeometry(0.12, 16, 12);
+    noteHeadGeometry.scale(1.45, 0.78, 0.55);
+    const noteStemGeometry = new THREE.BoxGeometry(0.035, 0.66, 0.035);
+    const noteMaterials = [
+      new THREE.MeshPhysicalMaterial({ color: 0x526d4c, roughness: 0.28, metalness: 0.18, clearcoat: 0.7 }),
+      new THREE.MeshPhysicalMaterial({ color: 0xb88c62, roughness: 0.3, metalness: 0.28, clearcoat: 0.65 }),
+    ];
+    const floatingNotes = [];
+    for (let i = 0; i < 9; i += 1) {
+      const note = new THREE.Group();
+      const material = noteMaterials[i % noteMaterials.length];
+      const head = new THREE.Mesh(noteHeadGeometry, material);
+      const stem = new THREE.Mesh(noteStemGeometry, material);
+      stem.position.set(0.13, 0.3, 0);
+      note.add(head, stem);
+      note.position.set((i - 4) * 0.62, (i % 3 - 1) * 0.42, 0.08 + (i % 2) * 0.04);
+      note.rotation.z = i % 2 ? -0.22 : 0.18;
+      scoreGroup.add(note);
+      floatingNotes.push({ note, baseY: note.position.y, phase: i * 0.72 });
+    }
 
     const particles = buildParticles(260);
     scene.add(particles.points);
@@ -132,7 +168,7 @@ export default function LandingScene({ className = "" }) {
       rig.rotation.y = pointer.x * 0.28 + Math.sin(t * 0.25) * 0.05;
       rig.rotation.z = pointer.y * 0.05;
       ring.rotation.z = t * 0.12;
-      particles.points.rotation.y = t * 0.02;
+      particles.points.rotation.y = t * 0.02;\n      scoreGroup.rotation.y = pointer.x * 0.08 + Math.sin(t * 0.18) * 0.035;\n      floatingNotes.forEach(({ note, baseY, phase }) => {\n        note.position.y = baseY + (reduceMotion ? 0 : Math.sin(t * 0.72 + phase) * 0.12);\n        note.rotation.z += reduceMotion ? 0 : Math.sin(t * 0.35 + phase) * 0.0008;\n      });
 
       keyboard.keys.forEach(({ mesh, baseY }, index) => {
         const wave = Math.max(0, Math.sin(t * 1.6 - index * 0.45));
