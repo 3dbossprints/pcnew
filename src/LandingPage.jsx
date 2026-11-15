@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-} from "firebase/auth";
-import { auth, googleProvider } from "./lib/firebase.js";
 import LandingScene from "./LandingScene.jsx";
+import LandingAssetGallery from "./LandingAssetGallery.jsx";
 import "./landing-depth.css";
 
 const PLANS = [
@@ -187,13 +182,6 @@ function usePointerDepth() {
 }
 
 export default function LandingPage({ onAuthed }) {
-  const [overlayOpen, setOverlayOpen] = useState(false);
-  const [mode, setMode] = useState("signup");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   const heroRef = useParallax();
   const visualRef = usePointerDepth();
   const [navScrolled, setNavScrolled] = useState(false);
@@ -206,49 +194,6 @@ export default function LandingPage({ onAuthed }) {
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  async function submit(event) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      if (mode === "signup") {
-        if (!passwordIsValid(password)) throw new Error("Use at least 8 characters, including uppercase, lowercase and a number.");
-        const cleanName = name.trim();
-        if (!cleanName || cleanName.length > 100) throw new Error("Enter your name (up to 100 characters).");
-        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await updateProfile(credential.user, { displayName: cleanName });
-        const token = await credential.user.getIdToken(true);
-        await fetch("/api/auth/email-code", { method: "POST", headers: { Authorization: "Bearer " + token } });
-        setMessage("Check your inbox for a verification link and code.");
-      } else {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      }
-    } catch (error) {
-      const messages = {
-        "auth/email-already-in-use": "An account already exists for this email. Try signing in.",
-        "auth/invalid-credential": "That email and password combination wasn't recognised.",
-        "auth/weak-password": "Choose a stronger password with at least 8 characters.",
-        "auth/invalid-email": "Enter a valid email address.",
-        "auth/too-many-requests": "Too many attempts. Please wait a little before trying again.",
-      };
-      setMessage(messages[error.code] || error.message || "We couldn't complete that request.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function googleSignIn() {
-    setBusy(true);
-    setMessage("");
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      setMessage(error.message || "Google sign-in could not be completed.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function openAuth(authMode) {
     window.location.assign(authMode === "signin" ? "/signin" : "/signup");
@@ -267,6 +212,7 @@ export default function LandingPage({ onAuthed }) {
         <div className="lp-nav-links">
           <a href="#features">Features</a>
           <a href="#how">How it works</a>
+          <a href="#3d-elements">3D elements</a>
           <a href="#pricing">Pricing</a>
         </div>
         <div className="lp-nav-actions">
@@ -333,6 +279,8 @@ export default function LandingPage({ onAuthed }) {
       <div className="lp-marquee" aria-label="Piano Coach capabilities">
         <div className="lp-marquee-track"><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i></div>
       </div>
+
+      <section className="lp-asset-section lp-reveal" id="3d-elements"><LandingAssetGallery /></section>
 
       <section className="lp-features" id="features">
         <div className="lp-section-head lp-reveal">
@@ -462,42 +410,6 @@ export default function LandingPage({ onAuthed }) {
         </div>
       </footer>
 
-      {overlayOpen && (
-        <div className="lp-auth-overlay" onClick={(e) => { if (e.target === e.currentTarget) setOverlayOpen(false); }}>
-          <div className="lp-auth-card">
-            <button className="lp-auth-close" onClick={() => setOverlayOpen(false)}>×</button>
-            <img className="lp-auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach" />
-            <span className="lp-eyebrow">{mode === "signup" ? "BEGIN YOUR JOURNEY" : "WELCOME BACK"}</span>
-            <h2>{mode === "signup" ? "Begin with your music." : "Sign in to Piano Coach."}</h2>
-            <p>{mode === "signup" ? "Start your free 60-minute demo. No card required." : "Continue your musical progress."}</p>
-            <form className="lp-auth-form" onSubmit={submit}>
-              {mode === "signup" && <label className="lp-field">
-                <span>Your name</span>
-                <input type="text" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required />
-              </label>}
-              <label className="lp-field">
-                <span>Email address</span>
-                <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              </label>
-              <label className="lp-field">
-                <span>Password</span>
-                <input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} required />
-              </label>
-              {mode === "signup" && <small className="lp-auth-help">At least 8 characters, with uppercase, lowercase and a number.</small>}
-              {message && <p className="lp-auth-message" role="alert">{message}</p>}
-              <button className="lp-button-primary" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"}</button>
-            </form>
-            <div className="lp-auth-separator"><span>or</span></div>
-            <button className="lp-button-outline lp-google-button" disabled={busy} onClick={googleSignIn}><svg viewBox="0 0 48 48" width="19" height="19" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.5 13.2l7.8 6.1C12.2 13.3 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.6 2.9-2.3 5.4-4.8 7.1l7.5 5.8c4.4-4.1 7-10.1 7-17.4z"/><path fill="#FBBC05" d="M10.3 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.3.8-4.7l-7.8-6.1C.9 16.6 0 20.2 0 24s.9 7.4 2.5 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.1-6.1l-7.5-5.8c-2.1 1.4-4.7 2.3-7.6 2.3-6.4 0-11.8-3.8-13.7-9.2l-7.8 6.1C6.5 43.2 14.6 48 24 48z"/></svg><span>Continue with Google</span></button>
-            <p className="lp-auth-switch">
-              {mode === "signup" ? "Already registered?" : "New to Piano Coach?"}
-              <button onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setMessage(""); setName(""); }}>
-                {mode === "signup" ? "Sign in" : "Create account"}
-              </button>
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
