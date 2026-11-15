@@ -1036,7 +1036,9 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [checkoutSecret,setCheckoutSecret]=useState("");
   const [deletionStep,setDeletionStep]=useState("idle");
   const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");
-  const [deletionCode,setDeletionCode]=useState("");\n  const [discountBusy,setDiscountBusy]=useState(false);\n  const [discountMessage,setDiscountMessage]=useState("");
+  const [deletionCode,setDeletionCode]=useState("");
+  const [discountBusy,setDiscountBusy]=useState(false);
+  const [discountMessage,setDiscountMessage]=useState("");
   const [deletionBusy,setDeletionBusy]=useState(false);
   const [deletionMessage,setDeletionMessage]=useState("");
   const plan=user.plan||"free";
