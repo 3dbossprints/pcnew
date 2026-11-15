@@ -120,7 +120,7 @@ export default function LandingAssetGallery() {
           float wave=sin(r*34.0-uTime*1.1+uScroll*5.0+sin(p.x*9.0+uTime*.25)*.8);
           float ripple=sin(length(p-uPointer*.16)*58.0-uTime*1.7);
           float lines=smoothstep(.88,.98,abs(wave))*.16+smoothstep(.94,1.0,abs(ripple))*.08;
-          float fade=smoothstep(.52,.08,r);
+          float fade=1.0-smoothstep(.08,.52,r);
           vec3 color=mix(vec3(.15,.22,.17),vec3(.68,.78,.59),lines);
           gl_FragColor=vec4(color,lines*fade);
         }`
