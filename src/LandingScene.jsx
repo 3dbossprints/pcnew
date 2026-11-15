@@ -41,7 +41,7 @@ export default function LandingScene({ className = "" }) {
     renderer.outputColorSpace=THREE.SRGBColorSpace;
     renderer.toneMapping=THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure=1.12;
-    host.appendChild(renderer.domElement);host.dataset.webglReady="true";
+    host.appendChild(renderer.domElement);
     const scene=new THREE.Scene();
     const camera=new THREE.PerspectiveCamera(34,1,.1,100);
     camera.position.set(0,3.6,13);camera.lookAt(0,0,0);
@@ -89,7 +89,7 @@ export default function LandingScene({ className = "" }) {
       ringGroup.rotation.y=t*.055+scroll*.2;ringGroup.rotation.z=t*.018;
       particles.rotation.y=t*.012+pointer.x*.04;
       camera.position.x=pointer.x*.35;camera.position.y=3.6+scroll*.3+pointer.y*.2;camera.lookAt(0,-.1,0);
-      renderer.render(scene,camera);if(!reduced)frame=requestAnimationFrame(render);
+      renderer.render(scene,camera);host.dataset.webglReady="true";if(!reduced)frame=requestAnimationFrame(render);
     }
     render();
     return()=>{cancelAnimationFrame(frame);observer.disconnect();host.removeEventListener("pointermove",onPointer);window.removeEventListener("scroll",onScroll);piano.geometries.forEach(g=>g.dispose());piano.materials.forEach(m=>m.dispose());ringGroup.children.forEach(m=>m.geometry.dispose());ringMat.dispose();staff.traverse(o=>{if(o.isMesh){o.geometry.dispose();}});lineGeo.dispose();lineMat.dispose();noteMat.forEach(m=>m.dispose());particleGeo.dispose();particleMat.dispose();renderer.dispose();renderer.domElement.remove();delete host.dataset.webglReady;};
