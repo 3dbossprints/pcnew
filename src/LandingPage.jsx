@@ -279,7 +279,7 @@ export default function LandingPage({ onAuthed }) {
         <div className="lp-marquee-track"><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i></div>
       </div>
 
-      <section className="lp-asset-section" id="3d-elements"><LandingAssetGallery /></section>
+      <section className="lp-asset-section lp-reveal" id="3d-elements"><LandingAssetGallery /></section>
 
       <section className="lp-features" id="features">
         <div className="lp-section-head lp-reveal">
