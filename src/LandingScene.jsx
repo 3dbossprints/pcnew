@@ -46,7 +46,6 @@ export default function LandingScene({ className = "" }) {
     const camera=new THREE.PerspectiveCamera(34,1,.1,100);
     camera.position.set(0,3.6,13);camera.lookAt(0,0,0);
     scene.add(new THREE.HemisphereLight(0xfff5e7,0x26372b,2));
-    const keyLight=new THREE.AreaLight?null:null;
     const light=new THREE.DirectionalLight(0xfff3df,3.2);light.position.set(4,8,7);scene.add(light);
     const greenLight=new THREE.PointLight(0x9dc183,36,18);greenLight.position.set(-5,2,1);scene.add(greenLight);
     const goldLight=new THREE.PointLight(0xc59a6b,28,16);goldLight.position.set(5,-1,-2);scene.add(goldLight);
