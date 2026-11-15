@@ -212,6 +212,7 @@ export default function LandingPage({ onAuthed }) {
         <div className="lp-nav-links">
           <a href="#features">Features</a>
           <a href="#how">How it works</a>
+          <a href="#3d-elements">3D elements</a>
           <a href="#pricing">Pricing</a>
         </div>
         <div className="lp-nav-actions">
