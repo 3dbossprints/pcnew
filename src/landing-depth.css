@@ -71,3 +71,90 @@
 @media(max-width:900px){.lp-hero{grid-template-columns:1fr;padding-top:64px}.lp-hero-visual{min-height:520px}.lp-hero-copy h1{font-size:clamp(52px,11vw,88px)}}
 @media(max-width:600px){.lp-nav{padding:13px 18px}.lp-nav-links{display:none}.lp-hero{padding:48px 20px 64px;gap:34px}.lp-hero-visual{min-height:390px}.lp-device{width:88%;right:3%;bottom:7%;padding:12px}.lp-features,.lp-how,.lp-pricing,.lp-showcase{padding:76px 20px}.lp-trust-inner{flex-wrap:wrap;justify-content:center}.lp-plan-card{padding:24px}.lp-auth-card{padding:26px 22px}}
 @media(prefers-reduced-motion:reduce){.lp-reveal{opacity:1;transform:none;filter:none;transition:none}.lp-scene canvas{display:none}}
+
+
+/* Immersive Piano Coach experience */
+:root{scroll-behavior:smooth;scroll-padding-top:88px}
+.lp-shell{overflow:hidden;background:#efeee7;color:#1b211c}
+.lp-nav{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:24px;backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);transition:background .35s,border-color .35s,box-shadow .35s}
+.lp-nav.scrolled{background:rgba(239,238,231,.94);box-shadow:0 8px 32px rgba(18,27,19,.06)}
+.lp-brand-logo{width:190px;height:auto;max-height:44px;object-fit:contain}
+.lp-nav-links{display:flex;align-items:center;gap:clamp(18px,3vw,48px)}
+.lp-nav-links a{font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;text-decoration:none;transition:color .2s}
+.lp-nav-links a:hover,.lp-nav-signin:hover{color:#829a70}
+.lp-nav-signin{font-size:12px;font-weight:700}
+.lp-nav-cta{font-size:11px;letter-spacing:.1em;text-transform:uppercase;transition:transform .25s,background .25s}
+.lp-nav-cta:hover{transform:translateY(-2px);background:#71876c}
+.lp-hero{position:relative;align-items:center}
+.lp-hero-copy h1{font-weight:500}
+.lp-hero-copy h1 em{font-weight:500}
+.lp-hero-visual{min-height:clamp(520px,60vw,760px);border-radius:2px;background:radial-gradient(ellipse at 48% 44%,#465b48 0%,#27372b 44%,#121a15 100%);box-shadow:0 38px 110px rgba(24,32,24,.2)}
+.lp-hero-visual:before{inset:16px;border-color:rgba(228,218,196,.23)}
+.lp-hero-visual:after{letter-spacing:.28em;font-size:8px}
+.lp-scene{inset:-5% -7% -5%}
+.lp-device{transform:rotate(-4deg) translateZ(0);box-shadow:0 32px 90px rgba(0,0,0,.34);border-radius:2px}
+.lp-hero-floating-card{border-radius:2px}
+.lp-hero-note{font-size:clamp(34px,4vw,62px)}
+.lp-hero-meta{font-size:11px;letter-spacing:.04em}
+.lp-trust-strip{position:relative}
+.lp-trust-inner span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#5d6659}
+.lp-marquee{overflow:hidden}
+.lp-marquee-track{width:max-content;animation:lp-marquee 32s linear infinite;will-change:transform}
+@keyframes lp-marquee{to{transform:translateX(-50%)}}
+.lp-marquee:hover .lp-marquee-track{animation-play-state:paused}
+.lp-asset-section{position:relative;padding:clamp(80px,10vw,150px) clamp(22px,7vw,120px);background:#17221a;color:#f2efe5;isolation:isolate}
+.lp-asset-section:before{content:"";position:absolute;inset:0;z-index:-1;opacity:.13;background-image:linear-gradient(rgba(227,232,217,.15) 1px,transparent 1px),linear-gradient(90deg,rgba(227,232,217,.15) 1px,transparent 1px);background-size:64px 64px;mask-image:linear-gradient(90deg,transparent,#000 25%,#000 80%,transparent)}
+.lp-asset-gallery{max-width:1440px;margin:0 auto;display:grid;grid-template-columns:minmax(280px,.72fr) minmax(0,1.28fr);gap:clamp(42px,8vw,130px);align-items:center}
+.lp-asset-intro .lp-eyebrow{color:#b3c49e}
+.lp-asset-intro h2{margin:24px 0 25px;font-family:"Playfair Display",Georgia,serif;font-size:clamp(42px,5.5vw,76px);font-weight:500;line-height:.99;letter-spacing:-.055em}
+.lp-asset-intro h2 em{color:#afc69a;font-weight:500}
+.lp-asset-intro>p{max-width:440px;color:#c1c9bd;font-size:14px;line-height:1.9}
+.lp-asset-picker{display:grid;margin-top:38px;border-top:1px solid rgba(233,238,222,.2)}
+.lp-asset-picker button{display:grid;grid-template-columns:42px 1fr 24px;align-items:center;gap:14px;padding:16px 2px;border:0;border-bottom:1px solid rgba(233,238,222,.2);background:transparent;color:#e9e8de;text-align:left;font-size:14px;cursor:pointer;transition:padding .25s,color .25s}
+.lp-asset-picker button span{font-size:10px;color:#91a18b;letter-spacing:.15em}
+.lp-asset-picker button b{font-size:16px;font-weight:400;opacity:.5;transition:transform .25s,opacity .25s}
+.lp-asset-picker button:hover,.lp-asset-picker button.active{padding-left:12px;color:#c4d8ae}
+.lp-asset-picker button.active b{opacity:1;transform:translate(3px,-3px)}
+.lp-asset-stage{position:relative;min-height:540px;border:1px solid rgba(227,232,217,.2);background:radial-gradient(ellipse at 50% 46%,rgba(133,157,116,.2),transparent 56%),linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,0));overflow:hidden}
+.lp-asset-stage:before{content:"";position:absolute;inset:18px;border:1px solid rgba(227,232,217,.08);pointer-events:none}
+.lp-asset-stage-top{position:absolute;z-index:2;top:28px;left:30px;right:30px;display:flex;justify-content:space-between;color:#9da99a;font-size:8px;letter-spacing:.2em}
+.lp-asset-canvas{position:absolute;inset:52px 0 76px;touch-action:pan-y}
+.lp-asset-canvas canvas{display:block;width:100%;height:100%}
+.lp-asset-stage-caption{position:absolute;z-index:2;left:30px;right:30px;bottom:28px;display:flex;align-items:baseline;justify-content:space-between;gap:18px;border-top:1px solid rgba(227,232,217,.17);padding-top:16px}
+.lp-asset-stage-caption strong{font-family:"Playfair Display",Georgia,serif;font-size:23px;font-weight:500}
+.lp-asset-stage-caption span{max-width:260px;color:#aeb8a9;font-size:10px;line-height:1.6;text-align:right}
+.lp-asset-stage-mark{position:absolute;right:26px;top:50%;color:rgba(227,232,217,.09);font-size:clamp(40px,7vw,90px);font-weight:700;letter-spacing:-.09em;pointer-events:none;transform:rotate(90deg) translateX(50%);transform-origin:right top}
+.lp-features,.lp-how,.lp-pricing{position:relative}
+.lp-section-head h2,.lp-showcase-text h2{font-family:"Playfair Display",Georgia,serif;font-weight:500}
+.lp-features-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.lp-feature-card{position:relative;overflow:hidden;min-height:270px}
+.lp-feature-card:after{content:"";position:absolute;width:160px;height:160px;right:-80px;bottom:-90px;border:1px solid rgba(103,128,94,.24);border-radius:50%;transition:transform .6s}
+.lp-feature-card:hover:after{transform:scale(1.8)}
+.lp-feature-icon{font-size:27px;color:#78916c}
+.lp-showcase{position:relative}
+.lp-showcase-grid{max-width:1320px;margin:0 auto;gap:clamp(40px,8vw,120px)}
+.lp-tilt-card,.lp-feedback{min-height:320px}
+.lp-showcase-text p{font-size:14px;line-height:1.95}
+.lp-showcase-list li{font-size:12px;line-height:1.7}
+.lp-how{overflow:hidden}
+.lp-steps-grid{max-width:1320px;margin:0 auto;gap:clamp(20px,4vw,56px)}
+.lp-step-card{position:relative;min-height:190px}
+.lp-step-num{font-family:"Playfair Display",Georgia,serif;font-size:34px}
+.lp-step-card h3{font-size:21px}
+.lp-plan-card{position:relative;min-height:510px;display:flex;flex-direction:column}
+.lp-plan-features{margin-bottom:32px}
+.lp-plan-card>button{margin-top:auto}
+.lp-plan-badge{border-radius:0;letter-spacing:.14em;text-transform:uppercase;font-size:8px}
+.lp-cta-strip{position:relative;overflow:hidden}
+.lp-cta-strip:before,.lp-cta-strip:after{content:"";position:absolute;border:1px solid rgba(31,48,34,.18);border-radius:50%;width:440px;height:440px;pointer-events:none}
+.lp-cta-strip:before{left:-220px;top:-280px}
+.lp-cta-strip:after{right:-180px;bottom:-330px;width:560px;height:560px}
+.lp-footer-inner{max-width:1440px;margin:0 auto}
+.lp-footer-logo{max-width:230px}
+.lp-parent-brand img{max-width:160px}
+.lp-reveal{will-change:transform,opacity}
+.lp-reveal-delay-1{transition-delay:.1s}.lp-reveal-delay-2{transition-delay:.2s}.lp-reveal-delay-3{transition-delay:.3s}
+@media(max-width:1000px){.lp-asset-gallery{grid-template-columns:1fr;gap:38px}.lp-asset-intro{max-width:720px}.lp-asset-picker{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:22px}.lp-asset-stage{min-height:500px}}
+@media(max-width:760px){.lp-nav{gap:12px}.lp-brand-logo{width:150px}.lp-nav-actions{gap:12px}.lp-nav-cta{padding:11px 13px}.lp-hero{min-height:0}.lp-hero-visual{min-height:480px}.lp-features-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-asset-stage{min-height:430px}.lp-asset-stage-caption{left:22px;right:22px}.lp-asset-stage-top{left:22px;right:22px}}
+@media(max-width:520px){.lp-brand-logo{width:128px}.lp-nav-signin{font-size:11px}.lp-nav-cta{font-size:9px;padding:10px}.lp-hero-visual{min-height:380px}.lp-features-grid{grid-template-columns:1fr}.lp-feature-card{min-height:210px}.lp-asset-section{padding:76px 20px}.lp-asset-picker{grid-template-columns:1fr}.lp-asset-stage{min-height:370px}.lp-asset-stage-caption{display:grid;gap:4px;bottom:20px}.lp-asset-stage-caption span{text-align:left}.lp-asset-stage-top{font-size:7px}.lp-asset-stage-mark{font-size:38px}.lp-plan-card{min-height:0}.lp-trust-inner{gap:18px 24px}}
+@media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}.lp-marquee-track{animation:none}.lp-reveal{will-change:auto}}
