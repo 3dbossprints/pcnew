@@ -17,7 +17,7 @@ export default function PianoLoader({ variant = "loading", onComplete }) {
       const timer = window.setInterval(() => setMessageIndex(index => (index + 1) % MESSAGES.length), 1900);
       return () => window.clearInterval(timer);
     }
-    const timer = window.setTimeout(() => onComplete?.(), 2800);
+    const timer = window.setTimeout(() => onComplete?.(), 4200);
     return () => window.clearTimeout(timer);
   }, [isIntro, onComplete]);
 
