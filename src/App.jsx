@@ -98,7 +98,7 @@ function recommendNextTask(tasks, attempts) {
   scored.sort((a, b) => b.priority - a.priority);
   return scored.filter(item => item.lastAttempted > 0 || item.task).slice(0, 3).map(item => item.task);
 }
-function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }\nfunction formatPromoCodeInput(value) { const code = String(value || "").replace(/\\s+/g, "").toUpperCase(); return /^[A-Z0-9]{0,8}$/.test(code) && code.length > 4 ? code.slice(0, 4) + " " + code.slice(4) : code; }
+function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }\nfunction formatPromoCodeInput(value) { const code = String(value || "").replace(/\s+/g, "").toUpperCase(); return /^[A-Z0-9]{0,8}$/.test(code) && code.length > 4 ? code.slice(0, 4) + " " + code.slice(4) : code; }
 
 export default function App() {
   const [page, setPage] = useState("home");
@@ -1129,7 +1129,7 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
     setDiscountBusy(true);
     setDiscountMessage("");
     try{
-      const result=await api("/api/billing/apply-discount",{method:"POST",body:{discountCode:discountCode.replace(/\\s/g,"")}});
+      const result=await api("/api/billing/apply-discount",{method:"POST",body:{discountCode:discountCode.replace(/\s/g,"")}});
       setDiscountMessage(result.message||"Your discount has been applied.");
       setDiscountCode("");
     }catch(error){setDiscountMessage(error.message||"The discount could not be applied.");}
