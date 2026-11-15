@@ -333,7 +333,8 @@ async function deactivateAdminDiscount(req,res) {
 export default async function handler(req,res) {
   const action=req.query?.action;
   if (action==="checkout") { if (!requireMethod(req,res,"POST")) return; return checkout(req,res); }
-  if (action==="portal") { if (!requireMethod(req,res,"POST")) return; return portal(req,res); }\n  if (action==="apply-discount") { if (!requireMethod(req,res,"POST")) return; return applyDiscount(req,res); }
+  if (action==="portal") { if (!requireMethod(req,res,"POST")) return; return portal(req,res); }
+  if (action==="apply-discount") { if (!requireMethod(req,res,"POST")) return; return applyDiscount(req,res); }
   if (action==="confirm") { if (!requireMethod(req,res,"POST")) return; return confirm(req,res); }
   if (action==="admin") { if (!requireMethod(req,res,"GET")) return; return adminOverview(req,res); }
   if (action==="admin-discounts") { if (req.method==="GET") return adminOverview(req,res); if (!requireMethod(req,res,"POST")) return; return createAdminDiscount(req,res); }
