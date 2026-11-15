@@ -168,7 +168,12 @@ export default function LandingScene({ className = "" }) {
       rig.rotation.y = pointer.x * 0.28 + Math.sin(t * 0.25) * 0.05;
       rig.rotation.z = pointer.y * 0.05;
       ring.rotation.z = t * 0.12;
-      particles.points.rotation.y = t * 0.02;\n      scoreGroup.rotation.y = pointer.x * 0.08 + Math.sin(t * 0.18) * 0.035;\n      floatingNotes.forEach(({ note, baseY, phase }) => {\n        note.position.y = baseY + (reduceMotion ? 0 : Math.sin(t * 0.72 + phase) * 0.12);\n        note.rotation.z += reduceMotion ? 0 : Math.sin(t * 0.35 + phase) * 0.0008;\n      });
+      particles.points.rotation.y = t * 0.02;
+      scoreGroup.rotation.y = pointer.x * 0.08 + Math.sin(t * 0.18) * 0.035;
+      floatingNotes.forEach(({ note, baseY, phase }) => {
+        note.position.y = baseY + (reduceMotion ? 0 : Math.sin(t * 0.72 + phase) * 0.12);
+        note.rotation.z += reduceMotion ? 0 : Math.sin(t * 0.35 + phase) * 0.0008;
+      });
 
       keyboard.keys.forEach(({ mesh, baseY }, index) => {
         const wave = Math.max(0, Math.sin(t * 1.6 - index * 0.45));
