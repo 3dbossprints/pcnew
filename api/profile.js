@@ -106,8 +106,8 @@ async function sendDeletionCode(req, res, user) {
 }
 
 async function verifyDeletionCode(req, res, user, body) {
-  const code = String(body.deletionAction?.code || "").replace(/\\s/g, "");
-  if (!/^\\d{6}$/.test(code)) return sendJson(res, 400, { error: "Enter the six-digit code from your email." });
+  const code = String(body.deletionAction?.code || "").replace(/\s/g, "");
+  if (!/^\d{6}$/.test(code)) return sendJson(res, 400, { error: "Enter the six-digit code from your email." });
   const db = database();
   const found = await db.query(
     "SELECT id,code_hash,expires_at,attempts FROM account_deletion_codes WHERE firebase_uid=$1 AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1",
