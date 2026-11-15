@@ -18,7 +18,7 @@ export default function AuthGate({ children }) {
   const [mode, setMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has("resetToken")) return "forgot";
-    return window.location.pathname.replace(/\\/+$/, "") === "/signup" ? "signup" : "signin";
+    return window.location.pathname.replace(/\/+$/, "") === "/signup" ? "signup" : "signin";
   });
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -185,7 +185,7 @@ export default function AuthGate({ children }) {
   }
 
   const hasResetToken = new URLSearchParams(window.location.search).has("resetToken");
-  const authRoute = ["/signin", "/signup"].includes(window.location.pathname.replace(/\\/+$/, ""));
+  const authRoute = ["/signin", "/signup"].includes(window.location.pathname.replace(/\/+$/, ""));
   if (!hasResetToken && !authRoute) return <LandingPage />;
 
   return <main className="auth-screen"><section className="auth-card">
