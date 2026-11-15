@@ -221,7 +221,8 @@ export default function LandingPage({ onAuthed }) {
           <a href="#3d-elements">3D elements</a>
           <a href="#pricing">Pricing</a>
         </div>
-        <div className="lp-nav-actions">\n          <LandingSoundToggle />
+        <div className="lp-nav-actions">
+          <LandingSoundToggle />
           <button className="lp-nav-signin" onClick={() => openAuth("signin")}>Sign in</button>
           <button className="lp-nav-cta" onClick={() => openAuth("signup")}>Start free</button>
         </div>
