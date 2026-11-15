@@ -98,7 +98,8 @@ function recommendNextTask(tasks, attempts) {
   scored.sort((a, b) => b.priority - a.priority);
   return scored.filter(item => item.lastAttempted > 0 || item.task).slice(0, 3).map(item => item.task);
 }
-function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }\nfunction formatPromoCodeInput(value) { const code = String(value || "").replace(/\s+/g, "").toUpperCase(); return /^[A-Z0-9]{0,8}$/.test(code) && code.length > 4 ? code.slice(0, 4) + " " + code.slice(4) : code; }
+function Icon({ children, className = "" }) { return <span className={"pc-icon " + className} aria-hidden="true">{children}</span>; }
+function formatPromoCodeInput(value) { const code = String(value || "").replace(/\s+/g, "").toUpperCase(); return /^[A-Z0-9]{0,8}$/.test(code) && code.length > 4 ? code.slice(0, 4) + " " + code.slice(4) : code; }
 
 export default function App() {
   const [page, setPage] = useState("home");
@@ -1034,7 +1035,8 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
   const [discountCode,setDiscountCode]=useState("");
   const [checkoutSecret,setCheckoutSecret]=useState("");
   const [deletionStep,setDeletionStep]=useState("idle");
-  const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");\n  const [deletionCode,setDeletionCode]=useState("");\n  const [discountBusy,setDiscountBusy]=useState(false);\n  const [discountMessage,setDiscountMessage]=useState("");
+  const [deletionConfirmPassword,setDeletionConfirmPassword]=useState("");
+  const [deletionCode,setDeletionCode]=useState("");\n  const [discountBusy,setDiscountBusy]=useState(false);\n  const [discountMessage,setDiscountMessage]=useState("");
   const [deletionBusy,setDeletionBusy]=useState(false);
   const [deletionMessage,setDeletionMessage]=useState("");
   const plan=user.plan||"free";
@@ -1178,7 +1180,8 @@ function ProfilePage({data,onSaved,toast,onRefresh}){
         {interfaceOpen&&<div className="pc-interface-settings"><label>Appearance<select value={theme} onChange={e=>setTheme(e.target.value)}><option value="light">Light</option><option value="dark">Dark</option><option value="contrast">High contrast</option></select></label><label>Text size<select value={fontSize} onChange={e=>setFontSize(e.target.value)}><option value="normal">Standard</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><p>Changes are applied in this browser and saved with your profile.</p></div>}
       </section>
       <section className="pc-panel pc-profile-section"><span className="pc-eyebrow">04 · SECURITY</span><h2>Change password</h2><div className="pc-profile-fields"><label>Current password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder={connected.includes("password")?"Current password":"Not needed for Google sign-in"}/></label><label>New password<input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} autoComplete="new-password"/></label></div><button type="button" className="pc-button outline" disabled={passwordBusy||!newPassword} onClick={changePassword}>{passwordBusy?"Updating…":"Update password"}</button><p className="pc-muted-small">At least 8 characters, including uppercase, lowercase and a number.</p></section>
-      <div className="pc-profile-logout"><button type="button" className="pc-button outline" onClick={async()=>{try{await signOut(auth);window.location.assign("/");}catch(error){setAccountMessage(error.message||"You could not be signed out.");}}}>Log out</button></div>\n      <section className="pc-panel pc-profile-section pc-delete-note">
+      <div className="pc-profile-logout"><button type="button" className="pc-button outline" onClick={async()=>{try{await signOut(auth);window.location.assign("/");}catch(error){setAccountMessage(error.message||"You could not be signed out.");}}}>Log out</button></div>
+      <section className="pc-panel pc-profile-section pc-delete-note">
         <span className="pc-eyebrow">05 · ACCOUNT DELETION</span>
         <h2>Leaving Piano Coach?</h2>
         {deletionActive ? (
