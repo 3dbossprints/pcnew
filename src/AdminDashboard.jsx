@@ -57,7 +57,7 @@ export default function AdminDashboard({ onExit }) {
     setSavingDiscount(true);
     setMessage("");
     try {
-      const result = await adminApi("/api/billing/admin-discounts", { method: "POST", body: { ...form, code: form.code.replace(/\\s+/g, "") } });
+      const result = await adminApi("/api/billing/admin-discounts", { method: "POST", body: { ...form, code: form.code.replace(/\s+/g, "") } });
       const createdCode = result.discountCode?.code;
       setMessage(createdCode ? "Discount created. Share this code: " + formatCode(createdCode) : "Discount code created in Stripe and saved.");
       setForm(current => ({ ...current, code: "", allowedEmail: "", maxRedemptions: "", expiresAt: "" }));
