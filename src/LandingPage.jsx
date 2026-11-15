@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-} from "firebase/auth";
-import { auth, googleProvider } from "./lib/firebase.js";
 import LandingScene from "./LandingScene.jsx";
+import LandingAssetGallery from "./LandingAssetGallery.jsx";
 import "./landing-depth.css";
 
 const PLANS = [
@@ -187,13 +182,6 @@ function usePointerDepth() {
 }
 
 export default function LandingPage({ onAuthed }) {
-  const [overlayOpen, setOverlayOpen] = useState(false);
-  const [mode, setMode] = useState("signup");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   const heroRef = useParallax();
   const visualRef = usePointerDepth();
   const [navScrolled, setNavScrolled] = useState(false);
@@ -206,49 +194,6 @@ export default function LandingPage({ onAuthed }) {
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  async function submit(event) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      if (mode === "signup") {
-        if (!passwordIsValid(password)) throw new Error("Use at least 8 characters, including uppercase, lowercase and a number.");
-        const cleanName = name.trim();
-        if (!cleanName || cleanName.length > 100) throw new Error("Enter your name (up to 100 characters).");
-        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await updateProfile(credential.user, { displayName: cleanName });
-        const token = await credential.user.getIdToken(true);
-        await fetch("/api/auth/email-code", { method: "POST", headers: { Authorization: "Bearer " + token } });
-        setMessage("Check your inbox for a verification link and code.");
-      } else {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      }
-    } catch (error) {
-      const messages = {
-        "auth/email-already-in-use": "An account already exists for this email. Try signing in.",
-        "auth/invalid-credential": "That email and password combination wasn't recognised.",
-        "auth/weak-password": "Choose a stronger password with at least 8 characters.",
-        "auth/invalid-email": "Enter a valid email address.",
-        "auth/too-many-requests": "Too many attempts. Please wait a little before trying again.",
-      };
-      setMessage(messages[error.code] || error.message || "We couldn't complete that request.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function googleSignIn() {
-    setBusy(true);
-    setMessage("");
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      setMessage(error.message || "Google sign-in could not be completed.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function openAuth(authMode) {
     window.location.assign(authMode === "signin" ? "/signin" : "/signup");
