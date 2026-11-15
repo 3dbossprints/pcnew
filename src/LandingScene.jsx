@@ -172,7 +172,7 @@ export default function LandingScene({ className = "" }) {
       scoreGroup.rotation.y = pointer.x * 0.08 + Math.sin(t * 0.18) * 0.035;
       floatingNotes.forEach(({ note, baseY, phase }) => {
         note.position.y = baseY + (reduceMotion ? 0 : Math.sin(t * 0.72 + phase) * 0.12);
-        note.rotation.z += reduceMotion ? 0 : Math.sin(t * 0.35 + phase) * 0.0008;
+        note.rotation.z = (phase % 1.44 < 0.72 ? -0.22 : 0.18) + (reduceMotion ? 0 : Math.sin(t * 0.35 + phase) * 0.025);
       });
 
       keyboard.keys.forEach(({ mesh, baseY }, index) => {
