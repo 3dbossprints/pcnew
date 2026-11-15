@@ -10,6 +10,6 @@ export async function adminApi(path, options = {}) {
     ...(options.body ? { body: JSON.stringify(options.body) } : {}),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || "Admin request failed.");
+  if (!response.ok) { const error = new Error(body.error || "Admin request failed."); error.status = response.status; throw error; }
   return body;
 }
