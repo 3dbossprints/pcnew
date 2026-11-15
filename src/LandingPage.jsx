@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import PianoLoader from "./PianoLoader.jsx";
-import LandingSoundToggle from "./LandingSoundToggle.jsx";
 import LandingScene from "./LandingScene.jsx";
-import LandingAssetGallery from "./LandingAssetGallery.jsx";
 import "./landing-depth.css";
 
 const PLANS = [
@@ -114,19 +112,26 @@ function passwordIsValid(value) {
 
 function useScrollReveal() {
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
+    const elements = [...document.querySelectorAll(".lp-reveal")];
+    if (!("IntersectionObserver" in window)) {
+      elements.forEach(el => el.classList.add("lp-revealed"));
+      return;
+    }
+    let observer;
+    try {
+      observer = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
             entry.target.classList.add("lp-revealed");
             observer.unobserve(entry.target);
           }
         }
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -60px 0px" }
-    );
-    document.querySelectorAll(".lp-reveal").forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+      }, { threshold: 0.08, rootMargin: "0px 0px -30px 0px" });
+      elements.forEach(el => observer.observe(el));
+    } catch {
+      elements.forEach(el => el.classList.add("lp-revealed"));
+    }
+    return () => observer?.disconnect();
   }, []);
 }
 
@@ -219,12 +224,10 @@ export default function LandingPage({ onAuthed }) {
         <div id="lp-mobile-navigation" className={"lp-nav-links" + (mobileNavOpen ? " is-open" : "")}>
           <a href="#features" onClick={() => setMobileNavOpen(false)}>Features</a>
           <a href="#how" onClick={() => setMobileNavOpen(false)}>How it works</a>
-          <a href="#3d-elements" onClick={() => setMobileNavOpen(false)}>3D elements</a>
           <a href="#pricing" onClick={() => setMobileNavOpen(false)}>Pricing</a>
         </div>
         <button className="lp-mobile-menu-toggle" type="button" aria-controls="lp-mobile-navigation" aria-expanded={mobileNavOpen} aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"} onClick={() => setMobileNavOpen(open => !open)}><span/><span/><span/></button>
         <div className="lp-nav-actions">
-          <LandingSoundToggle />
           <button className="lp-nav-signin" onClick={() => { setMobileNavOpen(false); openAuth("signin"); }}>Sign in</button>
           <button className="lp-nav-cta" onClick={() => { setMobileNavOpen(false); openAuth("signup"); }}>Start free</button>
         </div>
@@ -288,8 +291,6 @@ export default function LandingPage({ onAuthed }) {
       <div className="lp-marquee" aria-label="Piano Coach capabilities">
         <div className="lp-marquee-track"><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i><span>LISTEN DEEPLY</span><i>✦</i><span>PRACTISE INTENTIONALLY</span><i>✦</i><span>PLAY WITH CONFIDENCE</span><i>✦</i></div>
       </div>
-
-      <section className="lp-asset-section lp-reveal" id="3d-elements"><LandingAssetGallery /></section>
 
       <section className="lp-features" id="features">
         <div className="lp-section-head lp-reveal">
