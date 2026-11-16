@@ -1449,7 +1449,7 @@ button{color:inherit}
 .pc-loading-progress span{display:block;width:34%;height:100%;background:#9dc183;animation:pc-loading-travel 2.2s ease-in-out infinite alternate}
 @keyframes pc-loading-travel{from{transform:translateX(0)}to{transform:translateX(195%)}}
 .pc-loading-mic{display:flex;align-items:center;flex-direction:column;gap:9px}
-.pc-loading-mic button{display:inline-flex;align-items:center;gap:9px;min-height:42px;padding:0 17px;border:1px solid rgba(87,111,73,.28);border-radius:999px;background:rgba(255,255,255,.55);color:#536d45;font:600 12px inherit;cursor:pointer;transition:background .2s ease,border-color .2s ease,transform .2s ease}
+.pc-loading-mic button{display:inline-flex;align-items:center;gap:9px;min-height:42px;padding:0 17px;border:1px solid rgba(87,111,73,.28);border-radius:999px;background:rgba(255,255,255,.55);color:#536d45;font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .2s ease,border-color .2s ease,transform .2s ease}
 .pc-loading-mic button:hover{transform:translateY(-1px);background:rgba(255,255,255,.9);border-color:#9dc183}
 .pc-loading-mic button.is-active{background:#e9f0e2;border-color:#9dc183}
 .pc-loading-mic button:disabled{opacity:.65;cursor:wait}
