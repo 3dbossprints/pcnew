@@ -5,6 +5,7 @@ import { unzipSync } from "fflate";
 import ePub from "epubjs";
 import { musicXmlToMusicCoach, mergeMusicXmlPages } from "./musiccoach-format.js";
 import { createOmrClient } from "./omr/omrClient.js";
+import MusicXMLViewer from "./MusicXMLViewer.jsx";
 import "./DocumentViewer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -94,6 +95,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
   const [analysis, setAnalysis] = useState(null);
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState("");
+  const [analysisXml, setAnalysisXml] = useState("");
   const [pageRange, setPageRange] = useState("1");
   const epubHost = useRef(null);
   const epubBook = useRef(null);
@@ -157,7 +159,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
   }, [file.id, url]);
 
   async function requestAnalysis() {
-    setAnalysisBusy(true); setError(""); setAnalysis(null); setAnalysisProgress("Preparing on-device recognition…");
+    setAnalysisBusy(true); setError(""); setAnalysis(null); setAnalysisXml(""); setAnalysisProgress("Preparing on-device recognition…");
     let client = null;
     try {
       const sourcePages = [];
@@ -215,6 +217,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
         pageXml.push(result.xml);
       }
       const mergedXml = mergeMusicXmlPages(pageXml);
+      setAnalysisXml(mergedXml);
       const analysisDocument = musicXmlToMusicCoach(mergedXml, file.id, file.original_name, {
         engine: "homr-browser",
         sourcePages: selectedPageNumbers,
@@ -291,7 +294,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
       </div>
     </header>
     {error && <div className="document-error" role="alert">{error}</div>}
-    {analysisProgress && <div className="document-analysis-status"><strong>{analysisProgress}</strong></div>}{analysis && <div className="document-analysis-status"><strong>Score analysis: {analysis.status}</strong>{analysis.message && <span>{analysis.message}</span>}</div>}
+    {analysisProgress && <div className="document-analysis-status"><strong>{analysisProgress}</strong></div>}{analysis && <div className="document-analysis-status"><strong>Score analysis: {analysis.status}</strong>{analysis.message && <span>{analysis.message}</span>}</div>}{analysisXml && <section className="document-recognised-score"><strong>Recognised notation · check against the original pages</strong><MusicXMLViewer xml={analysisXml} title="Recognised score"/></section>}
     {busy && <div className="document-loading">Opening your document…</div>}
     {passwordRequest && <form className="document-password" onSubmit={submitPassword}>
       <strong>This PDF is password protected</strong><p>Enter the password supplied with your legitimate copy.</p>
