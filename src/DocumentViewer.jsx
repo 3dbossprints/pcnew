@@ -105,7 +105,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
 
   useEffect(() => {
     let cancelled = false;
-    setBusy(true); setError(""); setPdf(null); setAudioTracks([]);
+    setBusy(true); setError(""); setPdf(null); setAudioTracks([]); setAnalysis(null); setAnalysisXml(""); setAnalysisProgress(""); setPageRange("1");
     async function load() {
       try {
         if (pdfFile(file)) {
