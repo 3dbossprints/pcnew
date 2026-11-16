@@ -40,7 +40,7 @@ export default async function handler(req, res) {
   if (analysisOnly && (extension !== ".musiccoach" || purpose !== "library" || typeof sourceFileId !== "string" || !/^[0-9a-f-]{36}$/i.test(sourceFileId))) return sendJson(res, 400, { error: "Invalid linked analysis file." });
   try {
     if (analysisOnly) {
-      const source = await database().query("SELECT id FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'ready' AND kind = 'sheet'", [sourceFileId, user.uid]);
+      const source = await database().query("SELECT id FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'ready' AND kind IN ('sheet', 'image')", [sourceFileId, user.uid]);
       if (!source.rowCount) return sendJson(res, 404, { error: "The original book or score could not be found." });
     }
     if (purpose === "exam_book" && ![".pdf", ".epub"].includes(extension)) return sendJson(res, 415, { error: "Exam-board ebooks must be PDF or EPUB files." });
