@@ -3,7 +3,8 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { unzipSync } from "fflate";
 import ePub from "epubjs";
-import { musicXmlToMusicCoach } from "./musiccoach-format.js";
+import { musicXmlToMusicCoach, mergeMusicXmlPages } from "./musiccoach-format.js";
+import { createOmrClient } from "./omr/omrClient.js";
 import "./DocumentViewer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -72,6 +73,8 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
   const [audioTracks, setAudioTracks] = useState([]);
   const [analysis, setAnalysis] = useState(null);
   const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState("");
+  const [pageRange, setPageRange] = useState("1");
   const epubHost = useRef(null);
   const epubBook = useRef(null);
   const rendition = useRef(null);
@@ -134,30 +137,76 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
   }, [file.id, url]);
 
   async function requestAnalysis() {
-    setAnalysisBusy(true); setError(""); setAnalysis(null);
+    setAnalysisBusy(true); setError(""); setAnalysis(null); setAnalysisProgress("Preparing on-device recognition…");
+    let client = null;
     try {
-      let scoreXml = "";
-      if (pdfFile(file) && pdf) {
-        const attachments = await pdf.getAttachments();
-        const candidate = Object.values(attachments || {}).find(item => /\\.(musicxml|xml)$/i.test(item.filename || ""));
-        if (candidate?.content) scoreXml = new TextDecoder("utf-8").decode(candidate.content);
+      const sourcePages = [];
+      let selectedPageNumbers = [];
+      if (pdfFile(file)) {
+        if (!pdf) throw new Error("Wait until the PDF has finished opening, then try again.");
+        selectedPageNumbers = parsePageRange(pageRange, pdf.numPages);
+        for (const pageNumber of selectedPageNumbers) {
+          setAnalysisProgress("Preparing original book page " + pageNumber + " of " + pdf.numPages + "…");
+          const page = await pdf.getPage(pageNumber);
+          const base = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({ scale: Math.min(2.5, 2200 / base.width) });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+          await page.render({ canvasContext: canvas.getContext("2d", { alpha: false }), viewport }).promise;
+          const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("Page " + pageNumber + " could not be rasterised.")), "image/png"));
+          sourcePages.push({ pageNumber, blob });
+        }
       } else if (epubFile(file)) {
         const response = await fetch(url);
         if (!response.ok) throw new Error("The original EPUB could not be read locally.");
         const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
-        for (const path of Object.keys(archive)) {
-          if (!/\\.(musicxml|xml)$/i.test(path) || /(^|\\/)(container|content)\\.xml$/i.test(path)) continue;
-          const candidate = new TextDecoder("utf-8").decode(archive[path]);
-          if (/<(?:\\w+:)?score-partwise\\b|<(?:\\w+:)?score-timewise\\b/i.test(candidate)) { scoreXml = candidate; break; }
+        const entries = Object.keys(archive).filter(path => /\\.(png|jpe?g|webp|svg)$/i.test(path) && !path.endsWith("/")).sort();
+        if (!entries.length) throw new Error("This EPUB has no embedded score-page images. Export the score pages as a PDF or upload a MusicXML score to analyse them.");
+        selectedPageNumbers = parsePageRange(pageRange, entries.length);
+        for (const pageNumber of selectedPageNumbers) {
+          const path = entries[pageNumber - 1];
+          const ext = path.toLowerCase().split(".").pop();
+          const mime = ext === "svg" ? "image/svg+xml" : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+          const blob = await imageBlobAsPng(new Blob([archive[path]], { type: mime }));
+          sourcePages.push({ pageNumber, blob });
         }
       }
-      if (!scoreXml) throw new Error("No embedded machine-readable score was found in this file. It remains available as your original practice book. Image-only or scanned notation needs the on-device OMR model; no external OMR service or API key is used.");
-      const analysisDocument = musicXmlToMusicCoach(scoreXml, file.id, file.original_name);
+      if (!sourcePages.length) throw new Error("No score pages were selected.");
+      client = createOmrClient({
+        onProgress: message => {
+          if (message.stage === "download") {
+            const percent = Math.min(100, Math.round((Number(message.loaded) / Math.max(1, Number(message.total))) * 100));
+            setAnalysisProgress("Downloading and caching the on-device OMR model · " + percent + "%");
+          } else if (message.stage === "python") setAnalysisProgress("Starting the local notation engine…");
+          else if (message.stage === "retry") setAnalysisProgress("Resuming a model download…");
+        },
+        onLog: message => { if (/WebGPU|WASM|Loaded/i.test(message)) setAnalysisProgress(message); },
+      });
+      setAnalysisProgress("Loading the on-device OMR engine. First use downloads about 151 MB; later use is cached in this browser.");
+      await client.ready;
+      const pageXml = [];
+      for (let index = 0; index < sourcePages.length; index += 1) {
+        const page = sourcePages[index];
+        setAnalysisProgress("Recognising notation · page " + page.pageNumber + " (" + (index + 1) + " of " + sourcePages.length + ")…");
+        const result = await client.recognise(page.blob);
+        if (!result.xml || !/<(?:\\w+:)?score-partwise\\b/i.test(result.xml)) {
+          throw new Error("The OMR engine could not recognise a complete score on page " + page.pageNumber + ". Try a clearer scan or select a page containing notation.");
+        }
+        pageXml.push(result.xml);
+      }
+      const mergedXml = mergeMusicXmlPages(pageXml);
+      const analysisDocument = musicXmlToMusicCoach(mergedXml, file.id, file.original_name, {
+        engine: "homr-browser",
+        sourcePages: selectedPageNumbers,
+        requiresReview: true,
+        generatedAt: new Date().toISOString(),
+      });
       const output = new Blob([JSON.stringify(analysisDocument)], { type: "application/json" });
       const filename = file.original_name.replace(/\\.[^.]+$/, "") + ".musiccoach";
+      const token = await getToken();
       const signedResponse = await fetch("/api/uploads/sign", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + await getToken() },
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({ filename, contentType: "application/json", size: output.size, purpose: "library", category: "other", analysisOnly: true, sourceFileId: file.id }),
       });
       const signed = await signedResponse.json();
@@ -166,14 +215,20 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
       if (!uploaded.ok) throw new Error("Secure storage rejected the MusicCoach analysis file.");
       const completedResponse = await fetch("/api/uploads/complete", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + await getToken() },
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
         body: JSON.stringify({ fileId: signed.fileId, purpose: "library" }),
       });
       const completed = await completedResponse.json();
       if (!completedResponse.ok) throw new Error(completed.error || "The MusicCoach analysis file could not be verified.");
-      setAnalysis({ status: "completed", message: "The embedded score was converted locally and linked to the original book." });
-    } catch (requestError) { setError(requestError.message || "The score could not be prepared locally."); }
-    finally { setAnalysisBusy(false); }
+      setAnalysis({ status: "completed", message: "Notation recognised on this device and saved as a linked MusicCoach analysis file. Check the recognition before relying on it." });
+      setAnalysisProgress("");
+    } catch (requestError) {
+      setError(requestError.message || "The score could not be recognised on this device.");
+      setAnalysisProgress("");
+    } finally {
+      client?.terminate();
+      setAnalysisBusy(false);
+    }
   }
 
   function submitPassword(event) {
