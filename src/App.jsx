@@ -317,7 +317,7 @@ export default function App() {
       </div>
     </main>
 
-    {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => file.kind === "sheet" && !file.metadata?.analysisOnly)} busy={profileBusy} user={user} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
+    {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => (file.kind === "sheet" || file.kind === "image") && !file.metadata?.analysisOnly)} busy={profileBusy} user={user} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
     {showLibrary && <LibraryModal files={files} busy={documentBusy} onClose={() => setShowLibrary(false)} onOpen={openFile} onUpload={uploadFile} onRefresh={refresh} toast={toast} plan={plan}/>}
     {openedDocument && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
       {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={openedDocument.xml} title={openedDocument.file.original_name}/></div> :
@@ -571,7 +571,7 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
   if (feedback) return <FeedbackPage feedback={feedback} onBack={onReturn} onAgain={() => {setFeedback(null);toast("Choose another practice session.");}} onOpenFile={onOpenFile}/>;
   if (config) return <PracticeSession key={config.task?.id+":"+config.sectionKey+":"+config.mode+":"+(config.referenceFile?.id||"none")} config={config} files={files} onComplete={result=>{setFeedback(result);refresh().catch(()=>{});}} onExit={onReturn}/>;
   const selected=tasks.find(task=>task.id===chosenTask)||null;
-  const availableFiles=files.filter(file=>file.kind==="sheet"&&!file.metadata?.analysisOnly);
+  const availableFiles=files.filter(file=>(file.kind==="sheet"||file.kind==="image")&&!file.metadata?.analysisOnly);
   const reference=availableFiles.find(file=>file.id===chosenFile)||getTaskFile(selected,files);
   const locked=freeLocked || (plan!=="free"&&!hasExamBook);
   return <div className="pc-practice-hub">
