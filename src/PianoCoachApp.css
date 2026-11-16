@@ -1389,3 +1389,5 @@ button{color:inherit}
 .pc-live-session .pc-practice-pdf,.pc-live-session .pc-practice-epub-wrap{margin:12px 0 20px}
 .pc-live-session .pc-practice-pdf iframe{background:#fff}
 @media(max-width:700px){.pc-practice-epub-wrap{height:62vh;min-height:360px}.pc-practice-pdf{height:62vh;min-height:360px}}
+
+.pc-practice-sheet-image{max-height:68vh;overflow:auto;background:#fff;border:1px solid var(--pc-line);border-radius:10px;text-align:center;padding:10px}.pc-practice-sheet-image img{display:block;max-width:100%;height:auto;margin:0 auto}
