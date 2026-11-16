@@ -264,13 +264,14 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
     <header className="document-viewer-toolbar">
       <div className="document-viewer-title"><strong>{file.original_name}</strong><small>{pdfFile(file) ? "PDF document" : epubFile(file) ? "EPUB book" : "Audio reference"}</small></div>
       <div className="document-viewer-actions">
-        <button type="button" onClick={requestAnalysis} disabled={analysisBusy || (!pdfFile(file) && !epubFile(file))}>{analysisBusy ? "Starting analysis…" : "Analyse sheet music"}</button>
+        {(pdfFile(file) || epubFile(file)) && <label className="document-page-range">Pages to recognise<input value={pageRange} onChange={event => setPageRange(event.target.value)} placeholder="e.g. 4-6" aria-label="Pages to recognise"/></label>}
+        <button type="button" onClick={requestAnalysis} disabled={analysisBusy || (!pdfFile(file) && !epubFile(file)) || (pdfFile(file) && !pdf)}>{analysisBusy ? "Recognising…" : "Analyse on this device"}</button>
         {onUseForPractice && <button type="button" onClick={() => onUseForPractice(file, audioTracks[0] || null)}>Use for practice</button>}
         <button type="button" className="document-close" onClick={onClose}>Close</button>
       </div>
     </header>
     {error && <div className="document-error" role="alert">{error}</div>}
-    {analysis && <div className="document-analysis-status"><strong>Score analysis: {analysis.status}</strong>{analysis.message && <span>{analysis.message}</span>}</div>}
+    {analysisProgress && <div className="document-analysis-status"><strong>{analysisProgress}</strong></div>}{analysis && <div className="document-analysis-status"><strong>Score analysis: {analysis.status}</strong>{analysis.message && <span>{analysis.message}</span>}</div>}
     {busy && <div className="document-loading">Opening your document…</div>}
     {passwordRequest && <form className="document-password" onSubmit={submitPassword}>
       <strong>This PDF is password protected</strong><p>Enter the password supplied with your legitimate copy.</p>
