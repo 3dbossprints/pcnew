@@ -55,6 +55,7 @@ function isMusicXml(file) { return ["xml", "musicxml"].includes(fileExt(file)); 
 function isMusicCoach(file) { return fileExt(file) === "musiccoach"; }
 function isPdf(file) { return fileExt(file) === "pdf"; }
 function isEpub(file) { return fileExt(file) === "epub"; }
+function isSheetImage(file) { return ["png", "jpg", "jpeg"].includes(fileExt(file)); }
 function isAudio(file) { return file?.kind === "audio" || ["mp3", "m4a", "mp4", "webm", "wav", "mid", "midi"].includes(fileExt(file)); }
 function getTaskAttempts(task, attempts) {
   return (attempts || []).filter(item => item.task_id === task.id).sort((a, b) => new Date(b.attempted_at) - new Date(a.attempted_at));
@@ -901,7 +902,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
       <div className="pc-session-status"><span className="pc-recording-dot"/><span>Session in progress · {captureMessage}{currentBar?" · Bar "+currentBar:""}</span><span className="pc-input-level"><i style={{width:captureLevel+"%"}}/></span></div>
       {config.mode==="assisted"&&xmlReady ? <><Suspense fallback={<div className="pc-inline-status">Preparing your falling-note lesson…</div>}>
         <KeystoneLearnEngine xml={xml} notes={analysisNotes} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} recordingStartedAt={captureRef.current?.startedAt||null} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
-      </Suspense>{file&&(isPdf(file)||isEpub(file))&&<PracticeBook file={file}/>}</> : config.mode==="standard"&&file&&(isPdf(file)||isEpub(file)) ? <PracticeBook file={file} /> :
+      </Suspense>{file&&(isPdf(file)||isEpub(file)||isSheetImage(file))&&<PracticeBook file={file}/>}</> : config.mode==="standard"&&file&&(isPdf(file)||isEpub(file)||isSheetImage(file)) ? <PracticeBook file={file} /> :
       config.mode==="standard"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Rendering the score…</div>}><MusicXMLViewer xml={xml} title={file.original_name} currentMeasure={currentBar}/></Suspense> :
       <div className="pc-practice-no-score"><span>𝄞</span><h2>Practise at your own pace.</h2><p>{scoreLoadError||"Use your own sheet music or upload a score to see it alongside your session."}</p></div>}
       {config.mode==="standard"&&<div className="pc-standard-note"><strong>Standard Practice</strong><span>{standardEvents.length?"The microphone follows matching pitches through the score where possible. A MIDI keyboard or full score-alignment service is more reliable for chords.":"The session is recording, but this file has no structured note timeline for a live bar cursor."}</span></div>}
@@ -935,7 +936,7 @@ function PracticeBook({file}){
   useEffect(()=>{let active=true;setUrl("");setError("");api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1").then(result=>{if(active)setUrl(result.url);}).catch(reason=>{if(active)setError(reason.message);});return()=>{active=false;};},[file.id]);
   if(error)return <div className="pc-inline-error">{error}</div>;
   if(!url)return <div className="pc-inline-status">Opening your original book…</div>;
-  return isEpub(file) ? <PracticeEpub url={url} title={file.original_name}/> : <div className="pc-practice-pdf"><iframe title={file.original_name} src={url}/></div>;
+  return isEpub(file) ? <PracticeEpub url={url} title={file.original_name}/> : isSheetImage(file) ? <div className="pc-practice-sheet-image"><img src={url} alt={file.original_name}/></div> : <div className="pc-practice-pdf"><iframe title={file.original_name} src={url}/></div>;
 }
 function PracticeEpub({url,title}){
   const host=useRef(null);
