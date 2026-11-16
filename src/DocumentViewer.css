@@ -5,3 +5,6 @@
 .document-analysis-status{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;margin:10px 0;border-radius:8px;background:#edf3e8;color:#283326;font-size:13px;line-height:1.45}
 .document-viewer-actions{flex-wrap:wrap}
 @media(max-width:640px){.document-page-range{width:100%;justify-content:space-between}.document-page-range input{width:112px}.document-viewer-actions>*{flex:1 1 auto}}
+
+.document-recognised-score{margin:16px 0;padding:14px;border:1px solid var(--pc-line,#ded8cd);border-radius:10px;background:var(--pc-paper,#fff6eb)}
+.document-recognised-score>strong{display:block;margin-bottom:10px;color:var(--pc-ink,#242423);font-size:14px}
