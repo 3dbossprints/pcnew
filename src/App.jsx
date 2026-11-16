@@ -927,13 +927,35 @@ function estimateFrequency(buffer,sampleRate){
   return confidence<0.05?null:sampleRate/bestLag;
 }
 
-function PracticePdf({file}){
+function PracticeBook({file}){
   const [url,setUrl]=useState("");
   const [error,setError]=useState("");
-  useEffect(()=>{let active=true;api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1").then(result=>{if(active)setUrl(result.url);}).catch(reason=>{if(active)setError(reason.message);});return()=>{active=false;};},[file.id]);
+  useEffect(()=>{let active=true;setUrl("");setError("");api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1").then(result=>{if(active)setUrl(result.url);}).catch(reason=>{if(active)setError(reason.message);});return()=>{active=false;};},[file.id]);
   if(error)return <div className="pc-inline-error">{error}</div>;
-  if(!url)return <div className="pc-inline-status">Opening your sheet music…</div>;
-  return <div className="pc-practice-pdf"><iframe title={file.original_name} src={url}/></div>;
+  if(!url)return <div className="pc-inline-status">Opening your original book…</div>;
+  return isEpub(file) ? <PracticeEpub url={url} title={file.original_name}/> : <div className="pc-practice-pdf"><iframe title={file.original_name} src={url}/></div>;
+}
+function PracticeEpub({url,title}){
+  const host=useRef(null);
+  const [error,setError]=useState("");
+  useEffect(()=>{
+    let active=true,book=null,rendition=null;
+    async function open(){
+      try{
+        const module=await import("epubjs");
+        if(!active)return;
+        const createBook=module.default||module;
+        book=createBook(url);
+        await book.ready;
+        if(!active)return;
+        rendition=book.renderTo(host.current,{width:"100%",height:"100%",spread:"auto",flow:"paginated"});
+        await rendition.display();
+      }catch(reason){if(active)setError(reason.message||"This EPUB could not be displayed.");}
+    }
+    open();
+    return()=>{active=false;try{rendition?.destroy();book?.destroy();}catch{}};
+  },[url]);
+  return <div className="pc-practice-epub-wrap">{error?<div className="pc-inline-error">{error}</div>:<div className="pc-practice-epub" ref={host} aria-label={title}/>}</div>;
 }
 
 function FeedbackPage({feedback,onBack,onAgain,onOpenFile}){
