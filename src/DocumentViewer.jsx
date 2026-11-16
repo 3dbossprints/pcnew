@@ -12,6 +12,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 function pdfFile(file) { return file.original_name.toLowerCase().endsWith(".pdf"); }
 function epubFile(file) { return file.original_name.toLowerCase().endsWith(".epub"); }
+function imageFile(file) { return /\\.(png|jpe?g)$/i.test(file.original_name); }
 function audioFile(file) { return file.kind === "audio" || /\.(mp3|m4a|wav|ogg|webm)$/i.test(file.original_name); }
 function parsePageRange(value, total) {
   const pages = new Set();
@@ -114,7 +115,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
           };
           const document = await task.promise;
           if (!cancelled) setPdf(document);
-        } else if (epubFile(file)) {
+        } else if (imageFile(file)) {\n          // Image sheets are rendered directly from their original upload URL.\n        } else if (epubFile(file)) {
           const book = ePub(url);
           epubBook.current = book;
           await book.ready;
@@ -285,10 +286,10 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
   const measures = analysis && analysis.result && analysis.result.measures ? analysis.result.measures : [];
   return <section className="document-viewer" aria-label={file.original_name}>
     <header className="document-viewer-toolbar">
-      <div className="document-viewer-title"><strong>{file.original_name}</strong><small>{pdfFile(file) ? "PDF document" : epubFile(file) ? "EPUB book" : "Audio reference"}</small></div>
+      <div className="document-viewer-title"><strong>{file.original_name}</strong><small>{pdfFile(file) ? "PDF document" : epubFile(file) ? "EPUB book" : imageFile(file) ? "Sheet image" : "Audio reference"}</small></div>
       <div className="document-viewer-actions">
         {(pdfFile(file) || epubFile(file)) && <label className="document-page-range">Pages to recognise<input value={pageRange} onChange={event => setPageRange(event.target.value)} placeholder="e.g. 4-6" aria-label="Pages to recognise"/></label>}
-        <button type="button" onClick={requestAnalysis} disabled={analysisBusy || (!pdfFile(file) && !epubFile(file)) || (pdfFile(file) && !pdf)}>{analysisBusy ? "Recognising…" : "Analyse on this device"}</button>
+        <button type="button" onClick={requestAnalysis} disabled={analysisBusy || (!pdfFile(file) && !epubFile(file) && !imageFile(file)) || (pdfFile(file) && !pdf)}>{analysisBusy ? "Recognising…" : "Analyse on this device"}</button>
         {onUseForPractice && <button type="button" onClick={() => onUseForPractice(file, audioTracks[0] || null)}>Use for practice</button>}
         <button type="button" className="document-close" onClick={onClose}>Close</button>
       </div>
@@ -302,7 +303,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
       <button type="submit" disabled={!password.trim()}>Unlock PDF</button>
     </form>}
     {pdf && <div className="document-pdf-scroll">{Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} measures={measures}/>)}</div>}
-    {epubFile(file) && <div className="document-epub-host" ref={epubHost}/>}
+    {epubFile(file) && <div className="document-epub-host" ref={epubHost}/>}{imageFile(file) && <div className="document-image-viewer"><img src={url} alt={file.original_name}/></div>}
     {audioTracks.length > 0 && <div className="document-audio-tracks"><strong>Audio included with this book</strong>{audioTracks.map(track => <div key={track.url}><span>{track.name}</span><audio controls preload="metadata" src={track.url}/></div>)}</div>}
   </section>;
 }
