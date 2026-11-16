@@ -583,12 +583,12 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
       {selected&&<div className="pc-selected-task-info"><strong>{selected.title}</strong><span>{taskHasProgress(selected,attempts)?taskProgress(selected,attempts)+"% recent achievement":"Not assessed yet"}</span></div>}
       <div className="pc-practice-step second"><span>02</span><div><h2>Choose your practice mode</h2><p>Switch between guided learning and a more independent run-through.</p></div></div>
       <div className="pc-mode-grid">
-        <button type="button" className={mode==="assisted"?"selected":""} onClick={()=>setMode("assisted")}><span className="pc-mode-icon">♫</span><strong>Assisted Practice</strong><p>Falling notes, an adaptive keyboard and live note checking for a MusicXML score.</p><small>Best for learning a passage</small></button>
+        <button type="button" className={mode==="assisted"?"selected":""} onClick={()=>setMode("assisted")}><span className="pc-mode-icon">♫</span><strong>Assisted Practice</strong><p>Falling notes and live note checking, using the linked MusicCoach analysis while you read your original book.</p><small>Best for learning a passage</small></button>
         <button type="button" className={mode==="standard"?"selected":""} onClick={()=>setMode("standard")}><span className="pc-mode-icon">𝄞</span><strong>Standard Practice</strong><p>Use your sheet music and play through the piece independently while your session is recorded.</p><small>Best for run-throughs</small></button>
       </div>
       {locked&&<div className="pc-inline-warning">{freeLocked?"Your lifetime free hour has been used.":"Upload your exam-board ebook to unlock graded learning."} Your account and profile remain available.</div>}
-      {mode==="assisted"&&(!reference||!isMusicXml(reference))&&<div className="pc-inline-warning">Assisted Practice currently needs a MusicXML file with playable note data. Choose a MusicXML score or switch to Standard Practice. PDF score recognition needs the separate OMR worker, which is not connected yet.</div>}
-      <div className="pc-practice-start-row"><button className="pc-button dark" disabled={locked||(mode==="assisted"&&(!reference||!isMusicXml(reference)))} onClick={()=>onStart(selected,chosenSection,mode,reference?.metadata?.purpose==="personal_piece"?"personal":"graded",reference)}>Begin session ↗</button><span>Recording begins when your session starts. Microphone permission is requested then.</span></div>
+      {mode==="assisted"&&(!reference||(!isMusicXml(reference)&&!isMusicCoach(reference)))&&<div className="pc-inline-warning">Choose a MusicXML score or a book that has already been prepared for Assisted Practice. PDF and EPUB pages remain the music you read; the linked MusicCoach file supplies note analysis.</div>}
+      <div className="pc-practice-start-row"><button className="pc-button dark" disabled={locked||!reference} onClick={()=>onStart(selected,chosenSection,mode,reference?.metadata?.purpose==="personal_piece"?"personal":"graded",reference)}>Begin session ↗</button><span>Recording begins when your session starts. Microphone permission is requested then.</span></div>
     </section>
     <section className="pc-recent-practice"><div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LIBRARY</span><h2>Scores ready to practise</h2></div></div>
       {availableFiles.length ? <div className="pc-practice-file-grid">{availableFiles.slice(0,6).map(file=><button key={file.id} onClick={()=>onOpenFile(file)}><span className="pc-file-icon">{isMusicXml(file)?"♫":isPdf(file)?"▤":"♪"}</span><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras":"Your collection"}</small><b>Open ↗</b></button>)}</div> : <div className="pc-empty-library"><p>No scores in your collection yet.</p><small>Upload MusicXML for Assisted Practice, or PDF/EPUB for reading during Standard Practice.</small></div>}
@@ -626,20 +626,25 @@ function PracticeSession({ config, files, onComplete, onExit }) {
 
   useEffect(()=>{
     let cancelled=false;
-    async function loadXml(){
-      const file=config.referenceFile;
-      if(!file||!isMusicXml(file))return;
+    async function loadScoreData(){
+      const file=config.analysisFile || config.referenceFile;
+      if(!file)return;
       try{
         const link=await api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1");
         const response=await fetch(link.url);
-        if(!response.ok)throw new Error("The MusicXML score could not be retrieved from secure storage.");
-        const text=await response.text();
-        if(!cancelled)setXml(text);
+        if(!response.ok)throw new Error("The score could not be retrieved from secure storage.");
+        if(isMusicXml(file)){
+          const text=await response.text();
+          if(!cancelled)setXml(text);
+        }else if(isMusicCoach(file)){
+          const parsed=parseMusicCoachFile(await response.text());
+          if(!cancelled)setAnalysisNotes(parsed.notes);
+        }
       }catch(error){if(!cancelled)setScoreLoadError(error.message||"The score could not be loaded.");}
     }
-    loadXml();
+    loadScoreData();
     return()=>{cancelled=true;};
-  },[config.referenceFile?.id]);
+  },[config.referenceFile?.id,config.analysisFile?.id]);
 
   useEffect(()=>{
     if(!session)return;
