@@ -3,6 +3,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { unzipSync } from "fflate";
 import ePub from "epubjs";
+import { musicXmlToMusicCoach } from "./musiccoach-format.js";
 import "./DocumentViewer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -133,17 +134,45 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
   }, [file.id, url]);
 
   async function requestAnalysis() {
-    setAnalysisBusy(true); setError("");
+    setAnalysisBusy(true); setError(""); setAnalysis(null);
     try {
-      const response = await fetch("/api/uploads?analysis=1", {
+      let scoreXml = "";
+      if (pdfFile(file) && pdf) {
+        const attachments = await pdf.getAttachments();
+        const candidate = Object.values(attachments || {}).find(item => /\\.(musicxml|xml)$/i.test(item.filename || ""));
+        if (candidate?.content) scoreXml = new TextDecoder("utf-8").decode(candidate.content);
+      } else if (epubFile(file)) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("The original EPUB could not be read locally.");
+        const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+        for (const path of Object.keys(archive)) {
+          if (!/\\.(musicxml|xml)$/i.test(path) || /(^|\\/)(container|content)\\.xml$/i.test(path)) continue;
+          const candidate = new TextDecoder("utf-8").decode(archive[path]);
+          if (/<(?:\\w+:)?score-partwise\\b|<(?:\\w+:)?score-timewise\\b/i.test(candidate)) { scoreXml = candidate; break; }
+        }
+      }
+      if (!scoreXml) throw new Error("No embedded machine-readable score was found in this file. It remains available as your original practice book. Image-only or scanned notation needs the on-device OMR model; no external OMR service or API key is used.");
+      const analysisDocument = musicXmlToMusicCoach(scoreXml, file.id, file.original_name);
+      const output = new Blob([JSON.stringify(analysisDocument)], { type: "application/json" });
+      const filename = file.original_name.replace(/\\.[^.]+$/, "") + ".musiccoach";
+      const signedResponse = await fetch("/api/uploads/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + await getToken() },
-        body: JSON.stringify({ fileId: file.id }),
+        body: JSON.stringify({ filename, contentType: "application/json", size: output.size, purpose: "library", category: "other", analysisOnly: true, sourceFileId: file.id }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Score analysis could not be started.");
-      setAnalysis(body.job);
-    } catch (requestError) { setError(requestError.message || "Score analysis could not be started."); }
+      const signed = await signedResponse.json();
+      if (!signedResponse.ok) throw new Error(signed.error || "The MusicCoach analysis file could not be saved.");
+      const uploaded = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": "application/json" }, body: output });
+      if (!uploaded.ok) throw new Error("Secure storage rejected the MusicCoach analysis file.");
+      const completedResponse = await fetch("/api/uploads/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + await getToken() },
+        body: JSON.stringify({ fileId: signed.fileId, purpose: "library" }),
+      });
+      const completed = await completedResponse.json();
+      if (!completedResponse.ok) throw new Error(completed.error || "The MusicCoach analysis file could not be verified.");
+      setAnalysis({ status: "completed", message: "The embedded score was converted locally and linked to the original book." });
+    } catch (requestError) { setError(requestError.message || "The score could not be prepared locally."); }
     finally { setAnalysisBusy(false); }
   }
 
