@@ -343,16 +343,14 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const sheetMusicFiles = files.filter(file => file.kind === "sheet" && file.metadata?.purpose !== "exam_book");
   return <div className="pc-dashboard">
     <div className="pc-dash-header">
-      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[user.grade, user.exam_board].filter(Boolean).join(" · ") || "Your musical journey starts here."}</p></div>
+      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[[user.grade, user.exam_board].filter(Boolean).join(" · "), user.target_date ? "Exam target · " + formatDate(user.target_date) : ""].filter(Boolean).join("  /  ") || "Your musical journey starts here."}</p></div>
       <div className="pc-dash-actions">
         <button className="pc-button primary" onClick={() => onPractice(null)}>Start practice <span>→</span></button>
-        <button className="pc-button outline" onClick={onOpenLibrary}>Sheet music</button>
       </div>
     </div>
     <section className="pc-dashboard-summary" aria-label="Your progress">
-      <div className="pc-dashboard-summary-item"><span>OVERALL PROGRESS</span><strong>{avg === null ? "—" : avg + "%"}</strong><small>{tasks.length ? tasks.length + " learning tasks" : "Add your first learning task"}</small></div>
+      <div className="pc-dashboard-summary-item"><span>OVERALL PROGRESS</span><strong>{avg === null ? "—" : avg + "%"}</strong><small>{tasks.length ? tasks.length + " learning tasks" : "Your learning plan starts here"}</small></div>
       <div className="pc-dashboard-summary-item"><span>DAILY STREAK</span><strong>{Number(summary.streakDays || 0)} days</strong><small>{remaining ? formatDuration(remaining) + " to your 15-minute goal" : "15-minute goal reached today"}</small></div>
-      <div className="pc-dashboard-summary-item"><span>TARGET EXAM DATE</span><strong className="pc-dashboard-date">{examDate}</strong><small>{user.target_date ? "Your planned completion date" : "Add a date in your profile"}</small></div>
     </section>
     {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Your progress and account remain here. Choose a plan from Profile to continue learning.</span></div>}
     {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Upload your exam-board ebook.</strong><span>Add your own exam-board PDF or EPUB to your sheet music collection to unlock graded learning.</span></div>}
