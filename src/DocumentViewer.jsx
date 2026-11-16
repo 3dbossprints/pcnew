@@ -180,7 +180,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
         const response = await fetch(url);
         if (!response.ok) throw new Error("The original EPUB could not be read locally.");
         const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
-        const entries = Object.keys(archive).filter(path => /\\.(png|jpe?g|webp|svg)$/i.test(path) && !path.endsWith("/")).sort();
+        const entries = Object.keys(archive).filter(path => /\.(png|jpe?g|webp|svg)$/i.test(path) && !path.endsWith("/")).sort();
         if (!entries.length) throw new Error("This EPUB has no embedded score-page images. Export the score pages as a PDF or upload a MusicXML score to analyse them.");
         selectedPageNumbers = parsePageRange(pageRange, entries.length);
         for (const pageNumber of selectedPageNumbers) {
@@ -209,7 +209,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
         const page = sourcePages[index];
         setAnalysisProgress("Recognising notation · page " + page.pageNumber + " (" + (index + 1) + " of " + sourcePages.length + ")…");
         const result = await client.recognise(page.blob);
-        if (!result.xml || !/<(?:\\w+:)?score-partwise\\b/i.test(result.xml)) {
+        if (!result.xml || !/<(?:\w+:)?score-partwise\b/i.test(result.xml)) {
           throw new Error("The OMR engine could not recognise a complete score on page " + page.pageNumber + ". Try a clearer scan or select a page containing notation.");
         }
         pageXml.push(result.xml);
@@ -222,7 +222,7 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
         generatedAt: new Date().toISOString(),
       });
       const output = new Blob([JSON.stringify(analysisDocument)], { type: "application/json" });
-      const filename = file.original_name.replace(/\\.[^.]+$/, "") + ".musiccoach";
+      const filename = file.original_name.replace(/\.[^.]+$/, "") + ".musiccoach";
       const token = await getToken();
       const signedResponse = await fetch("/api/uploads/sign", {
         method: "POST",
