@@ -12,7 +12,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 function pdfFile(file) { return file.original_name.toLowerCase().endsWith(".pdf"); }
 function epubFile(file) { return file.original_name.toLowerCase().endsWith(".epub"); }
-function imageFile(file) { return /\\.(png|jpe?g)$/i.test(file.original_name); }
+function imageFile(file) { return /\.(png|jpe?g)$/i.test(file.original_name); }
 function audioFile(file) { return file.kind === "audio" || /\.(mp3|m4a|wav|ogg|webm)$/i.test(file.original_name); }
 function parsePageRange(value, total) {
   const pages = new Set();
@@ -115,7 +115,9 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
           };
           const document = await task.promise;
           if (!cancelled) setPdf(document);
-        } else if (imageFile(file)) {\n          // Image sheets are rendered directly from their original upload URL.\n        } else if (epubFile(file)) {
+        } else if (imageFile(file)) {
+          // Image sheets are rendered directly from their original upload URL.
+        } else if (epubFile(file)) {
           const book = ePub(url);
           epubBook.current = book;
           await book.ready;
