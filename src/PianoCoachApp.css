@@ -1383,3 +1383,9 @@ button{color:inherit}
 @media(prefers-reduced-motion:reduce){
   .pc-sidebar,.pc-main,.pc-content{scroll-behavior:auto!important}
 }
+
+.pc-practice-epub-wrap{height:min(68vh,790px);min-height:480px;background:#fff;border:1px solid var(--pc-line);border-radius:10px;overflow:hidden}
+.pc-practice-epub{width:100%;height:100%;background:#fff}
+.pc-live-session .pc-practice-pdf,.pc-live-session .pc-practice-epub-wrap{margin:12px 0 20px}
+.pc-live-session .pc-practice-pdf iframe{background:#fff}
+@media(max-width:700px){.pc-practice-epub-wrap{height:62vh;min-height:360px}.pc-practice-pdf{height:62vh;min-height:360px}}
