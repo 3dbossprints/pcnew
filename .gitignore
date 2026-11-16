@@ -5,3 +5,11 @@ dist
 !.env.example
 .DS_Store
 .vercel
+# Browser-local OMR source archives and model weights are prepared during builds
+vendor/
+public/vendor/
+public/models/
+public/omr/runner.py
+public/omr/onnxruntime.py
+public/omr/HOMR-LICENSE
+public/omr/THIRD-PARTY-NOTICES.txt
