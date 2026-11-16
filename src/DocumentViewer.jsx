@@ -12,6 +12,26 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 function pdfFile(file) { return file.original_name.toLowerCase().endsWith(".pdf"); }
 function epubFile(file) { return file.original_name.toLowerCase().endsWith(".epub"); }
 function audioFile(file) { return file.kind === "audio" || /\.(mp3|m4a|wav|ogg|webm)$/i.test(file.original_name); }
+function parsePageRange(value, total) {
+  const pages = new Set();
+  for (const part of String(value || "").split(",")) {
+    const match = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!match) throw new Error("Enter pages like 2-4 or 1,3,5.");
+    const first = Number(match[1]), last = Number(match[2] || match[1]);
+    if (first < 1 || last < first || last > total || last - first > 24) throw new Error("Choose pages between 1 and " + total + ". Analyse up to 25 pages at a time.");
+    for (let page = first; page <= last; page++) pages.add(page);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+async function imageBlobAsPng(blob) {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext("2d", { alpha: false }).drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  return await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("The EPUB score image could not be prepared.")), "image/png"));
+}
 
 function PdfPage({ pdf, pageNumber, measures }) {
   const host = useRef(null);
