@@ -5,7 +5,7 @@ import { requireUser } from "../_lib/auth.js";
 import { database } from "../_lib/db.js";
 import { requireMethod, sendJson } from "../_lib/http.js";
 
-const allowed = new Set(["application/epub+zip", "application/zip", "application/pdf", "image/png", "image/jpeg", "application/vnd.recordare.musicxml+xml", "application/xml", "application/octet-stream", "audio/mpeg", "audio/mp4", "audio/webm", "audio/midi", "audio/x-midi", "audio/wav", "audio/x-wav"]);
+const allowed = new Set(["application/epub+zip", "application/zip", "application/pdf", "image/png", "image/jpeg", "application/vnd.recordare.musicxml+xml", "application/xml", "application/octet-stream", "audio/mpeg", "audio/mp4", "audio/webm", "audio/midi", "audio/x-midi", "audio/wav", "audio/x-wav", "application/json"]);
 const extensions = new Set([".epub", ".pdf", ".png", ".jpg", ".jpeg", ".xml", ".musicxml", ".mid", ".midi", ".mp3", ".m4a", ".mp4", ".webm", ".wav", ".musiccoach"]);
 const categories = new Set(["pieces", "exercises", "scales", "recordings", "other"]);
 function kindFor(name) {
@@ -38,6 +38,10 @@ export default async function handler(req, res) {
   }
   if (!["library", "exam_book", "personal_piece"].includes(purpose)) return sendJson(res, 400, { error: "Invalid upload purpose." });\n  if (analysisOnly && (extension !== ".musiccoach" || purpose !== "library" || typeof sourceFileId !== "string" || !/^[0-9a-f-]{36}$/i.test(sourceFileId))) return sendJson(res, 400, { error: "Invalid linked analysis file." });
   try {
+    if (analysisOnly) {
+      const source = await database().query("SELECT id FROM user_files WHERE id = $1 AND firebase_uid = $2 AND status = 'ready' AND kind = 'sheet'", [sourceFileId, user.uid]);
+      if (!source.rowCount) return sendJson(res, 404, { error: "The original book or score could not be found." });
+    }
     if (purpose === "exam_book" && ![".pdf", ".epub"].includes(extension)) return sendJson(res, 415, { error: "Exam-board ebooks must be PDF or EPUB files." });
     if (purpose !== "library") {
       const account = await database().query("SELECT plan, pending_plan, onboarding_completed FROM users WHERE firebase_uid = $1", [user.uid]);
