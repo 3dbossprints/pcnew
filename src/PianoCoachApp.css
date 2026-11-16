@@ -1391,3 +1391,43 @@ button{color:inherit}
 @media(max-width:700px){.pc-practice-epub-wrap{height:62vh;min-height:360px}.pc-practice-pdf{height:62vh;min-height:360px}}
 
 .pc-practice-sheet-image{max-height:68vh;overflow:auto;background:#fff;border:1px solid var(--pc-line);border-radius:10px;text-align:center;padding:10px}.pc-practice-sheet-image img{display:block;max-width:100%;height:auto;margin:0 auto}
+
+
+/* Warm, quiet dashboard refinement */
+.pc-dashboard{width:min(100%,1360px);margin:0 auto}
+.pc-dash-header{align-items:flex-end;gap:28px;margin-bottom:22px}
+.pc-dash-greeting h1{font-size:clamp(30px,3.2vw,44px);letter-spacing:-.035em;line-height:1.08}
+.pc-dash-greeting p{margin-top:9px;font-size:14px;color:var(--pc-muted);line-height:1.55}
+.pc-dash-actions .pc-button{min-height:48px;padding-inline:22px;border-radius:999px}
+.pc-dashboard-summary{grid-template-columns:repeat(2,minmax(0,1fr));max-width:650px;gap:0;margin:24px 0 30px;padding:17px 0;border-top:1px solid var(--pc-line);border-bottom:1px solid var(--pc-line)}
+.pc-dashboard-summary-item{padding:2px 26px}
+.pc-dashboard-summary-item:first-child{padding-left:2px}
+.pc-dashboard-summary-item:last-child{border-right:0}
+.pc-dashboard-summary-item>strong{font-size:clamp(26px,3vw,36px);line-height:1.15}
+.pc-next-task{border-radius:14px;padding:16px 19px;margin:0 0 30px;transition:transform .2s ease,border-color .2s ease}
+.pc-next-task:hover{transform:translateY(-2px);border-color:var(--pc-sage)}
+.pc-section-heading{margin:26px 0 14px}
+.pc-section-heading h2{font-size:clamp(21px,2vw,27px)}
+.pc-learning-grid{gap:15px}
+.pc-learning-card{border-radius:16px;box-shadow:0 5px 24px rgba(70,64,49,.045);padding:18px}
+.pc-learning-card>header{gap:12px}
+.pc-learning-card>header h3{font-size:19px}
+.pc-task-row{border-radius:9px;padding:11px 8px}
+.pc-task-row:hover{background:rgba(157,193,131,.12)}
+@media(max-width:760px){
+ .pc-dash-header{align-items:stretch;flex-direction:column;gap:16px}
+ .pc-dash-actions{width:100%}
+ .pc-dash-actions .pc-button{width:100%;justify-content:center}
+ .pc-dashboard-summary{max-width:none;margin:18px 0 24px}
+ .pc-dashboard-summary-item{padding:2px 14px}
+ .pc-dashboard-summary-item:first-child{padding-left:0}
+ .pc-learning-grid{grid-template-columns:1fr}
+}
+@media(max-width:420px){
+ .pc-dashboard-summary-item>span{font-size:8px;letter-spacing:.8px}
+ .pc-dashboard-summary-item>strong{font-size:25px}
+ .pc-dashboard-summary-item>small{font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){
+ .pc-next-task,.pc-task-row{transition:none}
+}
