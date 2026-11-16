@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "npm test && vite build",
+    "predev": "bash scripts/prepare-omr.sh",
+    "prebuild": "npm test && bash scripts/prepare-omr.sh",
+    "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test"
   },

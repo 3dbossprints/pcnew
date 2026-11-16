@@ -1383,3 +1383,87 @@ button{color:inherit}
 @media(prefers-reduced-motion:reduce){
   .pc-sidebar,.pc-main,.pc-content{scroll-behavior:auto!important}
 }
+
+.pc-practice-epub-wrap{height:min(68vh,790px);min-height:480px;background:#fff;border:1px solid var(--pc-line);border-radius:10px;overflow:hidden}
+.pc-practice-epub{width:100%;height:100%;background:#fff}
+.pc-live-session .pc-practice-pdf,.pc-live-session .pc-practice-epub-wrap{margin:12px 0 20px}
+.pc-live-session .pc-practice-pdf iframe{background:#fff}
+@media(max-width:700px){.pc-practice-epub-wrap{height:62vh;min-height:360px}.pc-practice-pdf{height:62vh;min-height:360px}}
+
+.pc-practice-sheet-image{max-height:68vh;overflow:auto;background:#fff;border:1px solid var(--pc-line);border-radius:10px;text-align:center;padding:10px}.pc-practice-sheet-image img{display:block;max-width:100%;height:auto;margin:0 auto}
+
+
+/* Warm, quiet dashboard refinement */
+.pc-dashboard{width:min(100%,1360px);margin:0 auto}
+.pc-dash-header{align-items:flex-end;gap:28px;margin-bottom:22px}
+.pc-dash-greeting h1{font-size:clamp(30px,3.2vw,44px);letter-spacing:-.035em;line-height:1.08}
+.pc-dash-greeting p{margin-top:9px;font-size:14px;color:var(--pc-muted);line-height:1.55}
+.pc-dash-actions .pc-button{min-height:48px;padding-inline:22px;border-radius:999px}
+.pc-dashboard-summary{grid-template-columns:repeat(2,minmax(0,1fr));max-width:650px;gap:0;margin:24px 0 30px;padding:17px 0;border-top:1px solid var(--pc-line);border-bottom:1px solid var(--pc-line)}
+.pc-dashboard-summary-item{padding:2px 26px}
+.pc-dashboard-summary-item:first-child{padding-left:2px}
+.pc-dashboard-summary-item:last-child{border-right:0}
+.pc-dashboard-summary-item>strong{font-size:clamp(26px,3vw,36px);line-height:1.15}
+.pc-next-task{border-radius:14px;padding:16px 19px;margin:0 0 30px;transition:transform .2s ease,border-color .2s ease}
+.pc-next-task:hover{transform:translateY(-2px);border-color:var(--pc-sage)}
+.pc-section-heading{margin:26px 0 14px}
+.pc-section-heading h2{font-size:clamp(21px,2vw,27px)}
+.pc-learning-grid{gap:15px}
+.pc-learning-card{border-radius:16px;box-shadow:0 5px 24px rgba(70,64,49,.045);padding:18px}
+.pc-learning-card>header{gap:12px}
+.pc-learning-card>header h3{font-size:19px}
+.pc-task-row{border-radius:9px;padding:11px 8px}
+.pc-task-row:hover{background:rgba(157,193,131,.12)}
+@media(max-width:760px){
+ .pc-dash-header{align-items:stretch;flex-direction:column;gap:16px}
+ .pc-dash-actions{width:100%}
+ .pc-dash-actions .pc-button{width:100%;justify-content:center}
+ .pc-dashboard-summary{max-width:none;margin:18px 0 24px}
+ .pc-dashboard-summary-item{padding:2px 14px}
+ .pc-dashboard-summary-item:first-child{padding-left:0}
+ .pc-learning-grid{grid-template-columns:1fr}
+}
+@media(max-width:420px){
+ .pc-dashboard-summary-item>span{font-size:8px;letter-spacing:.8px}
+ .pc-dashboard-summary-item>strong{font-size:25px}
+ .pc-dashboard-summary-item>small{font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){
+ .pc-next-task,.pc-task-row{transition:none}
+}
+
+
+/* Piano Coach loading visualiser — warm paper, live local interaction */
+.pc-loading-visualizer{position:relative;isolation:isolate;display:flex;min-height:100svh;width:100%;overflow:hidden;flex-direction:column;align-items:center;justify-content:center;padding:clamp(22px,4vw,54px);box-sizing:border-box;background:#fff6eb;color:#242423}
+.pc-loading-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.pc-loading-topline,.pc-loading-footer{position:absolute;left:clamp(20px,4vw,58px);right:clamp(20px,4vw,58px);display:flex;align-items:center;justify-content:space-between;gap:14px;z-index:1}
+.pc-loading-topline{top:clamp(18px,3vw,36px)}
+.pc-loading-topline img{width:46px;height:46px;object-fit:contain}
+.pc-loading-topline>span,.pc-loading-footer{font-size:9px;font-weight:700;letter-spacing:.19em;color:#77796f}
+.pc-loading-content{position:relative;z-index:1;width:min(100%,600px);margin:auto;text-align:center;padding:100px 0 110px}
+.pc-loading-eyebrow{display:inline-block;margin-bottom:20px;color:#718c60;font-size:10px;font-weight:700;letter-spacing:.2em}
+.pc-loading-content h1{margin:0;color:#242423;font-family:"Playfair Display",Georgia,serif;font-size:clamp(43px,8vw,78px);font-weight:700;line-height:.99;letter-spacing:-.045em}
+.pc-loading-content h1 em{color:#829d70;font-weight:500}
+.pc-loading-message{min-height:26px;margin:22px 0 24px;color:#65665f;font-family:"Playfair Display",Georgia,serif;font-size:clamp(16px,2.2vw,20px)}
+.pc-loading-progress{width:min(190px,48vw);height:2px;margin:0 auto 26px;overflow:hidden;background:rgba(36,36,35,.11)}
+.pc-loading-progress span{display:block;width:34%;height:100%;background:#9dc183;animation:pc-loading-travel 2.2s ease-in-out infinite alternate}
+@keyframes pc-loading-travel{from{transform:translateX(0)}to{transform:translateX(195%)}}
+.pc-loading-mic{display:flex;align-items:center;flex-direction:column;gap:9px}
+.pc-loading-mic button{display:inline-flex;align-items:center;gap:9px;min-height:42px;padding:0 17px;border:1px solid rgba(87,111,73,.28);border-radius:999px;background:rgba(255,255,255,.55);color:#536d45;font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .2s ease,border-color .2s ease,transform .2s ease}
+.pc-loading-mic button:hover{transform:translateY(-1px);background:rgba(255,255,255,.9);border-color:#9dc183}
+.pc-loading-mic button.is-active{background:#e9f0e2;border-color:#9dc183}
+.pc-loading-mic button:disabled{opacity:.65;cursor:wait}
+.pc-loading-mic button>span{font-size:11px}
+.pc-loading-mic small{max-width:340px;color:#85847c;font-size:10px;line-height:1.5}
+.pc-loading-footer{bottom:clamp(18px,3vw,30px)}
+@media(max-width:600px){
+ .pc-loading-topline img{width:39px;height:39px}
+ .pc-loading-topline>span,.pc-loading-footer{font-size:8px;letter-spacing:.12em}
+ .pc-loading-content{padding:78px 0 92px}
+ .pc-loading-content h1{font-size:clamp(42px,12vw,62px)}
+ .pc-loading-message{margin:18px 0 21px}
+ .pc-loading-footer{flex-wrap:wrap;justify-content:center;gap:7px}
+}
+@media(prefers-reduced-motion:reduce){
+ .pc-loading-progress span{animation:none;width:100%}
+}

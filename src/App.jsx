@@ -2,8 +2,9 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import PianoLoader from "./PianoLoader.jsx";
 import { EmailAuthProvider, OAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, signOut, updatePassword, updateProfile } from "firebase/auth";
 import { auth, googleProvider } from "./lib/firebase.js";
-import { buildKeystoneTimeline, parseKeystoneMusicXML } from "./keystone-engine.js";
+import { buildKeystoneTimeline, parseKeystoneMusicXML, scoreNotesToKeystoneTimeline } from "./keystone-engine.js";
 import { searchScales } from "./scale-library.js";
+import { parseMusicCoachFile } from "./musiccoach-format.js";
 import "./PianoCoachApp.css";
 
 const DocumentViewer = lazy(() => import("./DocumentViewer.jsx"));
@@ -51,8 +52,10 @@ function formatDate(value) {
 }
 function fileExt(file) { return String(file?.original_name || "").split(".").pop().toLowerCase(); }
 function isMusicXml(file) { return ["xml", "musicxml"].includes(fileExt(file)); }
+function isMusicCoach(file) { return fileExt(file) === "musiccoach"; }
 function isPdf(file) { return fileExt(file) === "pdf"; }
 function isEpub(file) { return fileExt(file) === "epub"; }
+function isSheetImage(file) { return ["png", "jpg", "jpeg"].includes(fileExt(file)); }
 function isAudio(file) { return file?.kind === "audio" || ["mp3", "m4a", "mp4", "webm", "wav", "mid", "midi"].includes(fileExt(file)); }
 function getTaskAttempts(task, attempts) {
   return (attempts || []).filter(item => item.task_id === task.id).sort((a, b) => new Date(b.attempted_at) - new Date(a.attempted_at));
@@ -200,11 +203,11 @@ export default function App() {
   async function uploadFile(file, { purpose = "library", category = "other" } = {}) {
     if (!file) return null;
     const ext = file.name.toLowerCase().split(".").pop();
-    const allowed = ["pdf", "epub", "xml", "musicxml", "mid", "midi", "png", "jpg", "jpeg", "mp3", "m4a", "mp4", "webm", "wav"];
+    const allowed = ["pdf", "epub", "xml", "musicxml", "musiccoach", "mid", "midi", "png", "jpg", "jpeg", "mp3", "m4a", "mp4", "webm", "wav"];
     if (!allowed.includes(ext)) throw new Error("Choose a PDF, EPUB, MusicXML, MIDI, image or audio file.");
     if (file.size > 25 * 1024 * 1024) throw new Error("Files must be 25 MB or smaller.");
     const contentTypes = {
-      pdf: "application/pdf", epub: "application/epub+zip", xml: "application/xml",
+      pdf: "application/pdf", epub: "application/epub+zip", xml: "application/xml", musiccoach: "application/json",
       musicxml: "application/vnd.recordare.musicxml+xml", mid: "audio/midi", midi: "audio/midi",
       png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", mp3: "audio/mpeg",
       m4a: "audio/mp4", mp4: "audio/mp4", webm: "audio/webm", wav: "audio/wav",
@@ -262,16 +265,23 @@ export default function App() {
     } catch (error) { toast(error.message, "error"); }
   }
 
-  function beginPractice(task, sectionKey = "full", practiceMode = "standard", practiceType = "graded", referenceFile = null) {
+  async function beginPractice(task, sectionKey = "full", practiceMode = "standard", practiceType = "graded", referenceFile = null) {
     if (freeLocked) { setPage("profile"); toast("Your 60-minute demo has been used. Choose a subscription to continue.", "error"); return; }
     const actualFile = referenceFile || (task ? getTaskFile(task, files) : null);
     const actualPracticeType = actualFile?.metadata?.purpose === "personal_piece" ? "personal" : practiceType;
     if (actualPracticeType === "graded" && plan !== "free" && !hasExamBook) { setPage("home"); toast("Upload your exam-board ebook to unlock graded learning.", "error"); return; }
-    if (practiceMode === "assisted" && (!actualFile || !isMusicXml(actualFile))) {
-      toast("Assisted Practice needs a MusicXML score so the notes and timing can be checked. Choose Standard for this document.", "error");
+    let analysisFile = null;
+    if (actualFile && !isMusicXml(actualFile) && !isMusicCoach(actualFile)) {
+      try { analysisFile = (await api("/api/uploads?analysisFor=" + encodeURIComponent(actualFile.id))).file || null; }
+      catch (error) {
+        if (practiceMode === "assisted") { toast(error.message || "The linked score analysis could not be loaded.", "error"); return; }
+      }
+    }
+    if (practiceMode === "assisted" && (!actualFile || (!isMusicXml(actualFile) && !isMusicCoach(actualFile) && !analysisFile))) {
+      toast("This book has not been prepared for Assisted Practice yet. Open it in Sheet Music and analyse its notation first.", "error");
       return;
     }
-    setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType: actualPracticeType, referenceFile: actualFile, demoRemainingSeconds: plan === "free" ? demoRemaining : null });
+    setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType: actualPracticeType, referenceFile: actualFile, analysisFile, demoRemainingSeconds: plan === "free" ? demoRemaining : null });
     setFeedback(null);
     setPage("practice");
   }
@@ -307,11 +317,11 @@ export default function App() {
       </div>
     </main>
 
-    {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => file.kind === "sheet" && !isEpub(file))} busy={profileBusy} user={user} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
+    {taskEditor && <TaskEditor draft={taskEditor} files={files.filter(file => (file.kind === "sheet" || file.kind === "image") && !file.metadata?.analysisOnly)} busy={profileBusy} user={user} onClose={() => setTaskEditor(null)} onSave={saveTask}/>}
     {showLibrary && <LibraryModal files={files} busy={documentBusy} onClose={() => setShowLibrary(false)} onOpen={openFile} onUpload={uploadFile} onRefresh={refresh} toast={toast} plan={plan}/>}
     {openedDocument && <Suspense fallback={<div className="pc-modal-loading">Opening your music…</div>}>
       {openedDocument.xml ? <div className="pc-doc-modal"><header><div><span className="pc-eyebrow">SHEET MUSIC</span><strong>{openedDocument.file.original_name}</strong></div><button onClick={() => setOpenedDocument(null)}>Close ×</button></header><MusicXMLViewer xml={openedDocument.xml} title={openedDocument.file.original_name}/></div> :
-        <DocumentViewer file={openedDocument.file} url={openedDocument.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setOpenedDocument(null)} onUseForPractice={(file) => { setOpenedDocument(null); beginPractice(null,"full","standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
+        <DocumentViewer file={openedDocument.file} url={openedDocument.url} getToken={() => auth.currentUser.getIdToken()} onClose={() => setOpenedDocument(null)} onUseForPractice={(file, mode) => { setOpenedDocument(null); beginPractice(null,"full",mode||"standard",file.metadata?.purpose === "personal_piece" ? "personal" : "graded",file); }}/>}
     </Suspense>}
     {notice && <div className={"pc-toast " + noticeType} role="status"><span>{noticeType === "error" ? "!" : "✓"}</span>{notice}</div>}
   </div>;
@@ -333,16 +343,14 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const sheetMusicFiles = files.filter(file => file.kind === "sheet" && file.metadata?.purpose !== "exam_book");
   return <div className="pc-dashboard">
     <div className="pc-dash-header">
-      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[user.grade, user.exam_board].filter(Boolean).join(" · ") || "Your musical journey starts here."}</p></div>
+      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[[user.grade, user.exam_board].filter(Boolean).join(" · "), user.target_date ? "Exam target · " + formatDate(user.target_date) : ""].filter(Boolean).join("  /  ") || "Your musical journey starts here."}</p></div>
       <div className="pc-dash-actions">
         <button className="pc-button primary" onClick={() => onPractice(null)}>Start practice <span>→</span></button>
-        <button className="pc-button outline" onClick={onOpenLibrary}>Sheet music</button>
       </div>
     </div>
     <section className="pc-dashboard-summary" aria-label="Your progress">
-      <div className="pc-dashboard-summary-item"><span>OVERALL PROGRESS</span><strong>{avg === null ? "—" : avg + "%"}</strong><small>{tasks.length ? tasks.length + " learning tasks" : "Add your first learning task"}</small></div>
+      <div className="pc-dashboard-summary-item"><span>OVERALL PROGRESS</span><strong>{avg === null ? "—" : avg + "%"}</strong><small>{tasks.length ? tasks.length + " learning tasks" : "Your learning plan starts here"}</small></div>
       <div className="pc-dashboard-summary-item"><span>DAILY STREAK</span><strong>{Number(summary.streakDays || 0)} days</strong><small>{remaining ? formatDuration(remaining) + " to your 15-minute goal" : "15-minute goal reached today"}</small></div>
-      <div className="pc-dashboard-summary-item"><span>TARGET EXAM DATE</span><strong className="pc-dashboard-date">{examDate}</strong><small>{user.target_date ? "Your planned completion date" : "Add a date in your profile"}</small></div>
     </section>
     {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Your progress and account remain here. Choose a plan from Profile to continue learning.</span></div>}
     {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Upload your exam-board ebook.</strong><span>Add your own exam-board PDF or EPUB to your sheet music collection to unlock graded learning.</span></div>}
@@ -561,7 +569,7 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
   if (feedback) return <FeedbackPage feedback={feedback} onBack={onReturn} onAgain={() => {setFeedback(null);toast("Choose another practice session.");}} onOpenFile={onOpenFile}/>;
   if (config) return <PracticeSession key={config.task?.id+":"+config.sectionKey+":"+config.mode+":"+(config.referenceFile?.id||"none")} config={config} files={files} onComplete={result=>{setFeedback(result);refresh().catch(()=>{});}} onExit={onReturn}/>;
   const selected=tasks.find(task=>task.id===chosenTask)||null;
-  const availableFiles=files.filter(file=>file.kind==="sheet"&&file.metadata?.purpose!=="exam_book");
+  const availableFiles=files.filter(file=>(file.kind==="sheet"||file.kind==="image")&&!file.metadata?.analysisOnly);
   const reference=availableFiles.find(file=>file.id===chosenFile)||getTaskFile(selected,files);
   const locked=freeLocked || (plan!=="free"&&!hasExamBook);
   return <div className="pc-practice-hub">
@@ -576,12 +584,12 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
       {selected&&<div className="pc-selected-task-info"><strong>{selected.title}</strong><span>{taskHasProgress(selected,attempts)?taskProgress(selected,attempts)+"% recent achievement":"Not assessed yet"}</span></div>}
       <div className="pc-practice-step second"><span>02</span><div><h2>Choose your practice mode</h2><p>Switch between guided learning and a more independent run-through.</p></div></div>
       <div className="pc-mode-grid">
-        <button type="button" className={mode==="assisted"?"selected":""} onClick={()=>setMode("assisted")}><span className="pc-mode-icon">♫</span><strong>Assisted Practice</strong><p>Falling notes, an adaptive keyboard and live note checking for a MusicXML score.</p><small>Best for learning a passage</small></button>
+        <button type="button" className={mode==="assisted"?"selected":""} onClick={()=>setMode("assisted")}><span className="pc-mode-icon">♫</span><strong>Assisted Practice</strong><p>Falling notes and live note checking, using the linked MusicCoach analysis while you read your original book.</p><small>Best for learning a passage</small></button>
         <button type="button" className={mode==="standard"?"selected":""} onClick={()=>setMode("standard")}><span className="pc-mode-icon">𝄞</span><strong>Standard Practice</strong><p>Use your sheet music and play through the piece independently while your session is recorded.</p><small>Best for run-throughs</small></button>
       </div>
       {locked&&<div className="pc-inline-warning">{freeLocked?"Your lifetime free hour has been used.":"Upload your exam-board ebook to unlock graded learning."} Your account and profile remain available.</div>}
-      {mode==="assisted"&&(!reference||!isMusicXml(reference))&&<div className="pc-inline-warning">Assisted Practice currently needs a MusicXML file with playable note data. Choose a MusicXML score or switch to Standard Practice. PDF score recognition needs the separate OMR worker, which is not connected yet.</div>}
-      <div className="pc-practice-start-row"><button className="pc-button dark" disabled={locked||(mode==="assisted"&&(!reference||!isMusicXml(reference)))} onClick={()=>onStart(selected,chosenSection,mode,reference?.metadata?.purpose==="personal_piece"?"personal":"graded",reference)}>Begin session ↗</button><span>Recording begins when your session starts. Microphone permission is requested then.</span></div>
+      {mode==="assisted"&&(!reference||(!isMusicXml(reference)&&!isMusicCoach(reference)))&&<div className="pc-inline-warning">Choose a MusicXML score or a book that has already been prepared for Assisted Practice. PDF and EPUB pages remain the music you read; the linked MusicCoach file supplies note analysis.</div>}
+      <div className="pc-practice-start-row"><button className="pc-button dark" disabled={locked||!reference} onClick={()=>onStart(selected,chosenSection,mode,reference?.metadata?.purpose==="personal_piece"?"personal":"graded",reference)}>Begin session ↗</button><span>Recording begins when your session starts. Microphone permission is requested then.</span></div>
     </section>
     <section className="pc-recent-practice"><div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LIBRARY</span><h2>Scores ready to practise</h2></div></div>
       {availableFiles.length ? <div className="pc-practice-file-grid">{availableFiles.slice(0,6).map(file=><button key={file.id} onClick={()=>onOpenFile(file)}><span className="pc-file-icon">{isMusicXml(file)?"♫":isPdf(file)?"▤":"♪"}</span><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras":"Your collection"}</small><b>Open ↗</b></button>)}</div> : <div className="pc-empty-library"><p>No scores in your collection yet.</p><small>Upload MusicXML for Assisted Practice, or PDF/EPUB for reading during Standard Practice.</small></div>}
@@ -596,14 +604,17 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   const [captureMessage,setCaptureMessage]=useState("Microphone is not connected.");
   const [captureLevel,setCaptureLevel]=useState(0);
   const [xml,setXml]=useState("");
+  const [analysisNotes,setAnalysisNotes]=useState([]);
   const [scoreLoadError,setScoreLoadError]=useState("");
   const [summary,setSummary]=useState(null);
   const [currentBar,setCurrentBar]=useState(null);
   const [captureAvailable,setCaptureAvailable]=useState(false);
   const standardEvents=useMemo(()=>{
-    if(config.mode!=="standard"||!xml)return [];
+    if(config.mode!=="standard")return [];
+    if(analysisNotes.length)return scoreNotesToKeystoneTimeline(analysisNotes,120);
+    if(!xml)return [];
     try{return buildKeystoneTimeline(parseKeystoneMusicXML(xml));}catch{return [];}
-  },[config.mode,xml]);
+  },[config.mode,xml,analysisNotes]);
   const standardCursorRef=useRef(0);
   const micInputRef=useRef(null);
   const captureRef=useRef(null);
@@ -616,20 +627,25 @@ function PracticeSession({ config, files, onComplete, onExit }) {
 
   useEffect(()=>{
     let cancelled=false;
-    async function loadXml(){
-      const file=config.referenceFile;
-      if(!file||!isMusicXml(file))return;
+    async function loadScoreData(){
+      const file=config.analysisFile || config.referenceFile;
+      if(!file)return;
       try{
         const link=await api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1");
         const response=await fetch(link.url);
-        if(!response.ok)throw new Error("The MusicXML score could not be retrieved from secure storage.");
-        const text=await response.text();
-        if(!cancelled)setXml(text);
+        if(!response.ok)throw new Error("The score could not be retrieved from secure storage.");
+        if(isMusicXml(file)){
+          const text=await response.text();
+          if(!cancelled)setXml(text);
+        }else if(isMusicCoach(file)){
+          const parsed=parseMusicCoachFile(await response.text());
+          if(!cancelled)setAnalysisNotes(parsed.notes);
+        }
       }catch(error){if(!cancelled)setScoreLoadError(error.message||"The score could not be loaded.");}
     }
-    loadXml();
+    loadScoreData();
     return()=>{cancelled=true;};
-  },[config.referenceFile?.id]);
+  },[config.referenceFile?.id,config.analysisFile?.id]);
 
   useEffect(()=>{
     if(!session)return;
@@ -865,7 +881,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
 
   useEffect(()=>()=>{stopCapture().catch(()=>{});},[]);
   const file=config.referenceFile;
-  const xmlReady=Boolean(xml);
+  const xmlReady=Boolean(xml || analysisNotes.length);
   const isXml=file&&isMusicXml(file);
   
   const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0");
@@ -882,9 +898,9 @@ function PracticeSession({ config, files, onComplete, onExit }) {
       {config.mode==="assisted"&&!xmlReady&&<small>{scoreLoadError||"Preparing the MusicXML score…"}</small>}
     </section> : <div className="pc-session-stage">
       <div className="pc-session-status"><span className="pc-recording-dot"/><span>Session in progress · {captureMessage}{currentBar?" · Bar "+currentBar:""}</span><span className="pc-input-level"><i style={{width:captureLevel+"%"}}/></span></div>
-      {config.mode==="assisted"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Preparing your falling-note lesson…</div>}>
-        <KeystoneLearnEngine xml={xml} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} recordingStartedAt={captureRef.current?.startedAt||null} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
-      </Suspense> : config.mode==="standard"&&file&&isPdf(file) ? <PracticePdf file={file} /> :
+      {config.mode==="assisted"&&xmlReady ? <><Suspense fallback={<div className="pc-inline-status">Preparing your falling-note lesson…</div>}>
+        <KeystoneLearnEngine xml={xml} notes={analysisNotes} bpm={120} title={config.task?.title||file?.original_name||"Your piece"} recordingStartedAt={captureRef.current?.startedAt||null} micInputRef={micInputRef} microphoneListening={Boolean(captureRef.current)} microphoneLevel={captureLevel} microphoneStatus={captureMessage} onProgress={setCurrentBar} onReady={handle=>{engineControlRef.current=handle;}} onFinish={finishSession} onClose={()=>{if(engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}}/>
+      </Suspense>{file&&(isPdf(file)||isEpub(file)||isSheetImage(file))&&<PracticeBook file={file}/>}</> : config.mode==="standard"&&file&&(isPdf(file)||isEpub(file)||isSheetImage(file)) ? <PracticeBook file={file} /> :
       config.mode==="standard"&&xmlReady ? <Suspense fallback={<div className="pc-inline-status">Rendering the score…</div>}><MusicXMLViewer xml={xml} title={file.original_name} currentMeasure={currentBar}/></Suspense> :
       <div className="pc-practice-no-score"><span>𝄞</span><h2>Practise at your own pace.</h2><p>{scoreLoadError||"Use your own sheet music or upload a score to see it alongside your session."}</p></div>}
       {config.mode==="standard"&&<div className="pc-standard-note"><strong>Standard Practice</strong><span>{standardEvents.length?"The microphone follows matching pitches through the score where possible. A MIDI keyboard or full score-alignment service is more reliable for chords.":"The session is recording, but this file has no structured note timeline for a live bar cursor."}</span></div>}
@@ -912,13 +928,35 @@ function estimateFrequency(buffer,sampleRate){
   return confidence<0.05?null:sampleRate/bestLag;
 }
 
-function PracticePdf({file}){
+function PracticeBook({file}){
   const [url,setUrl]=useState("");
   const [error,setError]=useState("");
-  useEffect(()=>{let active=true;api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1").then(result=>{if(active)setUrl(result.url);}).catch(reason=>{if(active)setError(reason.message);});return()=>{active=false;};},[file.id]);
+  useEffect(()=>{let active=true;setUrl("");setError("");api("/api/uploads/download?id="+encodeURIComponent(file.id)+"&inline=1").then(result=>{if(active)setUrl(result.url);}).catch(reason=>{if(active)setError(reason.message);});return()=>{active=false;};},[file.id]);
   if(error)return <div className="pc-inline-error">{error}</div>;
-  if(!url)return <div className="pc-inline-status">Opening your sheet music…</div>;
-  return <div className="pc-practice-pdf"><iframe title={file.original_name} src={url}/></div>;
+  if(!url)return <div className="pc-inline-status">Opening your original book…</div>;
+  return isEpub(file) ? <PracticeEpub url={url} title={file.original_name}/> : isSheetImage(file) ? <div className="pc-practice-sheet-image"><img src={url} alt={file.original_name}/></div> : <div className="pc-practice-pdf"><iframe title={file.original_name} src={url}/></div>;
+}
+function PracticeEpub({url,title}){
+  const host=useRef(null);
+  const [error,setError]=useState("");
+  useEffect(()=>{
+    let active=true,book=null,rendition=null;
+    async function open(){
+      try{
+        const module=await import("epubjs");
+        if(!active)return;
+        const createBook=module.default||module;
+        book=createBook(url);
+        await book.ready;
+        if(!active)return;
+        rendition=book.renderTo(host.current,{width:"100%",height:"100%",spread:"auto",flow:"paginated"});
+        await rendition.display();
+      }catch(reason){if(active)setError(reason.message||"This EPUB could not be displayed.");}
+    }
+    open();
+    return()=>{active=false;try{rendition?.destroy();book?.destroy();}catch{}};
+  },[url]);
+  return <div className="pc-practice-epub-wrap">{error?<div className="pc-inline-error">{error}</div>:<div className="pc-practice-epub" ref={host} aria-label={title}/>}</div>;
 }
 
 function FeedbackPage({feedback,onBack,onAgain,onOpenFile}){
