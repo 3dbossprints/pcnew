@@ -3,7 +3,7 @@ import { buildKeystoneTimeline, parseKeystoneMusicXML } from "./keystone-engine.
 export const MUSICCOACH_FORMAT = "musiccoach";
 export const MUSICCOACH_VERSION = 1;
 
-export function musicXmlToMusicCoach(xml, sourceFileId, sourceName = "") {
+export function musicXmlToMusicCoach(xml, sourceFileId, sourceName = "", recognition = null) {
   if (typeof xml !== "string" || !xml.trim()) throw new Error("The source score is empty.");
   const parsed = parseKeystoneMusicXML(xml);
   const timeline = buildKeystoneTimeline(parsed);
@@ -29,13 +29,43 @@ export function musicXmlToMusicCoach(xml, sourceFileId, sourceName = "") {
       orderIndex: note.orderIndex,
       noteIndex: note.noteIndex,
     })),
-    recognition: {
+    recognition: recognition || {
       engine: "musicxml-import",
       confidence: 1,
       requiresReview: false,
       generatedAt: new Date().toISOString(),
     },
   };
+}
+
+export function mergeMusicXmlPages(xmlPages) {
+  if (!Array.isArray(xmlPages) || !xmlPages.length) throw new Error("No recognised score pages were returned.");
+  if (typeof DOMParser === "undefined" || typeof XMLSerializer === "undefined") throw new Error("Score merging requires browser XML support.");
+  const parser = new DOMParser();
+  const documents = xmlPages.map(xml => parser.parseFromString(String(xml || ""), "application/xml"));
+  for (const doc of documents) {
+    if (doc.querySelector("parsererror") || !doc.querySelector("score-partwise")) throw new Error("A recognised page did not contain valid MusicXML.");
+  }
+  const merged = documents[0];
+  const targetParts = [...merged.querySelectorAll(":scope > part")];
+  if (!targetParts.length) throw new Error("The recognised score contains no parts.");
+  const counts = new Map(targetParts.map((part, index) => [part.getAttribute("id") || String(index), part.querySelectorAll(":scope > measure").length]));
+  for (const page of documents.slice(1)) {
+    const pageParts = [...page.querySelectorAll(":scope > part")];
+    pageParts.forEach((part, index) => {
+      const id = part.getAttribute("id") || String(index);
+      const target = targetParts.find((candidate, targetIndex) => (candidate.getAttribute("id") || String(targetIndex)) === id) || targetParts[index];
+      if (!target) return;
+      let number = counts.get(target.getAttribute("id") || String(index)) || target.querySelectorAll(":scope > measure").length;
+      for (const measure of [...part.querySelectorAll(":scope > measure")]) {
+        const imported = merged.importNode(measure, true);
+        imported.setAttribute("number", String(++number));
+        target.appendChild(imported);
+      }
+      counts.set(target.getAttribute("id") || String(index), number);
+    });
+  }
+  return new XMLSerializer().serializeToString(merged);
 }
 
 export function parseMusicCoachFile(input) {
