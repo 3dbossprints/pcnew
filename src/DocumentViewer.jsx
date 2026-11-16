@@ -167,7 +167,12 @@ export default function DocumentViewer({ file, url, onClose, getToken, onUseForP
     try {
       const sourcePages = [];
       let selectedPageNumbers = [];
-      if (pdfFile(file)) {
+      if (imageFile(file)) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("The original sheet image could not be read locally.");
+        sourcePages.push({ pageNumber: 1, blob: await imageBlobAsPng(await response.blob()) });
+        selectedPageNumbers = [1];
+      } else if (pdfFile(file)) {
         if (!pdf) throw new Error("Wait until the PDF has finished opening, then try again.");
         selectedPageNumbers = parsePageRange(pageRange, pdf.numPages);
         for (const pageNumber of selectedPageNumbers) {
