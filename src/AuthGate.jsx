@@ -4,7 +4,6 @@ import {
   signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
 } from "firebase/auth";
 import { auth, googleProvider, firebaseConfigured } from "./lib/firebase.js";
-import LandingPage from "./LandingPage.jsx";
 import PianoLoader from "./PianoLoader.jsx";
 
 function passwordIsValid(value) {
@@ -186,9 +185,6 @@ export default function AuthGate({ children }) {
   }
 
   const hasResetToken = new URLSearchParams(window.location.search).has("resetToken");
-  const authRoute = ["/signin", "/signup"].includes(window.location.pathname.replace(/\/+$/, ""));
-  if (!hasResetToken && !authRoute) return <LandingPage />;
-
   return <main className="auth-screen"><section className="auth-card">
     <img className="auth-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><p className="eyebrow">YOUR MUSICAL JOURNEY</p>
     <h1>{mode === "signup" ? "A lovely place to begin." : mode === "forgot" ? "Reset your password." : "Welcome back."}</h1>
