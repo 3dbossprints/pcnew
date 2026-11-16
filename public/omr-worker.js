@@ -37,6 +37,7 @@ const MODEL_SIZES = {
   [MODELS[1]]: 52861122,
   [MODELS[2]]: 47309835,
 };
+const bytesBefore = (name) => MODELS.slice(0, MODELS.indexOf(name)).reduce((sum, model) => sum + MODEL_SIZES[model], 0);
 const modelUrl = (name) => new URL("models/" + name, location.href).href;
 const pieceKey = (name, i) => `${modelUrl(name)}?piece=${i}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -71,7 +72,7 @@ async function downloadModel(name) {
           if (got.whole) {
             if (got.whole.byteLength !== size) throw new Error("short read");
             await cache.put(modelUrl(name), new Response(got.whole));
-            post({ type: "progress", stage: "download", name, loaded: size, total: MODELS_TOTAL_BYTES });
+            post({ type: "progress", stage: "download", name, loaded: bytesBefore(name) + size, total: MODELS_TOTAL_BYTES });
             return;
           }
           await cache.put(pieceKey(name, i), new Response(got.piece));
@@ -88,7 +89,7 @@ async function downloadModel(name) {
       }
     }
     loaded = end + 1;
-    post({ type: "progress", stage: "download", name, loaded, total: MODELS_TOTAL_BYTES });
+    post({ type: "progress", stage: "download", name, loaded: bytesBefore(name) + loaded, total: MODELS_TOTAL_BYTES });
   }
 }
 
