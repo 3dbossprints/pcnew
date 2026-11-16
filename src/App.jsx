@@ -270,9 +270,11 @@ export default function App() {
     const actualPracticeType = actualFile?.metadata?.purpose === "personal_piece" ? "personal" : practiceType;
     if (actualPracticeType === "graded" && plan !== "free" && !hasExamBook) { setPage("home"); toast("Upload your exam-board ebook to unlock graded learning.", "error"); return; }
     let analysisFile = null;
-    if (practiceMode === "assisted" && actualFile && !isMusicXml(actualFile) && !isMusicCoach(actualFile)) {
+    if (actualFile && !isMusicXml(actualFile) && !isMusicCoach(actualFile)) {
       try { analysisFile = (await api("/api/uploads?analysisFor=" + encodeURIComponent(actualFile.id))).file || null; }
-      catch (error) { toast(error.message || "The linked score analysis could not be loaded.", "error"); return; }
+      catch (error) {
+        if (practiceMode === "assisted") { toast(error.message || "The linked score analysis could not be loaded.", "error"); return; }
+      }
     }
     if (practiceMode === "assisted" && (!actualFile || (!isMusicXml(actualFile) && !isMusicCoach(actualFile) && !analysisFile))) {
       toast("This book has not been prepared for Assisted Practice yet. Open it in Sheet Music and analyse its notation first.", "error");
