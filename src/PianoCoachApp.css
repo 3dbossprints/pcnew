@@ -1566,3 +1566,41 @@ button{color:inherit}
  .pc-task-reference-grid{grid-template-columns:1fr}
  .pc-feedback-reference-grid{grid-template-columns:1fr}
 }
+
+/* Updated brand lockup and screenshot-led app layout */
+.pc-sidebar{width:204px;flex-basis:204px;padding:27px 17px 18px}
+.pc-main{margin-left:204px}
+.pc-brand{display:flex;flex-direction:row;align-items:center;padding:0 5px 58px}
+.pc-brand-lockup{display:flex;align-items:center;gap:7px;min-width:0}
+.pc-brand-logo{width:17px;height:29px;max-height:29px;object-fit:contain;object-position:center}
+.pc-brand-lockup>span{font-family:"Playfair Display",Georgia,serif;font-size:13px;font-weight:700;letter-spacing:-.35px;white-space:nowrap;color:var(--pc-ink)}
+.pc-brand-lockup>span em{font-style:italic;color:var(--pc-sage-dark);font-weight:600}
+.pc-sidebar-wordmark{display:block;width:150px;height:auto;max-height:26px;object-fit:contain;object-position:left center;padding:8px 0 0 2px}
+.pc-profile-page{width:100%;max-width:1224px}
+.pc-grade-task-columns{display:grid;grid-template-columns:minmax(0,1fr);gap:17px}
+.pc-grade-task-column{padding:0;border:0;min-width:0}
+.pc-grade-task-column+.pc-grade-task-column{margin-left:24px;padding-left:22px;border-left:1px solid rgba(36,36,35,.12)}
+.pc-grade-task-column>header{display:block;margin:0 0 12px}
+.pc-grade-task-column>header h2{display:block;width:100%;margin:0;padding:0 0 8px;border:0;border-bottom:2px solid var(--pc-sage);font-family:"Playfair Display",Georgia,serif;font-size:20px;line-height:1.25}
+.pc-add-task-icon{display:grid;place-items:center;width:38px;height:36px;margin:0 0 9px;border:1px solid rgba(89,116,72,.34);border-radius:8px;background:var(--pc-paper);color:var(--pc-sage-dark);font-size:23px;line-height:1;transition:background .18s,transform .18s}
+.pc-add-task-icon:hover{background:var(--pc-sage-pale);transform:translateY(-1px)}
+.pc-grade-task-empty{display:flex;align-items:center;gap:7px;padding:0 0 3px}
+.pc-grade-task-empty>span{font-size:13px;color:var(--pc-ink)}
+.pc-grade-task-empty button{border:1px solid var(--pc-line);border-radius:7px;background:var(--pc-paper);padding:6px 10px;color:var(--pc-ink);font-size:11px;font-weight:600;transition:background .18s,border-color .18s}
+.pc-grade-task-empty button:hover{background:var(--pc-paper-soft);border-color:var(--pc-sage)}
+.pc-grade-task-list{display:grid;gap:2px}
+.pc-grade-task-row{width:100%;border-bottom:1px solid rgba(36,36,35,.08)}
+.pc-grade-task-row:hover{background:rgba(157,193,131,.1)}
+@media(max-width:900px){
+  .pc-sidebar{width:76px;flex-basis:76px;padding:22px 10px 14px}
+  .pc-main{margin-left:76px}
+  .pc-brand{padding:0 0 35px;min-height:70px;justify-content:center}
+  .pc-brand-lockup{justify-content:center}
+  .pc-brand-lockup>span{display:none}
+  .pc-brand-logo{width:34px;height:46px;max-height:46px}
+}
+@media(max-width:680px){
+  .pc-grade-task-column+.pc-grade-task-column{margin-left:12px;padding-left:15px}
+  .pc-profile-page{max-width:none}
+  .pc-sidebar-wordmark{display:none}
+}
