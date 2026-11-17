@@ -27,7 +27,7 @@ function detectPitch(buffer, sampleRate) {
   return { level: rms, pitch: bestLag > 0 && best > 0.002 ? sampleRate / bestLag : null };
 }
 
-export default function PianoLoader({ variant = "loading", onComplete }) {
+export default function PianoLoader({ variant = "loading", onComplete, enableMicrophone = false }) {
   const surfaceRef = useRef(null);
   const canvasRef = useRef(null);
   const pointerRef = useRef({ x: 0.5, y: 0.5, lastX: 0.5, lastY: 0.5, movedAt: 0 });
@@ -127,6 +127,46 @@ export default function PianoLoader({ variant = "loading", onComplete }) {
     };
   }, [micActive]);
 
+  useEffect(() => {
+    if (!enableMicrophone || isIntro) return undefined;
+    let cancelled = false;
+    async function requestMicrophone() {
+      setMicBusy(true);
+      setMicError("");
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access is not available in this browser. The visualiser will still respond to your pointer.");
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+        if (cancelled) { stream.getTracks().forEach(track => track.stop()); return; }
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error("Live microphone analysis is not supported here. The visualiser will still respond to your pointer.");
+        const context = new AudioContextClass();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.72;
+        context.createMediaStreamSource(stream).connect(analyser);
+        try { await context.resume(); } catch {}
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          await context.close().catch(() => {});
+          return;
+        }
+        micStreamRef.current = stream;
+        audioContextRef.current = { context, analyser };
+        setMicActive(true);
+      } catch (error) {
+        if (!cancelled) {
+          micStreamRef.current?.getTracks().forEach(track => track.stop());
+          micStreamRef.current = null;
+          setMicError(error?.message || "Microphone permission was not granted. The visualiser will still respond to your pointer.");
+        }
+      } finally {
+        if (!cancelled) setMicBusy(false);
+      }
+    }
+    requestMicrophone();
+    return () => { cancelled = true; };
+  }, [enableMicrophone, isIntro]);
+
   useEffect(() => () => {
     micStreamRef.current?.getTracks().forEach(track => track.stop());
     audioContextRef.current?.context?.close?.().catch?.(() => {});
@@ -154,34 +194,34 @@ export default function PianoLoader({ variant = "loading", onComplete }) {
   }
 
   async function toggleMicrophone() {
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(track => track.stop());
-      micStreamRef.current = null;
-      await audioContextRef.current?.context?.close?.().catch?.(() => {});
-      audioContextRef.current = null;
-      micDataRef.current = { level: 0, pitch: null };
-      setMicActive(false); setMicError("");
+    if (!micStreamRef.current) {
+      setMicBusy(true); setMicError("");
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone input is not available in this browser.");
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error("Live microphone analysis is not supported in this browser.");
+        const context = new AudioContextClass();
+        await context.resume();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.72;
+        context.createMediaStreamSource(stream).connect(analyser);
+        micStreamRef.current = stream;
+        audioContextRef.current = { context, analyser };
+        setMicActive(true);
+      } catch (error) {
+        micStreamRef.current?.getTracks().forEach(track => track.stop());
+        micStreamRef.current = null;
+        setMicError(error?.message || "Microphone permission was not granted.");
+      } finally { setMicBusy(false); }
       return;
     }
-    setMicBusy(true); setMicError("");
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone input is not available in this browser.");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) throw new Error("Live microphone analysis is not supported in this browser.");
-      const context = new AudioContextClass();
-      await context.resume();
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.72;
-      context.createMediaStreamSource(stream).connect(analyser);
-      micStreamRef.current = stream;
-      audioContextRef.current = { context, analyser };
-      setMicActive(true);
-    } catch (error) {
-      micStreamRef.current?.getTracks().forEach(track => track.stop());
-      micStreamRef.current = null;
-      setMicError(error?.message || "Microphone permission was not granted.");
-    } finally { setMicBusy(false); }
+    micStreamRef.current.getTracks().forEach(track => track.stop());
+    micStreamRef.current = null;
+    await audioContextRef.current?.context?.close?.().catch?.(() => {});
+    audioContextRef.current = null;
+    micDataRef.current = { level: 0, pitch: null };
+    setMicActive(false); setMicError("");
   }
 
   return <main ref={surfaceRef} className="pc-loading-visualizer" onPointerMove={handlePointerMove} onPointerDown={event => addRipple(event, 1.8)} aria-live="polite">
@@ -194,9 +234,9 @@ export default function PianoLoader({ variant = "loading", onComplete }) {
       <div className="pc-loading-progress" aria-hidden="true"><span/></div>
       <div className="pc-loading-mic">
         <button type="button" className={micActive ? "is-active" : ""} onClick={toggleMicrophone} disabled={micBusy}>
-          <span aria-hidden="true">{micActive ? "●" : "◌"}</span>{micBusy ? "Connecting…" : micActive ? "Microphone active · Turn off" : "Use microphone"}
+          <span aria-hidden="true">{micActive ? "●" : "◌"}</span>{micBusy ? "Requesting microphone…" : micActive ? "Microphone active · Turn off" : "Try microphone again"}
         </button>
-        <small>{micError || (micActive ? "Live pitch and loudness shape the waves. Audio stays in this browser." : "Move your pointer or click anywhere to send ripples. Microphone is optional.")}</small>
+        <small>{micError || (micActive ? "Live pitch and loudness shape the waves. Audio stays in this browser." : enableMicrophone ? "Move your pointer or click anywhere to send ripples while microphone access is pending." : "Move your pointer or click anywhere to send ripples. Microphone is optional.")}</small>
       </div>
     </section>
     <div className="pc-loading-footer"><span>PIANO COACH</span><span>PERSONALISING YOUR PRACTICE</span></div>
