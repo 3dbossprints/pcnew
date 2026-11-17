@@ -298,14 +298,14 @@ export default function App() {
 
   return <div className="pc-app">
     <aside className="pc-sidebar">
-      <div className="pc-brand"><img className="pc-brand-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/></div>
+      <div className="pc-brand"><div className="pc-brand-lockup"><img className="pc-brand-logo" src="/assets/logos/piano-coach-mark.png" alt=""/><span>Piano <em>Coach</em></span></div></div>
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Dashboard</span></button>
         <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
       </nav>
       <div className="pc-sidebar-spacer" />
       
-      <div className="pc-sidebar-account"><button className="pc-sidebar-profile" onClick={() => setPage("profile")}><span className="pc-avatar">{initials}</span><span><strong>{displayName}</strong><small>{user.grade || "Piano student"}{user.exam_board ? " · " + user.exam_board : ""}</small></span></button><span className={"pc-sidebar-plan " + plan}>{plan === "free" ? "FREE" : plan.toUpperCase()}</span><div className="pc-sidebar-wordmark">Music Coach</div></div>
+      <div className="pc-sidebar-account"><button className="pc-sidebar-profile" onClick={() => setPage("profile")}><span className="pc-avatar">{initials}</span><span><strong>{displayName}</strong><small>{user.grade || "Piano student"}{user.exam_board ? " · " + user.exam_board : ""}</small></span></button><span className={"pc-sidebar-plan " + plan}>{plan === "free" ? "FREE" : plan.toUpperCase()}</span><img className="pc-sidebar-wordmark" src="/assets/logos/music-coach-wordmark.png" alt="Music Coach"/></div>
     </aside>
     <main className="pc-main">
       <header className="pc-topbar">
@@ -350,7 +350,8 @@ function Dashboard({ data, tasks, attempts, onOpenTask, onAddTask }) {
       <h1>Tasks For Your Grade</h1>
       <div className="pc-grade-task-columns">
         {categories.map(category => <section className="pc-grade-task-column" key={category.id}>
-          <header><h2>{category.title}</h2><button type="button" aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
+          <header><h2>{category.title}</h2></header>
+          <button className="pc-add-task-icon" type="button" aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button>
           {category.tasks.length ? <div className="pc-grade-task-list">
             {category.tasks.map(task => <TaskRow key={task.id} task={task} attempts={attempts} onClick={() => onOpenTask(task)} />)}
           </div> : <div className="pc-grade-task-empty"><span>No {category.title.toLowerCase()} yet</span><button type="button" onClick={() => onAddTask(category.id)}>Add</button></div>}
