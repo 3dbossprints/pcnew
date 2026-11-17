@@ -56,8 +56,14 @@ async function saveTask(req, res, user, body) {
   if (!categories.has(category) || !title || !Number.isInteger(sectionCount) || sectionCount < 1 || sectionCount > 100 ||
       (sourceFileId !== null && !validUuid(sourceFileId))) return sendJson(res, 400, { error: "Enter a task title, category and valid section count." });
   if (sourceFileId) {
-    const source = await db.query("SELECT id FROM user_files WHERE id=$1 AND firebase_uid=$2 AND status='ready' AND kind='sheet'", [sourceFileId, user.uid]);
+    const source = await db.query("SELECT id,kind,metadata FROM user_files WHERE id=$1 AND firebase_uid=$2 AND status='ready'", [sourceFileId, user.uid]);
     if (!source.rowCount) return sendJson(res, 404, { error: "The linked score is not available in your library." });
+    if (source.rows[0].kind !== "sheet" || source.rows[0].metadata?.analysisOnly) {
+      return sendJson(res, 400, { error: "Choose a recognised sheet-music file, not an image or hidden analysis file." });
+    }
+    if (source.rows[0].metadata?.purpose === "personal_piece") {
+      return sendJson(res, 400, { error: "Extra sheets belong in Extras and cannot be added to graded Pieces." });
+    }
   }
   const result = await db.query(
     "INSERT INTO practice_tasks(id,firebase_uid,category,title,composer,notes,source_file_id,section_count) " +
