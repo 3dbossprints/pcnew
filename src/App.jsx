@@ -284,7 +284,7 @@ export default function App() {
       }
     }
     if (practiceMode === "assisted" && (!actualFile || (!isMusicXml(actualFile) && !isMusicCoach(actualFile) && !analysisFile))) {
-      toast("This book has not been prepared for Assisted Practice yet. Open it in Sheet Music and analyse its notation first.", "error");
+      toast("This score has not been prepared for Assisted Practice yet. Open it in your music library and analyse its notation first.", "error");
       return;
     }
     setPracticeConfig({ task: task || null, sectionKey, mode: practiceMode, practiceType: actualPracticeType, referenceFile: actualFile, analysisFile, demoRemainingSeconds: plan === "free" ? demoRemaining : null });
@@ -346,7 +346,7 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
   const recommendations = recommendNextTask(tasks, attempts).filter(task => taskHasProgress(task, attempts));
   const nextTask = recommendations[0] || null;
   const examDate = user.target_date ? formatDate(user.target_date) : "Not set";
-  const sheetMusicFiles = files.filter(file => file.kind === "sheet" && file.metadata?.purpose !== "exam_book");
+  const sheetMusicFiles = files.filter(file => file.kind === "sheet" && file.metadata?.purpose !== "exam_book" && file.metadata?.purpose !== "personal_piece");
   return <div className="pc-dashboard">
     <div className="pc-dash-header">
       <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[[user.grade, user.exam_board].filter(Boolean).join(" · "), user.target_date ? "Exam target · " + formatDate(user.target_date) : ""].filter(Boolean).join("  /  ") || "Your musical journey starts here."}</p></div>
