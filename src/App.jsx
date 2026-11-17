@@ -316,7 +316,7 @@ export default function App() {
         </div>
       </header>
       <div className="pc-content">
-        {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onOpenFile={openFile} onPractice={beginPractice} freeLocked={freeLocked} onRefresh={refresh}/>}
+        {page === "home" && !selectedTask && <Dashboard data={data} tasks={tasks} attempts={attempts} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })}/>}
         {page === "home" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
         {page === "practice" && <PracticeHub tasks={tasks} files={files} attempts={attempts} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked} config={practiceConfig} onStart={beginPractice} onOpenFile={openFile} onOpenLibrary={() => setShowLibrary(true)} onUpload={uploadFile} onReturn={() => { setPracticeConfig(null); setFeedback(null); setPage("home"); }} feedback={feedback} setFeedback={setFeedback} toast={toast} refresh={refresh}/>}
         {page === "profile" && <ProfilePage data={data} onSaved={async () => { await refresh(); toast("Your profile has been saved."); }} toast={toast} onRefresh={refresh}/>}
@@ -333,50 +333,41 @@ export default function App() {
   </div>;
 }
 
-function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAddTask, onOpenLibrary, onOpenFile, onPractice, freeLocked }) {
+function Dashboard({ data, tasks, attempts, onOpenTask, onAddTask }) {
   const user = data?.user || {};
-  const summary = data?.practiceSummary || {};
-  const now = new Date();
-  const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
-  const today = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-  const todaySeconds = Number(summary.todaySeconds || 0);
-  const remaining = Math.max(0, 900 - todaySeconds);
   const categories = CATEGORIES.map(category => ({ ...category, tasks: tasks.filter(task => task.category === category.id) }));
-  const avg = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, attempts), 0) / tasks.length) : null;
-  const recommendations = recommendNextTask(tasks, attempts).filter(task => taskHasProgress(task, attempts));
-  const nextTask = recommendations[0] || null;
+  const progress = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + taskProgress(task, attempts), 0) / tasks.length) : 0;
   const examDate = user.target_date ? formatDate(user.target_date) : "Not set";
-  const sheetMusicFiles = files.filter(file => file.kind === "sheet" && file.metadata?.purpose !== "exam_book" && file.metadata?.purpose !== "personal_piece");
-  return <div className="pc-dashboard">
-    <div className="pc-dash-header">
-      <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[[user.grade, user.exam_board].filter(Boolean).join(" · "), user.target_date ? "Exam target · " + formatDate(user.target_date) : ""].filter(Boolean).join("  /  ") || "Your musical journey starts here."}</p></div>
-      <div className="pc-dash-actions">
-        <button className="pc-button outline" onClick={onOpenLibrary}>Upload sheet music <span>＋</span></button><button className="pc-button primary" onClick={() => onPractice(null)}>Start practice <span>→</span></button>
+  return <div className="pc-dashboard pc-dashboard-reference">
+    <section className="pc-grade-overview" aria-label="Grade progress">
+      <div className="pc-grade-progress"><div className="pc-grade-progress-track"><span style={{ width: progress + "%" }} /></div><strong>{progress}%</strong></div>
+      <div className="pc-grade-meta">
+        <div className="pc-grade-meta-card"><span>Grade:</span><strong>{user.grade || "Not set"}</strong></div>
+        <div className="pc-grade-meta-card"><span>Exam Date:</span><strong>{examDate}</strong></div>
       </div>
-    </div>
-    <section className="pc-dashboard-summary" aria-label="Your progress">
-      <div className="pc-dashboard-summary-item"><span>OVERALL PROGRESS</span><strong>{avg === null ? "—" : avg + "%"}</strong><small>{tasks.length ? tasks.length + " learning tasks" : "Your learning plan starts here"}</small></div>
-      <div className="pc-dashboard-summary-item"><span>DAILY STREAK</span><strong>{Number(summary.streakDays || 0)} days</strong><small>{remaining ? formatDuration(remaining) + " to your 15-minute goal" : "15-minute goal reached today"}</small></div>
     </section>
-    {freeLocked && <div className="pc-notice-banner"><strong>Your free practice hour has been used.</strong><span>Your progress and account remain here. Choose a plan from Profile to continue learning.</span></div>}
-    {user.plan !== "free" && !user.exam_book_file_id && <div className="pc-notice-banner"><strong>Upload your exam-board ebook.</strong><span>Add your own exam-board PDF or EPUB to your sheet music collection to unlock graded learning.</span></div>}
-    {nextTask && <button className="pc-next-task" onClick={() => onOpenTask(nextTask)}><span><small>RECOMMENDED NEXT</small><strong>{nextTask.title}</strong></span><span className="pc-next-task-action">View task ↗</span></button>}
-    <div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LEARNING PLAN</span><h2>Pieces, exercises & scales</h2></div></div>
-    <div className="pc-learning-grid">
-      {categories.map(category => <section className="pc-learning-card" key={category.id}>
-        <header><span className="pc-category-icon">{category.icon}</span><div><h3>{category.title}</h3><p>{category.tasks.length ? category.tasks.length + " saved" : category.detail}</p></div><button aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
-        {category.tasks.length ? <div className="pc-task-list">{category.tasks.slice(0,4).map(task => <TaskRow key={task.id} task={task} attempts={attempts} onClick={() => onOpenTask(task)}/>)}
-          {category.tasks.length > 4 && <button className="pc-text-link" onClick={() => onOpenTask(category.tasks[4])}>View all {category.tasks.length} →</button>}
-        </div> : <div className="pc-empty-category"><span>＋</span><p>No {category.title.toLowerCase()} added yet.</p><button onClick={() => onAddTask(category.id)}>Add your first {category.title.slice(0,-1).toLowerCase()}</button></div>}
-      </section>)}
-    </div>
+    <section className="pc-grade-tasks" aria-label="Tasks for your grade">
+      <h1>Tasks For Your Grade</h1>
+      <div className="pc-grade-task-columns">
+        {categories.map(category => <section className="pc-grade-task-column" key={category.id}>
+          <header><h2>{category.title}</h2><button type="button" aria-label={"Add " + category.title.toLowerCase()} onClick={() => onAddTask(category.id)}>＋</button></header>
+          {category.tasks.length ? <div className="pc-grade-task-list">
+            {category.tasks.map(task => <TaskRow key={task.id} task={task} attempts={attempts} onClick={() => onOpenTask(task)} />)}
+          </div> : <div className="pc-grade-task-empty"><span>No {category.title.toLowerCase()} yet</span><button type="button" onClick={() => onAddTask(category.id)}>Add</button></div>}
+        </section>)}
+      </div>
+    </section>
   </div>;
 }
 
 function TaskRow({ task, attempts, onClick }) {
   const progress = taskProgress(task, attempts);
   const hasProgress = taskHasProgress(task, attempts);
-  return <button className="pc-task-row" onClick={onClick}><span className="pc-task-dot"/><span className="pc-task-name"><strong>{task.title}</strong><small>{task.composer || (task.section_count > 1 ? task.section_count + " sections" : "Learning task")}</small></span><span className="pc-task-score">{hasProgress ? progress + "%" : "—"}</span><span className="pc-row-arrow">↗</span></button>;
+  const score = hasProgress ? Math.round(progress) : null;
+  return <button className="pc-task-row pc-grade-task-row" onClick={onClick}>
+    <span className="pc-task-name"><strong>{task.title}</strong></span>
+    <span className={"pc-task-score" + (score !== null && score < 40 ? " is-low" : "")}>{score === null ? "—" : score + "%"}</span>
+  </button>;
 }
 
 function TaskDetails({ task, attempts, files, onBack, onPractice, onEdit, onDelete, onOpenFile }) {
@@ -384,71 +375,62 @@ function TaskDetails({ task, attempts, files, onBack, onPractice, onEdit, onDele
   const scored = related.filter(item => item.score !== null).slice(0, 30).reverse();
   const file = getTaskFile(task, files);
   const progress = taskProgress(task, attempts);
-  const [scoreXml, setScoreXml] = useState("");
-  const [scoreLoadError, setScoreLoadError] = useState("");
-  const [activeMistake, setActiveMistake] = useState(0);
-  const mistakeBars = Array.from(new Set(related.flatMap(item =>
-    Array.isArray(item.feedback?.trouble) ? item.feedback.trouble.map(area => Number(area.bar)) : []
-  ))).filter(bar => Number.isInteger(bar) && bar > 0).sort((a, b) => a - b);
-
+  const issueRows = related.flatMap(attempt => {
+    const trouble = Array.isArray(attempt.feedback?.trouble) ? attempt.feedback.trouble : [];
+    const clips = Array.isArray(attempt.feedback?.mistakeClips) ? attempt.feedback.mistakeClips : [];
+    return trouble.map(area => ({ ...area, attemptId: attempt.id, clip: clips.find(clip => Number(clip.bar) === Number(area.bar)) || null }));
+  }).slice(-12).reverse();
+  const [mistakeAudioUrls, setMistakeAudioUrls] = useState({});
   useEffect(() => {
     let active = true;
-    setScoreXml("");
-    setScoreLoadError("");
-    if (!file || !isMusicXml(file)) return () => { active = false; };
-    async function loadScore() {
-      try {
-        const link = await api("/api/uploads/download?id=" + encodeURIComponent(file.id) + "&inline=1");
-        const response = await fetch(link.url);
-        if (!response.ok) throw new Error("The score could not be opened from your collection.");
-        const xml = await response.text();
-        if (active) setScoreXml(xml);
-      } catch (error) {
-        if (active) setScoreLoadError(error.message || "The score could not be loaded.");
-      }
-    }
-    loadScore();
+    const fileIds = [...new Set(issueRows.map(item => item.clip?.fileId).filter(Boolean))];
+    if (!fileIds.length) { setMistakeAudioUrls({}); return () => { active = false; }; }
+    Promise.all(fileIds.map(async id => {
+      try { const result = await api("/api/uploads/download?id=" + encodeURIComponent(id) + "&inline=1"); return [id, result.url]; }
+      catch { return null; }
+    })).then(results => { if (active) setMistakeAudioUrls(Object.fromEntries(results.filter(Boolean))); });
     return () => { active = false; };
-  }, [file?.id]);
-
-  useEffect(() => { setActiveMistake(0); }, [task.id]);
+  }, [issueRows.map(item => item.clip?.fileId || "").join("|")]);
   const areas = Array.from({ length: Number(task.section_count) || 1 }, (_, index) => {
     const score = sectionScore(task, attempts, index + 1);
     return { key: "section-" + (index + 1), label: "Section " + (index + 1), score };
-  }).filter(item => item.score !== null && item.score < 80).sort((a,b) => a.score-b.score);
-  return <div className="pc-task-detail">
-    <button className="pc-back-link" onClick={onBack}>← Back to Home</button>
-    <div className="pc-detail-title-row"><div><span className="pc-eyebrow">{task.category.toUpperCase()} · YOUR GRADE PLAN</span><h1>{task.title}</h1><p>{task.composer || task.notes || "Your personal learning task."}</p></div><div className="pc-detail-actions"><button className="pc-button outline" onClick={onEdit}>Edit task</button><button className="pc-button dark" onClick={() => onPractice(task)}>Practice this task ↗</button></div></div>
-    {file && <div className="pc-linked-score"><span className="pc-file-icon">{isMusicXml(file) ? "♫" : isPdf(file) ? "▤" : "♪"}</span><div><strong>{file.original_name}</strong><small>Linked score in your sheet music collection</small></div></div>}
-    <div className="pc-detail-stats"><div><span>OVERALL ACHIEVEMENT</span><strong>{related.length ? progress + "%" : "Not assessed"}</strong><small>Recent performance across sections</small></div><div><span>PRACTICE SESSIONS</span><strong>{related.length}</strong><small>Recorded attempts</small></div><div><span>SECTIONS</span><strong>{task.section_count}</strong><small>Tracked independently</small></div></div>
-    <div className="pc-detail-grid">
-      <section className="pc-panel pc-history-panel"><span className="pc-eyebrow">PROGRESS HISTORY</span><h2>Your improvement over time</h2>
-        {scored.length ? <ProgressChart values={scored.map(item => Number(item.score))}/> : <div className="pc-empty-chart"><span>⌁</span><p>Your progress graph will appear after your first scored practice session.</p></div>}
-        {scored.length > 0 && <div className="pc-history-footer"><span>{formatDate(scored[0].attempted_at)}</span><span>{formatDate(scored[scored.length-1].attempted_at)}</span></div>}
+  }).filter(item => item.score !== null && item.score < 80).sort((a, b) => a.score - b.score);
+
+  return <div className="pc-task-detail pc-task-detail-reference">
+    <button className="pc-back-link" onClick={onBack}>← Back to Dashboard</button>
+    <div className="pc-task-reference-heading">
+      <h1>{task.title}</h1>
+      <div className="pc-task-reference-stats">
+        <div><span>Score</span><strong>{related.length ? Math.round(progress) + "%" : "—"}</strong></div>
+        <div><span>Practice Sessions</span><strong>{related.length}</strong></div>
+      </div>
+    </div>
+    <div className="pc-task-reference-grid">
+      <section className="pc-panel pc-history-panel pc-task-reference-history">
+        <h2>Improvement</h2>
+        {scored.length ? <ProgressChart values={scored.map(item => Number(item.score))} /> : <div className="pc-empty-chart"><p>Your improvement history will appear after your first scored practice session.</p></div>}
+        {scored.length > 0 && <div className="pc-history-footer"><span>{formatDate(scored[0].attempted_at)}</span><span>{formatDate(scored[scored.length - 1].attempted_at)}</span></div>}
       </section>
-      <section className="pc-panel pc-improve-panel"><span className="pc-eyebrow">AREAS TO IMPROVE</span><h2>Where to focus next</h2>
-        {areas.length ? areas.map(item => <div className="pc-improve-item" key={item.key}><span>↗</span><div><strong>{item.label}</strong><small>Recent average: {Math.round(item.score)}%</small></div><button onClick={() => onPractice(task,item.key)}>Practise</button></div>) : <div className="pc-improve-empty"><span>✧</span><p>{related.length ? "No consistently low-scoring sections have been identified yet." : "As you practise, we'll build a picture of what needs attention."}</p></div>}
+      <section className="pc-panel pc-improve-panel pc-task-reference-issues">
+        <h2>Areas To Improve</h2>
+        {issueRows.length ? <div className="pc-reference-issue-list">
+          {issueRows.map((item, index) => {
+            const clipUrl = item.clip?.fileId ? mistakeAudioUrls[item.clip.fileId] : "";
+            const notes = Array.isArray(item.notes) ? item.notes : [];
+            return <article className="pc-reference-issue" key={(item.attemptId || "attempt") + "-" + item.bar + "-" + index}>
+              <div className="pc-reference-issue-copy"><strong>{item.bar ? "Bar " + item.bar : "Practice note"}</strong><span>{notes.length ? "Wrong Notes (" + notes.join(", ") + ")" : item.message || item.label || "Review this passage"}</span></div>
+              {clipUrl && <audio controls preload="none" src={clipUrl} aria-label={"Recording for bar " + item.bar} />}
+            </article>;
+          })}
+        </div> : areas.length ? areas.map(item => <div className="pc-improve-item" key={item.key}><span>•</span><div><strong>{item.label}</strong><small>Recent average: {Math.round(item.score)}%</small></div><button onClick={() => onPractice(task, item.key)}>Practise</button></div>) : <div className="pc-improve-empty"><p>{related.length ? "No areas to improve have been identified yet." : "Mistakes and areas to improve will appear here after you practise."}</p></div>}
       </section>
     </div>
-    {task.category === "pieces" && file && <section className="pc-panel pc-piece-score-preview">
-      <div className="pc-panel-heading">
-        <div><span className="pc-eyebrow">YOUR REPERTOIRE</span><h2>Piece score</h2></div>
-        {mistakeBars.length > 0 && <div className="pc-mistake-nav">
-          <button type="button" onClick={() => setActiveMistake(index => Math.max(0, index - 1))} disabled={activeMistake === 0} aria-label="Previous mistake">←</button>
-          <span>{activeMistake + 1} / {mistakeBars.length}</span>
-          <button type="button" onClick={() => setActiveMistake(index => Math.min(mistakeBars.length - 1, index + 1))} disabled={activeMistake >= mistakeBars.length - 1} aria-label="Next mistake">→</button>
-        </div>}
-      </div>
-      {isMusicXml(file) && (scoreXml
-        ? <MusicXMLViewer xml={scoreXml} title={file.original_name} highlightMeasures={mistakeBars} focusMeasure={mistakeBars[activeMistake]}/>
-        : <div className="pc-inline-status">{scoreLoadError || "Loading your score…"}</div>)}
-      {!isMusicXml(file) && <div className="pc-linked-score"><span className="pc-file-icon">▤</span><div><strong>{file.original_name}</strong><small>Open the original score to read it. Bar highlights are available for supported MusicXML scores.</small></div><button className="pc-button outline" onClick={() => onOpenFile(file)}>Open sheet ↗</button></div>}
-      {isMusicXml(file) && mistakeBars.length > 0 && <p className="pc-muted-small">Orange markers show recorded mistake areas. Use the arrows to move between them, or scroll through the score yourself.</p>}
-    </section>}
-    <section className="pc-panel pc-sections-panel"><div className="pc-panel-heading"><div><span className="pc-eyebrow">CHOOSE YOUR FOCUS</span><h2>Practice a section</h2></div></div>
-      <div className="pc-section-list">{Array.from({ length: Number(task.section_count) || 1 }, (_, index) => { const score = sectionScore(task, attempts, index+1); return <div className="pc-section-row" key={index}><span className="pc-section-number">{String(index+1).padStart(2,"0")}</span><div><strong>Section {index+1}</strong><small>{score === null ? "Not practised yet" : "Recent average · " + Math.round(score) + "%"}</small></div><div className="pc-section-meter"><i style={{width:(score === null ? 0 : score)+"%"}}/></div><button onClick={() => onPractice(task,"section-"+(index+1))}>Practice section ↗</button></div>; })}</div>
-    </section>
-    <button className="pc-danger-text" onClick={() => onDelete(task)}>Remove this learning task</button>
+    <div className="pc-task-reference-actions">
+      <button className="pc-button dark" onClick={() => onPractice(task)}>Practice</button>
+      <button className="pc-button outline" onClick={onEdit}>Edit</button>
+      <button className="pc-button danger" onClick={() => onDelete(task)}>Delete</button>
+    </div>
+    {file && <button className="pc-task-reference-file" onClick={() => onOpenFile(file)}><span>{file.original_name}</span><span>Open score ↗</span></button>}
   </div>;
 }
 
@@ -912,7 +894,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
   const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,"0")+":"+String(elapsed%60).padStart(2,"0");
 
   return <div className="pc-live-session">
-    <header className="pc-session-top"><div><button className="pc-back-link" onClick={onExit} disabled={Boolean(session)}>← Back</button><span className="pc-eyebrow">{config.mode==="assisted"?"ASSISTED PRACTICE":"STANDARD PRACTICE"}</span><h1>{config.task?.title||file?.original_name||"Free practice"}</h1><p>{config.sectionKey==="full"?"Whole task":config.sectionKey.replace("section-","Section ")}</p></div><div className="pc-session-top-right"><span className="pc-session-clock">{elapsedLabel}</span>{session&&<button className="pc-button dark" onClick={()=>{if(config.mode==="assisted"&&engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}} disabled={busy}>{busy?"Saving session…":"Stop Session ■"}</button>}</div></header>
+    <header className="pc-session-top"><div><button className="pc-back-link" onClick={onExit} disabled={Boolean(session)}>← Back</button><span className="pc-eyebrow">{config.mode==="assisted"?"ASSISTED PRACTICE":"STANDARD PRACTICE"}</span><h1>{config.task?.title||file?.original_name||"Free practice"}</h1><p>{config.sectionKey==="full"?"Whole task":config.sectionKey.replace("section-","Section ")}</p></div><div className="pc-session-top-right"><span className="pc-session-clock">{elapsedLabel}</span></div></header>
     {!session ? <section className="pc-session-ready"><span className="pc-session-ready-icon">♫</span><h2>Take a moment to settle in.</h2><p>Your session will be recorded when you begin. Microphone input is optional, and you can connect a MIDI piano for more accurate note detection.</p>
       {config.mode==="assisted"&&<div className="pc-inline-warning">Assisted mode will use the score's note timings. Use an external MIDI keyboard for accurate chords; microphone pitch detection is monophonic.</div>}
       {!navigator.mediaDevices?.getUserMedia&&<div className="pc-device-warning"><span>⚠</span><div>This browser does not support microphone input. You can still use an attached MIDI keyboard or your computer keys to practise.</div></div>}
@@ -931,7 +913,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
       {config.mode==="standard"&&<div className="pc-standard-note"><strong>Standard Practice</strong><span>{standardEvents.length?"The microphone follows matching pitches through the score where possible. A MIDI keyboard or full score-alignment service is more reliable for chords.":"The session is recording, but this file has no structured note timeline for a live bar cursor."}</span></div>}
       {scoreLoadError&&<p className="pc-form-error">{scoreLoadError}</p>}
     </div>}
-    <footer className="pc-session-footer"><span>{config.mode==="assisted"?"Follow the falling notes and play without rushing.":"Play through the music at a comfortable pace."}</span><span>15 minutes of practice earns today's streak.</span></footer>
+    <footer className="pc-session-footer pc-session-reference-footer">{session ? <><span className="pc-listening-indicator"><i/>Listening</span><button type="button" className="pc-button dark" onClick={()=>{if(config.mode==="assisted"&&engineControlRef.current?.finish)engineControlRef.current.finish();else finishSession(null);}} disabled={busy}>{busy?"Saving…":"Finish →"}</button></> : <span>{config.mode==="assisted"?"Follow the falling notes and play without rushing.":"Play through the music at a comfortable pace."}</span>}</footer>
   </div>;
 }
 
@@ -984,94 +966,49 @@ function PracticeEpub({url,title}){
   return <div className="pc-practice-epub-wrap">{error?<div className="pc-inline-error">{error}</div>:<div className="pc-practice-epub" ref={host} aria-label={title}/>}</div>;
 }
 
-function FeedbackPage({feedback,onBack,onAgain,onOpenFile}){
-  const [audioUrl,setAudioUrl]=useState("");
+function FeedbackPage({feedback,onBack,onAgain}){
   const [mistakeAudioUrls,setMistakeAudioUrls]=useState({});
-  const [scoreXml,setScoreXml]=useState("");
-  const [scoreError,setScoreError]=useState("");
-  const [activeMistake,setActiveMistake]=useState(0);
   const summary=feedback.summary;
   const mistakes=summary?.trouble||[];
-  const referenceFile=feedback.referenceFile||null;
   const mistakeClips=feedback.mistakeClips||[];
 
   useEffect(()=>{
     let active=true;
-    if(!feedback.recordingFileId)return ()=>{active=false;};
-    api("/api/uploads/download?id="+encodeURIComponent(feedback.recordingFileId)+"&inline=1")
-      .then(result=>{if(active)setAudioUrl(result.url);}).catch(()=>{});
-    return()=>{active=false;};
-  },[feedback.recordingFileId]);
-
-  useEffect(()=>{
-    let active=true;
-    if(!mistakeClips.length)return ()=>{active=false;};
-    Promise.all(mistakeClips.map(async clip=>{
-      if(!clip.fileId)return null;
+    const fileIds=[...new Set(mistakeClips.map(clip=>clip.fileId).filter(Boolean))];
+    if(!fileIds.length){setMistakeAudioUrls({});return()=>{active=false;};}
+    Promise.all(fileIds.map(async id=>{
       try{
-        const result=await api("/api/uploads/download?id="+encodeURIComponent(clip.fileId)+"&inline=1");
-        return [clip.fileId,result.url];
+        const result=await api("/api/uploads/download?id="+encodeURIComponent(id)+"&inline=1");
+        return [id,result.url];
       }catch{return null;}
-    })).then(results=>{
-      if(active)setMistakeAudioUrls(Object.fromEntries(results.filter(Boolean)));
-    });
+    })).then(results=>{if(active)setMistakeAudioUrls(Object.fromEntries(results.filter(Boolean)));});
     return()=>{active=false;};
   },[mistakeClips.map(clip=>clip.fileId).join("|")]);
 
-  useEffect(()=>{
-    let active=true;
-    setScoreXml("");setScoreError("");
-    if(!referenceFile||!isMusicXml(referenceFile))return ()=>{active=false;};
-    async function loadScore(){
-      try{
-        const link=await api("/api/uploads/download?id="+encodeURIComponent(referenceFile.id)+"&inline=1");
-        const response=await fetch(link.url);
-        if(!response.ok)throw new Error("The score could not be loaded from your collection.");
-        const xml=await response.text();
-        if(active)setScoreXml(xml);
-      }catch(error){if(active)setScoreError(error.message||"The score could not be loaded.");}
-    }
-    loadScore();
-    return()=>{active=false;};
-  },[referenceFile?.id]);
-
-  function move(delta){setActiveMistake(index=>Math.max(0,Math.min(mistakes.length-1,index+delta)));}
-  const activeBar=Number(mistakes[activeMistake]?.bar);
-
-  return <div className="pc-feedback-page">
-    <div className="pc-feedback-heading"><button className="pc-back-link" onClick={onBack}>← Back to practice</button><span className="pc-eyebrow">SESSION COMPLETE</span><h1>A little more progress<em>.</em></h1><p>{feedback.task?.title||"Your practice session"} · {formatDuration(feedback.durationSeconds)} recorded</p></div>
-    <section className="pc-feedback-written"><div><span className="pc-eyebrow">YOUR SESSION</span><h2>{summary?"Your assisted practice result":"Your practice has been saved."}</h2><p>{summary?"You matched "+summary.hits+" of "+summary.total+" expected notes in the selected passage. "+(summary.wrong?summary.wrong+" incorrect note attempts were detected. ":"")+"Revisit the marked bars below and try them again at a comfortable pace.":"Your session time has been saved to your practice history. This document did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p></div>{summary&&<div className="pc-feedback-score"><strong>{summary.score}%</strong><small>SESSION SCORE</small></div>}</section>
-
-    <section className="pc-feedback-recordings">
-      <div className="pc-section-heading"><div><span className="pc-eyebrow">MISTAKE RECORDINGS</span><h2>Listen to the places to revisit</h2></div></div>
-      {mistakes.length>0 ? <div className="pc-mistake-recordings">
-        {mistakes.map((item,index)=>{
-          const clip=mistakeClips.find(entry=>Number(entry.bar)===Number(item.bar));
-          const clipUrl=clip?.fileId?mistakeAudioUrls[clip.fileId]:"";
-          return <article className={"pc-mistake-recording "+(activeMistake===index?"active":"")} key={item.bar+"-"+index}>
-            <button type="button" className="pc-mistake-recording-target" onClick={()=>setActiveMistake(index)}>
-              <span className="pc-mistake-number">{String(index+1).padStart(2,"0")}</span>
-              <span><strong>Bar {item.bar}</strong><small>{(item.notes||[]).join(" · ")||"Revisit this passage"}</small></span>
-              <b>View on sheet ↗</b>
-            </button>
-            {clipUrl?<audio controls preload="metadata" src={clipUrl} onPlay={()=>setActiveMistake(index)} aria-label={"Mistake recording for bar "+item.bar}/>:<small className="pc-muted-small">{clip?"Preparing the clip…":"No separate clip was saved for this bar."}</small>}
-          </article>;
-        })}
-      </div> : <p>{summary?"No specific trouble bars were returned by the practice engine.":"Mistake-level recordings require note-level score analysis; your session duration has still been saved."}</p>}
-      {audioUrl&&<details className="pc-full-session-audio"><summary>Listen to the full session recording</summary><audio controls preload="metadata" src={audioUrl}/></details>}
-      {!audioUrl&&<p className="pc-muted-small">{feedback.recordingSaved?"The full session recording is saved in your Sheet Music collection.":"No audio recording was saved for this session."}</p>}
-    </section>
-
-    <section className="pc-feedback-sheet">
-      <div className="pc-section-heading"><div><span className="pc-eyebrow">SHEET MUSIC</span><h2>Your score, with mistakes highlighted</h2><p>Every detected mistake is marked in orange. Select a recording or use the arrows to move to its bar.</p></div>
-        {mistakes.length>0&&<div className="pc-mistake-nav"><button onClick={()=>move(-1)} disabled={activeMistake===0} aria-label="Previous mistake">←</button><span>{activeMistake+1} / {mistakes.length}</span><button onClick={()=>move(1)} disabled={activeMistake===mistakes.length-1} aria-label="Next mistake">→</button></div>}
-      </div>
-      {scoreXml?<MusicXMLViewer xml={scoreXml} title={referenceFile?.original_name||feedback.task?.title||"Your score"} highlightMeasures={mistakes.map(item=>Number(item.bar))} focusMeasure={Number.isInteger(activeBar)&&activeBar>0?activeBar:null}/>:
-        referenceFile&&!isMusicXml(referenceFile)?<div className="pc-linked-score"><span className="pc-file-icon">▤</span><div><strong>{referenceFile.original_name}</strong><small>{scoreError||"Open the original score. Page-level mistake highlights require score-recognition alignment."}</small></div><button className="pc-button outline" onClick={()=>onOpenFile(referenceFile)}>Open sheet ↗</button></div>:
-        <div className="pc-empty-chart"><span>𝄞</span><p>{scoreError||"A MusicXML score linked to this session will appear here with orange mistake markers."}</p></div>}
-      {mistakes.length>0&&activeBar>0&&<div className="pc-active-mistake"><strong>Currently viewing bar {activeBar}</strong><p>{(mistakes[activeMistake]?.notes||[]).join(", ")}</p><small>You can still scroll manually to any other part of the score.</small></div>}
-    </section>
-    <div className="pc-feedback-footer"><button className="pc-button outline" onClick={onBack}>Back to practice</button><button className="pc-button dark" onClick={onAgain}>Start another session ↗</button></div>
+  return <div className="pc-feedback-page pc-feedback-reference">
+    <div className="pc-feedback-reference-heading"><span className="pc-eyebrow">SESSION COMPLETE</span><h1>Practice Feedback</h1></div>
+    <div className="pc-feedback-reference-grid">
+      <section className="pc-feedback-written pc-feedback-overview">
+        <h2>Your Overview</h2>
+        <p>{summary ? "You matched " + summary.hits + " of " + summary.total + " expected notes in this session. " + (summary.wrong ? summary.wrong + " incorrect note attempts were detected. " : "") + "Use the recordings to revisit the bars below, then try the passage again at a comfortable pace." : "Your practice session has been saved. This score did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p>
+        {summary && <strong className="pc-feedback-overview-score">{summary.score}%</strong>}
+      </section>
+      <section className="pc-feedback-recordings pc-feedback-where">
+        <h2>Where you went wrong</h2>
+        {mistakes.length ? <div className="pc-reference-feedback-list">
+          {mistakes.map((item,index)=>{
+            const clip=mistakeClips.find(entry=>Number(entry.bar)===Number(item.bar));
+            const clipUrl=clip?.fileId?mistakeAudioUrls[clip.fileId]:"";
+            const notes=Array.isArray(item.notes)?item.notes:[];
+            return <article className="pc-reference-feedback-item" key={item.bar+"-"+index}>
+              <div><strong>Bar {item.bar}</strong><span>{notes.length?"You played "+notes.join(", ")+" incorrectly":item.message||item.label||"Review this passage"}</span></div>
+              {clipUrl?<audio controls preload="none" src={clipUrl} aria-label={"Recording for bar "+item.bar}/>:<small>{clip?"Preparing recording…":"No separate recording saved."}</small>}
+            </article>;
+          })}
+        </div>:<p>{summary?"No specific mistake bars were returned for this session.":"Mistake-level feedback is not available for this score."}</p>}
+      </section>
+    </div>
+    <div className="pc-feedback-footer"><button className="pc-button dark" onClick={onAgain}>Continue ↗</button></div>
   </div>;
 }
 

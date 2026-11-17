@@ -1476,3 +1476,130 @@ button{color:inherit}
 
 .pc-practice-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
 @media(max-width:640px){.pc-practice-header-actions{width:100%;justify-content:stretch}.pc-practice-header-actions>*{flex:1 1 100%}}
+
+
+/* Supplied Piano Coach app design: cream paper, sage panels and restrained serif type. */
+.pc-dashboard-reference{width:min(100%,1440px);margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.pc-grade-overview{background:#9dc183;border-radius:28px;padding:clamp(18px,2.8vw,34px);display:grid;gap:22px}
+.pc-grade-progress{display:flex;align-items:center;justify-content:center;gap:16px;width:min(100%,760px);margin:0 auto}
+.pc-grade-progress-track{height:16px;flex:1;border:2px solid #fff6eb;border-radius:99px;overflow:hidden;background:rgba(255,246,235,.45)}
+.pc-grade-progress-track span{display:block;height:100%;border-radius:99px;background:#fff6eb;transition:width .35s ease}
+.pc-grade-progress>strong{font-family:"Playfair Display",Georgia,serif;font-size:clamp(24px,3vw,36px);font-weight:700;color:#242423}
+.pc-grade-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(12px,4vw,48px)}
+.pc-grade-meta-card{min-height:112px;background:#fff0dc;border-radius:24px;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.pc-grade-meta-card span{font-family:"Playfair Display",Georgia,serif;font-weight:700;font-size:clamp(19px,2.2vw,29px);color:#242423}
+.pc-grade-meta-card strong{font-family:"Playfair Display",Georgia,serif;font-size:clamp(24px,3vw,38px);font-weight:700;text-align:right;color:#242423}
+.pc-grade-tasks{background:#9dc183;border-radius:28px;padding:16px}
+.pc-grade-tasks>h1{margin:0;background:#fff0dc;border-radius:22px 22px 0 0;padding:24px 18px 12px;text-align:center;font-family:"Playfair Display",Georgia,serif;font-size:clamp(27px,3.6vw,46px);font-weight:700;letter-spacing:-.035em;color:#242423}
+.pc-grade-task-columns{background:#fff0dc;border-radius:0 0 22px 22px;padding:10px clamp(14px,3vw,36px) 28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(16px,3vw,44px)}
+.pc-grade-task-column{min-width:0}
+.pc-grade-task-column>header{display:flex;align-items:center;justify-content:center;gap:8px;position:relative;margin:0 0 12px}
+.pc-grade-task-column>header h2{margin:0;min-width:0;text-align:center;font-family:"Playfair Display",Georgia,serif;font-size:clamp(18px,2.1vw,27px);font-weight:700;color:#242423;border-bottom:2px solid #242423;padding:0 16px 4px}
+.pc-grade-task-column>header button{position:absolute;right:0;border:0;background:transparent;color:#242423;font-size:23px;cursor:pointer;opacity:.7}
+.pc-grade-task-list{display:flex;flex-direction:column;gap:4px}
+.pc-grade-task-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;border:0;border-radius:8px;background:transparent;padding:12px 4px;text-align:left;color:#242423}
+.pc-grade-task-row:hover,.pc-grade-task-row:focus-visible{background:rgba(157,193,131,.2)}
+.pc-grade-task-row .pc-task-name{min-width:0;flex:1}
+.pc-grade-task-row .pc-task-name strong{font-family:"Playfair Display",Georgia,serif;font-size:clamp(13px,1.35vw,17px);font-weight:700;white-space:normal;overflow-wrap:anywhere}
+.pc-grade-task-row .pc-task-score{flex:0 0 auto;font-family:"Playfair Display",Georgia,serif;font-size:clamp(15px,1.5vw,20px);font-weight:700;color:#64835b}
+.pc-grade-task-row .pc-task-score.is-low{color:#d74b45}
+.pc-grade-task-empty{min-height:70px;display:flex;align-items:center;justify-content:center;gap:10px;color:#77796f;font-size:12px}
+.pc-grade-task-empty button{border:0;background:transparent;color:#526d4c;text-decoration:underline;font:inherit;cursor:pointer}
+
+.pc-task-detail-reference{width:min(100%,1440px);margin:0 auto}
+.pc-task-reference-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:20px;margin:14px 0 20px}
+.pc-task-reference-heading h1{margin:0;font-family:"Playfair Display",Georgia,serif;font-size:clamp(32px,4vw,56px);line-height:1.05;color:#242423}
+.pc-task-reference-stats{display:grid;grid-template-columns:repeat(2,minmax(108px,1fr));gap:10px}
+.pc-task-reference-stats>div{min-width:0;background:#9dc183;border-radius:20px;padding:16px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.pc-task-reference-stats span{font-family:"Playfair Display",Georgia,serif;font-size:17px;font-weight:700;color:#242423}
+.pc-task-reference-stats strong{font-family:"Playfair Display",Georgia,serif;font-size:clamp(28px,3vw,42px);line-height:1.2;color:#242423}
+.pc-task-reference-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:16px;align-items:stretch}
+.pc-task-reference-grid>.pc-panel{min-width:0;border:7px solid #9dc183;border-radius:24px;background:#fff0dc;padding:22px;box-shadow:none}
+.pc-task-reference-grid .pc-panel h2{margin:0 0 14px;font-family:"Playfair Display",Georgia,serif;font-size:clamp(22px,2.5vw,32px);font-weight:700;color:#242423}
+.pc-task-reference-history .pc-progress-chart{width:100%;height:auto;min-height:190px}
+.pc-task-reference-history .pc-chart-grid{stroke:rgba(36,36,35,.12)}
+.pc-task-reference-history .pc-chart-path{stroke:#9dc183;stroke-width:3;fill:none}
+.pc-task-reference-history .pc-chart-point{fill:#9dc183;stroke:#9dc183}
+.pc-task-reference-history .pc-chart-label{fill:#242423;font-family:"Playfair Display",Georgia,serif;font-size:12px}
+.pc-task-reference-issues{max-height:560px;overflow:auto}
+.pc-reference-issue-list{display:flex;flex-direction:column;gap:16px}
+.pc-reference-issue{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:0 0 14px;border-bottom:1px solid rgba(36,36,35,.12)}
+.pc-reference-issue:last-child{border-bottom:0;padding-bottom:0}
+.pc-reference-issue-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pc-reference-issue-copy strong{font-family:"Playfair Display",Georgia,serif;font-size:18px;color:#242423}
+.pc-reference-issue-copy span{font-family:"Playfair Display",Georgia,serif;font-size:14px;line-height:1.4;color:#242423;overflow-wrap:anywhere}
+.pc-reference-issue audio{width:100%;height:34px;max-width:100%}
+.pc-task-reference-actions{display:flex;align-items:center;gap:12px;margin:20px 0}
+.pc-task-reference-actions .pc-button{min-width:120px;justify-content:center;border-radius:14px;min-height:48px}
+.pc-button.danger{background:#e83f42;color:#fff;border:1px solid #e83f42}
+.pc-task-reference-file{width:100%;display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border:1px solid rgba(36,36,35,.15);border-radius:12px;background:transparent;color:#242423;text-align:left;cursor:pointer}
+
+.pc-session-reference-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0}
+.pc-listening-indicator{display:inline-flex;align-items:center;gap:12px;padding:12px 22px;border-radius:16px;background:#fff0dc;color:#242423;font-family:"Playfair Display",Georgia,serif;font-size:clamp(20px,2.5vw,30px);font-weight:700}
+.pc-listening-indicator i{display:block;width:20px;height:20px;border:2px solid #e83f42;border-radius:50%;background:#e83f42;box-shadow:inset 0 0 0 2px #fff0dc}
+.pc-session-reference-footer .pc-button{min-width:180px;min-height:52px;border-radius:16px;font-family:"Playfair Display",Georgia,serif;font-size:20px}
+
+.pc-feedback-reference{width:min(100%,1440px);margin:0 auto}
+.pc-feedback-reference-heading{margin-bottom:18px}
+.pc-feedback-reference-heading h1{margin:4px 0 0;font-family:"Playfair Display",Georgia,serif;font-size:clamp(34px,4vw,58px);color:#242423}
+.pc-feedback-reference-grid{display:grid;grid-template-columns:minmax(250px,.75fr) minmax(0,1.25fr);gap:18px;align-items:stretch}
+.pc-feedback-reference-grid>.pc-feedback-written,.pc-feedback-reference-grid>.pc-feedback-recordings{min-width:0;min-height:440px;margin:0;border:0;border-radius:24px;background:#fff0dc;padding:clamp(20px,3vw,36px);box-shadow:none}
+.pc-feedback-overview{display:flex;flex-direction:column;align-items:center;text-align:center}
+.pc-feedback-overview h2,.pc-feedback-where h2{margin:0 0 20px;font-family:"Playfair Display",Georgia,serif;font-size:clamp(25px,3vw,40px);color:#242423}
+.pc-feedback-overview p{margin:0;color:#242423;font-family:"Playfair Display",Georgia,serif;font-size:clamp(15px,1.5vw,19px);line-height:1.55}
+.pc-feedback-overview-score{display:block;margin:22px 0 8px;font-family:"Playfair Display",Georgia,serif;font-size:44px;color:#64835b}
+.pc-feedback-overview small{margin-top:auto;padding-top:22px;color:#6d6b63;font-size:11px}
+.pc-feedback-where{display:flex;flex-direction:column}
+.pc-reference-feedback-list{display:flex;flex-direction:column;gap:18px}
+.pc-reference-feedback-item{display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,.65fr);align-items:center;gap:14px;padding-bottom:15px;border-bottom:1px solid rgba(36,36,35,.12)}
+.pc-reference-feedback-item:last-child{border-bottom:0}
+.pc-reference-feedback-item>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.pc-reference-feedback-item>div strong{font-family:"Playfair Display",Georgia,serif;font-size:clamp(19px,2vw,27px);color:#242423}
+.pc-reference-feedback-item>div span{font-family:"Playfair Display",Georgia,serif;font-size:clamp(14px,1.4vw,18px);line-height:1.35;color:#242423}
+.pc-reference-feedback-item audio{width:100%;height:34px;min-width:0}
+.pc-reference-feedback-item>small{font-size:11px;color:#77796f}
+.pc-feedback-reference .pc-feedback-footer{display:flex;justify-content:flex-end;margin-top:18px}
+.pc-feedback-reference .pc-feedback-footer .pc-button{min-width:180px;min-height:50px;border-radius:16px;font-family:"Playfair Display",Georgia,serif;font-size:20px}
+
+@media(max-width:900px){
+ .pc-grade-task-columns{gap:14px;padding-inline:16px}
+ .pc-task-reference-grid{grid-template-columns:1fr}
+ .pc-task-reference-issues{max-height:none}
+}
+@media(max-width:680px){
+ .pc-grade-overview{padding:14px;border-radius:18px;gap:14px}
+ .pc-grade-progress-track{height:12px}
+ .pc-grade-meta{gap:8px}
+ .pc-grade-meta-card{min-height:82px;padding:12px;border-radius:14px;align-items:flex-start;flex-direction:column;justify-content:center;gap:5px}
+ .pc-grade-meta-card span{font-size:16px}
+ .pc-grade-meta-card strong{font-size:19px;text-align:left}
+ .pc-grade-tasks{padding:9px;border-radius:18px}
+ .pc-grade-tasks>h1{font-size:25px;padding:16px 10px 8px}
+ .pc-grade-task-columns{grid-template-columns:1fr;gap:18px;padding:8px 14px 18px}
+ .pc-grade-task-column>header{margin-bottom:4px}
+ .pc-grade-task-column>header h2{font-size:20px}
+ .pc-grade-task-row{padding:10px 2px}
+ .pc-grade-task-row .pc-task-name strong{font-size:15px}
+ .pc-grade-task-row .pc-task-score{font-size:17px}
+ .pc-task-reference-heading{grid-template-columns:1fr;gap:12px}
+ .pc-task-reference-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .pc-task-reference-stats>div{padding:12px;border-radius:14px}
+ .pc-task-reference-stats span{font-size:14px}
+ .pc-task-reference-stats strong{font-size:28px}
+ .pc-task-reference-grid>.pc-panel{border-width:4px;padding:16px}
+ .pc-task-reference-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .pc-task-reference-actions .pc-button{min-width:0;width:100%;padding-inline:10px}
+ .pc-task-reference-actions .pc-button:first-child{grid-column:1/-1}
+ .pc-session-reference-footer{position:sticky;bottom:68px;background:#9dc183;margin-inline:-14px;padding:12px 14px;z-index:5}
+ .pc-listening-indicator{font-size:19px;padding:10px 14px}
+ .pc-listening-indicator i{width:16px;height:16px}
+ .pc-session-reference-footer .pc-button{min-width:120px;min-height:46px;font-size:18px}
+ .pc-feedback-reference-grid{grid-template-columns:1fr;gap:12px}
+ .pc-feedback-reference-grid>.pc-feedback-written,.pc-feedback-reference-grid>.pc-feedback-recordings{min-height:0;padding:20px;border-radius:18px}
+ .pc-feedback-overview small{margin-top:20px}
+ .pc-reference-feedback-item{grid-template-columns:1fr;gap:8px}
+ .pc-feedback-reference .pc-feedback-footer .pc-button{width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+ .pc-grade-progress-track span{transition:none}
+}
