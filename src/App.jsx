@@ -88,7 +88,8 @@ function taskHasProgress(task, attempts) {
   return getTaskAttempts(task, attempts).some(item => item.score !== null);
 }
 function getTaskFile(task, files) {
-  return files.find(file => file.id === task.source_file_id) || null;
+  if (!task || !task.source_file_id || !Array.isArray(files)) return null;
+  return files.find(file => file && file.id === task.source_file_id) || null;
 }
 function recommendNextTask(tasks, attempts) {
   const scored = tasks.map(task => {
@@ -128,7 +129,7 @@ export default function App() {
   const refresh = useCallback(async () => {
     const [account, library] = await Promise.all([api("/api/me"), api("/api/uploads")]);
     setData(account);
-    setFiles(library.files || []);
+    setFiles(Array.isArray(library.files) ? library.files.filter(Boolean) : []);
     return account;
   }, []);
 
@@ -184,7 +185,7 @@ export default function App() {
 
   const user = data?.user || {};
   const summary = data?.practiceSummary || {};
-  const tasks = data?.tasks || [];
+  const tasks = Array.isArray(data?.tasks) ? data.tasks.filter(Boolean) : [];
   const attempts = data?.attempts || [];
   const plan = user.plan || "free";
   const displayName = user.preferred_name || user.display_name || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Piano student";
@@ -570,7 +571,7 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
   }
   if (feedback) return <FeedbackPage feedback={feedback} onBack={onReturn} onAgain={() => {setFeedback(null);toast("Choose another practice session.");}} onOpenFile={onOpenFile}/>;
   if (config) return <PracticeSession key={config.task?.id+":"+config.sectionKey+":"+config.mode+":"+(config.referenceFile?.id||"none")} config={config} files={files} onComplete={result=>{setFeedback(result);refresh().catch(()=>{});}} onExit={onReturn}/>;
-  const selected=tasks.find(task=>task.id===chosenTask)||null;
+  const selected=tasks.find(task=>task && task.id===chosenTask)||null;
   const availableFiles=files.filter(file=>(file.kind==="sheet"||file.kind==="image")&&!file.metadata?.analysisOnly);
   const reference=availableFiles.find(file=>file.id===chosenFile)||getTaskFile(selected,files);
   const gradedSelection = reference
