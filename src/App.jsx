@@ -1020,40 +1020,32 @@ function FeedbackPage({feedback,onBack,onAgain,onOpenFile}){
   function move(delta){setActiveMistake(index=>Math.max(0,Math.min(mistakes.length-1,index+delta)));}
   const activeBar=Number(mistakes[activeMistake]?.bar);
 
-  return <div className="pc-feedback-page">
-    <div className="pc-feedback-heading"><button className="pc-back-link" onClick={onBack}>← Back to practice</button><span className="pc-eyebrow">SESSION COMPLETE</span><h1>A little more progress<em>.</em></h1><p>{feedback.task?.title||"Your practice session"} · {formatDuration(feedback.durationSeconds)} recorded</p></div>
-    <section className="pc-feedback-written"><div><span className="pc-eyebrow">YOUR SESSION</span><h2>{summary?"Your assisted practice result":"Your practice has been saved."}</h2><p>{summary?"You matched "+summary.hits+" of "+summary.total+" expected notes in the selected passage. "+(summary.wrong?summary.wrong+" incorrect note attempts were detected. ":"")+"Revisit the marked bars below and try them again at a comfortable pace.":"Your session time has been saved to your practice history. This document did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p></div>{summary&&<div className="pc-feedback-score"><strong>{summary.score}%</strong><small>SESSION SCORE</small></div>}</section>
-
-    <section className="pc-feedback-recordings">
-      <div className="pc-section-heading"><div><span className="pc-eyebrow">MISTAKE RECORDINGS</span><h2>Listen to the places to revisit</h2></div></div>
-      {mistakes.length>0 ? <div className="pc-mistake-recordings">
-        {mistakes.map((item,index)=>{
-          const clip=mistakeClips.find(entry=>Number(entry.bar)===Number(item.bar));
-          const clipUrl=clip?.fileId?mistakeAudioUrls[clip.fileId]:"";
-          return <article className={"pc-mistake-recording "+(activeMistake===index?"active":"")} key={item.bar+"-"+index}>
-            <button type="button" className="pc-mistake-recording-target" onClick={()=>setActiveMistake(index)}>
-              <span className="pc-mistake-number">{String(index+1).padStart(2,"0")}</span>
-              <span><strong>Bar {item.bar}</strong><small>{(item.notes||[]).join(" · ")||"Revisit this passage"}</small></span>
-              <b>View on sheet ↗</b>
-            </button>
-            {clipUrl?<audio controls preload="metadata" src={clipUrl} onPlay={()=>setActiveMistake(index)} aria-label={"Mistake recording for bar "+item.bar}/>:<small className="pc-muted-small">{clip?"Preparing the clip…":"No separate clip was saved for this bar."}</small>}
-          </article>;
-        })}
-      </div> : <p>{summary?"No specific trouble bars were returned by the practice engine.":"Mistake-level recordings require note-level score analysis; your session duration has still been saved."}</p>}
-      {audioUrl&&<details className="pc-full-session-audio"><summary>Listen to the full session recording</summary><audio controls preload="metadata" src={audioUrl}/></details>}
-      {!audioUrl&&<p className="pc-muted-small">{feedback.recordingSaved?"The full session recording is saved in your Sheet Music collection.":"No audio recording was saved for this session."}</p>}
-    </section>
-
-    <section className="pc-feedback-sheet">
-      <div className="pc-section-heading"><div><span className="pc-eyebrow">SHEET MUSIC</span><h2>Your score, with mistakes highlighted</h2><p>Every detected mistake is marked in orange. Select a recording or use the arrows to move to its bar.</p></div>
-        {mistakes.length>0&&<div className="pc-mistake-nav"><button onClick={()=>move(-1)} disabled={activeMistake===0} aria-label="Previous mistake">←</button><span>{activeMistake+1} / {mistakes.length}</span><button onClick={()=>move(1)} disabled={activeMistake===mistakes.length-1} aria-label="Next mistake">→</button></div>}
-      </div>
-      {scoreXml?<MusicXMLViewer xml={scoreXml} title={referenceFile?.original_name||feedback.task?.title||"Your score"} highlightMeasures={mistakes.map(item=>Number(item.bar))} focusMeasure={Number.isInteger(activeBar)&&activeBar>0?activeBar:null}/>:
-        referenceFile&&!isMusicXml(referenceFile)?<div className="pc-linked-score"><span className="pc-file-icon">▤</span><div><strong>{referenceFile.original_name}</strong><small>{scoreError||"Open the original score. Page-level mistake highlights require score-recognition alignment."}</small></div><button className="pc-button outline" onClick={()=>onOpenFile(referenceFile)}>Open sheet ↗</button></div>:
-        <div className="pc-empty-chart"><span>𝄞</span><p>{scoreError||"A MusicXML score linked to this session will appear here with orange mistake markers."}</p></div>}
-      {mistakes.length>0&&activeBar>0&&<div className="pc-active-mistake"><strong>Currently viewing bar {activeBar}</strong><p>{(mistakes[activeMistake]?.notes||[]).join(", ")}</p><small>You can still scroll manually to any other part of the score.</small></div>}
-    </section>
-    <div className="pc-feedback-footer"><button className="pc-button outline" onClick={onBack}>Back to practice</button><button className="pc-button dark" onClick={onAgain}>Start another session ↗</button></div>
+  return <div className="pc-feedback-page pc-feedback-reference">
+    <div className="pc-feedback-reference-heading"><span className="pc-eyebrow">SESSION COMPLETE</span><h1>AI Feedback</h1></div>
+    <div className="pc-feedback-reference-grid">
+      <section className="pc-feedback-written pc-feedback-overview">
+        <h2>Your Overview</h2>
+        <p>{summary ? "You matched " + summary.hits + " of " + summary.total + " expected notes in this session. " + (summary.wrong ? summary.wrong + " incorrect note attempts were detected. " : "") + "Use the recordings to revisit the bars below, then try the passage again at a comfortable pace." : "Your practice session has been saved. This score did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p>
+        {summary && <strong className="pc-feedback-overview-score">{summary.score}%</strong>}
+        <small>AI Generated Overview may not be accurate.</small>
+      </section>
+      <section className="pc-feedback-recordings pc-feedback-where">
+        <h2>Where you went wrong</h2>
+        {mistakes.length ? <div className="pc-reference-feedback-list">
+          {mistakes.map((item,index) => {
+            const clip = mistakeClips.find(entry => Number(entry.bar) === Number(item.bar));
+            const clipUrl = clip?.fileId ? mistakeAudioUrls[clip.fileId] : "";
+            const notes = Array.isArray(item.notes) ? item.notes : [];
+            return <article className="pc-reference-feedback-item" key={item.bar + "-" + index}>
+              <div><strong>Bar {item.bar}</strong><span>{notes.length ? "You played " + notes.join(", ") + " incorrectly" : item.message || item.label || "Review this passage"}</span></div>
+              {clipUrl ? <audio controls preload="none" src={clipUrl} aria-label={"Recording for bar " + item.bar}/> : <small>{clip ? "Preparing recording…" : "No separate recording saved."}</small>}
+            </article>;
+          })}
+        </div> : <p>{summary ? "No specific mistake bars were returned for this session." : "Mistake-level feedback is not available for this score."}</p>}
+        {audioUrl && <details className="pc-full-session-audio"><summary>Listen to full session</summary><audio controls preload="metadata" src={audioUrl}/></details>}
+      </section>
+    </div>
+    <div className="pc-feedback-footer"><button className="pc-button dark" onClick={onAgain}>Continue ↗</button></div>
   </div>;
 }
 
