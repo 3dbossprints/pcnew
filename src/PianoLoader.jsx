@@ -226,7 +226,7 @@ export default function PianoLoader({ variant = "loading", onComplete, enableMic
 
   return <main ref={surfaceRef} className="pc-loading-visualizer" onPointerMove={handlePointerMove} onPointerDown={event => addRipple(event, 1.8)} aria-live="polite">
     <canvas ref={canvasRef} className="pc-loading-canvas" aria-hidden="true"/>
-    <div className="pc-loading-topline"><img src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><span>LISTEN · LEARN · PLAY</span></div>
+    <div className="pc-loading-topline"><img src="/assets/logos/piano-coach-mark.png" alt="Piano Coach"/><span>LISTEN · LEARN · PLAY</span></div>
     <section className="pc-loading-content">
       <span className="pc-loading-eyebrow">{isIntro ? "WELCOME TO PIANO COACH" : "YOUR SPACE IS COMING TOGETHER"}</span>
       <h1>{isIntro ? <>A little space<br/><em>to get in tune.</em></> : <>Your music,<br/><em>in motion.</em></>}</h1>
