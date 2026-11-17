@@ -1472,3 +1472,7 @@ button{color:inherit}
 .pc-practice-upload{position:relative;flex:0 0 auto;white-space:nowrap}
 .pc-practice-upload input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 @media(max-width:760px){.pc-welcome-row{align-items:stretch;flex-direction:column}.pc-practice-upload{align-self:flex-start;min-height:44px}}
+
+
+.pc-practice-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+@media(max-width:640px){.pc-practice-header-actions{width:100%;justify-content:stretch}.pc-practice-header-actions>*{flex:1 1 100%}}
