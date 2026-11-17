@@ -38,9 +38,20 @@ const MODEL_SIZES = {
   [MODELS[2]]: 47309835,
 };
 const bytesBefore = (name) => MODELS.slice(0, MODELS.indexOf(name)).reduce((sum, model) => sum + MODEL_SIZES[model], 0);
-const modelUrl = (name) => new URL("models/" + name, location.href).href;
+const modelUrl = (name) => new URL("/models/" + name, self.location.origin).href;
 const pieceKey = (name, i) => `${modelUrl(name)}?piece=${i}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchLocalAsset(path) {
+  const url = new URL(path + self.location.search, self.location.href);
+  try {
+    const response = await fetch(url, { cache: "force-cache" });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    return response;
+  } catch (error) {
+    throw new Error("Could not fetch the local notation asset " + url.pathname + " (" + error.message + "). Refresh the app and check your connection.");
+  }
+}
 
 async function fetchPiece(url, start, end) {
   const abort = new AbortController();
@@ -269,30 +280,47 @@ async function init() {
   if (typeof WebAssembly.Suspending !== "function") {
     throw new Error("This browser lacks WebAssembly JSPI. Use an up-to-date Chrome.");
   }
-  ort = await import(ORT_URL + "ort.webgpu.min.mjs");
+  try {
+    ort = await import(ORT_URL + "ort.webgpu.min.mjs");
+  } catch (error) {
+    throw new Error("Could not fetch ONNX Runtime from jsDelivr. Check your connection or content blocker and try again. " + (error.message || error));
+  }
   ort.env.wasm.wasmPaths = ORT_URL;
   ort.env.wasm.numThreads = self.crossOriginIsolated
     ? Math.min(4, navigator.hardwareConcurrency || 1)
     : 1;
   post({ type: "log", msg: `WASM threads: ${ort.env.wasm.numThreads}` });
-  const { loadPyodide } = await import(PYODIDE_URL + "pyodide.mjs");
+  let loadPyodide;
+  try {
+    ({ loadPyodide } = await import(PYODIDE_URL + "pyodide.mjs"));
+  } catch (error) {
+    throw new Error("Could not fetch the Pyodide runtime. Check your connection or content blocker and try again. " + (error.message || error));
+  }
   useGpu = !!(self.navigator.gpu && (await navigator.gpu.requestAdapter()));
 
   post({ type: "progress", stage: "python" });
-  pyodide = await loadPyodide({ indexURL: PYODIDE_URL });
+  try {
+    pyodide = await loadPyodide({ indexURL: PYODIDE_URL });
+  } catch (error) {
+    throw new Error("Pyodide could not be downloaded or started. Check your connection and browser compatibility. " + (error.message || error));
+  }
   pyodide.setStderr({ batched: (msg) => post({ type: "log", msg }) });
   pyodide.setStdout({ batched: (msg) => post({ type: "log", msg }) });
-  await pyodide.loadPackage(["numpy", "opencv-python", "pillow", "typing-extensions"]);
+  try {
+    await pyodide.loadPackage(["numpy", "opencv-python", "pillow", "typing-extensions"]);
+  } catch (error) {
+    throw new Error("A required local notation package could not be fetched. Check your connection and try again. " + (error.message || error));
+  }
 
   const lib = "/home/pyodide/lib";
   pyodide.FS.mkdirTree(lib);
   // Same deploy version as this worker (?v=… from scripts/stamp-version.mjs).
   const v = location.search;
-  const homrZip = await (await fetch("vendor/homr.zip" + v)).arrayBuffer();
+  const homrZip = await (await fetchLocalAsset("vendor/homr.zip")).arrayBuffer();
   pyodide.unpackArchive(homrZip, "zip", { extractDir: lib });
   const version = new URLSearchParams(v).get("v");
   for (const f of ["onnxruntime.py", "runner.py"]) {
-    let text = await (await fetch("omr/" + f + v)).text();
+    let text = await (await fetchLocalAsset("omr/" + f)).text();
     pyodide.FS.writeFile(`${lib}/${f}`, text);
   }
   pyodide.runPython(`import sys; sys.path.insert(0, "${lib}")`);

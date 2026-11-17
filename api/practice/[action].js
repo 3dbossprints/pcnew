@@ -27,14 +27,28 @@ async function startSession(req, res) {
       if (!task.rowCount) return sendJson(res, 404, { error: "This learning task is not available in your Grade Plan." });
     }
     if (referenceFileId) {
-      const reference = await database().query("SELECT id FROM user_files WHERE id=$1 AND firebase_uid=$2 AND status='ready' AND kind='sheet' AND ($3='graded' OR metadata->>'purpose'='personal_piece')", [referenceFileId,user.uid,practiceType]);
+      const reference = await database().query(
+        "SELECT id,kind,metadata FROM user_files WHERE id=$1 AND firebase_uid=$2 AND status='ready' AND kind IN ('sheet','image')",
+        [referenceFileId,user.uid],
+      );
       if (!reference.rowCount) return sendJson(res, 404, { error: "The selected book or score is not available in your library." });
+      const purpose = reference.rows[0].metadata?.purpose || "library";
+      if (practiceType === "graded" && purpose === "personal_piece") {
+        return sendJson(res, 400, { error: "Extra sheets are for personal practice and cannot be used as graded exam pieces." });
+      }
+      if (practiceType === "graded" && purpose !== "exam_book") {
+        return sendJson(res, 400, { error: "This is an independently uploaded score. Start it as personal practice, not graded practice." });
+      }
+      if (practiceType === "personal" && purpose === "exam_book") {
+        return sendJson(res, 400, { error: "Exam-book pieces must be started as graded practice." });
+      }
     }
     const account = await database().query("SELECT plan,demo_seconds_used,exam_book_file_id FROM users WHERE firebase_uid=$1",[user.uid]);
     if (!account.rowCount) return sendJson(res,404,{error:"Complete your account setup first."});
     if (practiceType==="graded" && account.rows[0].plan!=="free" && !account.rows[0].exam_book_file_id) return sendJson(res,403,{error:"Upload your exam-board ebook to unlock graded learning. You can still practise your own pieces in Pro Extras."});
-    if (practiceType==="personal" && account.rows[0].plan!=="pro") return sendJson(res,403,{error:"Personal-piece practice in Extras requires Piano Coach Pro."});
-    if (practiceType==="personal" && !referenceFileId) return sendJson(res,400,{error:"Choose one of your uploaded personal pieces first."});
+    if (practiceType==="personal" && account.rows[0].plan==="free" && Number(account.rows[0].demo_seconds_used||0)>=3600) {
+      return sendJson(res,403,{error:"Your free 60-minute demo has been used. Subscribe to continue practising."});
+    }
     if (account.rows[0].plan==="free" && account.rows[0].demo_seconds_used>=3600) return sendJson(res,403,{error:"Your free 60-minute demo has been used. Subscribe to continue practising."});
     const id=randomUUID();
     let result;
