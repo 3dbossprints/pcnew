@@ -966,83 +966,46 @@ function PracticeEpub({url,title}){
   return <div className="pc-practice-epub-wrap">{error?<div className="pc-inline-error">{error}</div>:<div className="pc-practice-epub" ref={host} aria-label={title}/>}</div>;
 }
 
-function FeedbackPage({feedback,onBack,onAgain,onOpenFile}){
-  const [audioUrl,setAudioUrl]=useState("");
+function FeedbackPage({feedback,onBack,onAgain}){
   const [mistakeAudioUrls,setMistakeAudioUrls]=useState({});
-  const [scoreXml,setScoreXml]=useState("");
-  const [scoreError,setScoreError]=useState("");
-  const [activeMistake,setActiveMistake]=useState(0);
   const summary=feedback.summary;
   const mistakes=summary?.trouble||[];
-  const referenceFile=feedback.referenceFile||null;
   const mistakeClips=feedback.mistakeClips||[];
 
   useEffect(()=>{
     let active=true;
-    if(!feedback.recordingFileId)return ()=>{active=false;};
-    api("/api/uploads/download?id="+encodeURIComponent(feedback.recordingFileId)+"&inline=1")
-      .then(result=>{if(active)setAudioUrl(result.url);}).catch(()=>{});
-    return()=>{active=false;};
-  },[feedback.recordingFileId]);
-
-  useEffect(()=>{
-    let active=true;
-    if(!mistakeClips.length)return ()=>{active=false;};
-    Promise.all(mistakeClips.map(async clip=>{
-      if(!clip.fileId)return null;
+    const fileIds=[...new Set(mistakeClips.map(clip=>clip.fileId).filter(Boolean))];
+    if(!fileIds.length){setMistakeAudioUrls({});return()=>{active=false;};}
+    Promise.all(fileIds.map(async id=>{
       try{
-        const result=await api("/api/uploads/download?id="+encodeURIComponent(clip.fileId)+"&inline=1");
-        return [clip.fileId,result.url];
+        const result=await api("/api/uploads/download?id="+encodeURIComponent(id)+"&inline=1");
+        return [id,result.url];
       }catch{return null;}
-    })).then(results=>{
-      if(active)setMistakeAudioUrls(Object.fromEntries(results.filter(Boolean)));
-    });
+    })).then(results=>{if(active)setMistakeAudioUrls(Object.fromEntries(results.filter(Boolean)));});
     return()=>{active=false;};
   },[mistakeClips.map(clip=>clip.fileId).join("|")]);
 
-  useEffect(()=>{
-    let active=true;
-    setScoreXml("");setScoreError("");
-    if(!referenceFile||!isMusicXml(referenceFile))return ()=>{active=false;};
-    async function loadScore(){
-      try{
-        const link=await api("/api/uploads/download?id="+encodeURIComponent(referenceFile.id)+"&inline=1");
-        const response=await fetch(link.url);
-        if(!response.ok)throw new Error("The score could not be loaded from your collection.");
-        const xml=await response.text();
-        if(active)setScoreXml(xml);
-      }catch(error){if(active)setScoreError(error.message||"The score could not be loaded.");}
-    }
-    loadScore();
-    return()=>{active=false;};
-  },[referenceFile?.id]);
-
-  function move(delta){setActiveMistake(index=>Math.max(0,Math.min(mistakes.length-1,index+delta)));}
-  const activeBar=Number(mistakes[activeMistake]?.bar);
-
   return <div className="pc-feedback-page pc-feedback-reference">
-    <div className="pc-feedback-reference-heading"><span className="pc-eyebrow">SESSION COMPLETE</span><h1>AI Feedback</h1></div>
+    <div className="pc-feedback-reference-heading"><span className="pc-eyebrow">SESSION COMPLETE</span><h1>Practice Feedback</h1></div>
     <div className="pc-feedback-reference-grid">
       <section className="pc-feedback-written pc-feedback-overview">
         <h2>Your Overview</h2>
         <p>{summary ? "You matched " + summary.hits + " of " + summary.total + " expected notes in this session. " + (summary.wrong ? summary.wrong + " incorrect note attempts were detected. " : "") + "Use the recordings to revisit the bars below, then try the passage again at a comfortable pace." : "Your practice session has been saved. This score did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p>
         {summary && <strong className="pc-feedback-overview-score">{summary.score}%</strong>}
-        <small>AI Generated Overview may not be accurate.</small>
       </section>
       <section className="pc-feedback-recordings pc-feedback-where">
         <h2>Where you went wrong</h2>
         {mistakes.length ? <div className="pc-reference-feedback-list">
-          {mistakes.map((item,index) => {
-            const clip = mistakeClips.find(entry => Number(entry.bar) === Number(item.bar));
-            const clipUrl = clip?.fileId ? mistakeAudioUrls[clip.fileId] : "";
-            const notes = Array.isArray(item.notes) ? item.notes : [];
-            return <article className="pc-reference-feedback-item" key={item.bar + "-" + index}>
-              <div><strong>Bar {item.bar}</strong><span>{notes.length ? "You played " + notes.join(", ") + " incorrectly" : item.message || item.label || "Review this passage"}</span></div>
-              {clipUrl ? <audio controls preload="none" src={clipUrl} aria-label={"Recording for bar " + item.bar}/> : <small>{clip ? "Preparing recording…" : "No separate recording saved."}</small>}
+          {mistakes.map((item,index)=>{
+            const clip=mistakeClips.find(entry=>Number(entry.bar)===Number(item.bar));
+            const clipUrl=clip?.fileId?mistakeAudioUrls[clip.fileId]:"";
+            const notes=Array.isArray(item.notes)?item.notes:[];
+            return <article className="pc-reference-feedback-item" key={item.bar+"-"+index}>
+              <div><strong>Bar {item.bar}</strong><span>{notes.length?"You played "+notes.join(", ")+" incorrectly":item.message||item.label||"Review this passage"}</span></div>
+              {clipUrl?<audio controls preload="none" src={clipUrl} aria-label={"Recording for bar "+item.bar}/>:<small>{clip?"Preparing recording…":"No separate recording saved."}</small>}
             </article>;
           })}
-        </div> : <p>{summary ? "No specific mistake bars were returned for this session." : "Mistake-level feedback is not available for this score."}</p>}
-        {audioUrl && <details className="pc-full-session-audio"><summary>Listen to full session</summary><audio controls preload="metadata" src={audioUrl}/></details>}
+        </div>:<p>{summary?"No specific mistake bars were returned for this session.":"Mistake-level feedback is not available for this score."}</p>}
       </section>
     </div>
     <div className="pc-feedback-footer"><button className="pc-button dark" onClick={onAgain}>Continue ↗</button></div>
