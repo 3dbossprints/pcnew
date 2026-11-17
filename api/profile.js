@@ -64,6 +64,9 @@ async function saveTask(req, res, user, body) {
     if (source.rows[0].metadata?.purpose === "personal_piece") {
       return sendJson(res, 400, { error: "Extra sheets belong in Extras and cannot be added to graded Pieces." });
     }
+    if (source.rows[0].metadata?.purpose !== "exam_book") {
+      return sendJson(res, 400, { error: "Independently uploaded scores are for personal practice. Only an exam-book score can be linked to graded Pieces." });
+    }
   }
   const result = await db.query(
     "INSERT INTO practice_tasks(id,firebase_uid,category,title,composer,notes,source_file_id,section_count) " +
