@@ -88,7 +88,8 @@ function taskHasProgress(task, attempts) {
   return getTaskAttempts(task, attempts).some(item => item.score !== null);
 }
 function getTaskFile(task, files) {
-  return files.find(file => file.id === task.source_file_id) || null;
+  if (!task || !task.source_file_id || !Array.isArray(files)) return null;
+  return files.find(file => file && file.id === task.source_file_id) || null;
 }
 function recommendNextTask(tasks, attempts) {
   const scored = tasks.map(task => {
@@ -128,7 +129,7 @@ export default function App() {
   const refresh = useCallback(async () => {
     const [account, library] = await Promise.all([api("/api/me"), api("/api/uploads")]);
     setData(account);
-    setFiles(library.files || []);
+    setFiles(Array.isArray(library.files) ? library.files.filter(Boolean) : []);
     return account;
   }, []);
 
@@ -184,7 +185,7 @@ export default function App() {
 
   const user = data?.user || {};
   const summary = data?.practiceSummary || {};
-  const tasks = data?.tasks || [];
+  const tasks = Array.isArray(data?.tasks) ? data.tasks.filter(Boolean) : [];
   const attempts = data?.attempts || [];
   const plan = user.plan || "free";
   const displayName = user.preferred_name || user.display_name || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Piano student";
@@ -297,15 +298,14 @@ export default function App() {
 
   return <div className="pc-app">
     <aside className="pc-sidebar">
-      <div className="pc-brand"><img className="pc-brand-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><small>YOUR MUSICAL JOURNEY</small></div>
-      <div className="pc-sidebar-label">YOUR SPACE</div>
+      <div className="pc-brand"><img className="pc-brand-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/></div>
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Dashboard</span></button>
         <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
       </nav>
       <div className="pc-sidebar-spacer" />
-      <div className="pc-sidebar-encouragement"><span>✧</span><strong>Small steps.<br/>Beautiful music.</strong><p>A little thoughtful practice adds up.</p><button onClick={() => { setPage("practice"); setPracticeConfig(null); }}>Begin a session <b>↗</b></button></div>
-      <button className="pc-sidebar-profile" onClick={() => setPage("profile")}><span className="pc-avatar">{initials}</span><span><strong>{displayName}</strong><small>{user.grade || "Piano student"}{user.exam_board ? " · " + user.exam_board : ""}</small></span><b>•••</b></button>
+      
+      <div className="pc-sidebar-account"><button className="pc-sidebar-profile" onClick={() => setPage("profile")}><span className="pc-avatar">{initials}</span><span><strong>{displayName}</strong><small>{user.grade || "Piano student"}{user.exam_board ? " · " + user.exam_board : ""}</small></span></button><span className={"pc-sidebar-plan " + plan}>{plan === "free" ? "FREE" : plan.toUpperCase()}</span><div className="pc-sidebar-wordmark">Music Coach</div></div>
     </aside>
     <main className="pc-main">
       <header className="pc-topbar">
@@ -570,8 +570,10 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
   }
   if (feedback) return <FeedbackPage feedback={feedback} onBack={onReturn} onAgain={() => {setFeedback(null);toast("Choose another practice session.");}} onOpenFile={onOpenFile}/>;
   if (config) return <PracticeSession key={config.task?.id+":"+config.sectionKey+":"+config.mode+":"+(config.referenceFile?.id||"none")} config={config} files={files} onComplete={result=>{setFeedback(result);refresh().catch(()=>{});}} onExit={onReturn}/>;
-  const selected=tasks.find(task=>task.id===chosenTask)||null;
-  const availableFiles=files.filter(file=>(file.kind==="sheet"||file.kind==="image")&&!file.metadata?.analysisOnly);
+  const safeTasks=Array.isArray(tasks)?tasks.filter(Boolean):[];
+  const safeFiles=Array.isArray(files)?files.filter(Boolean):[];
+  const selected=safeTasks.find(task=>task.id===chosenTask)||null;
+  const availableFiles=safeFiles.filter(file=>(file.kind==="sheet"||file.kind==="image")&&!file.metadata?.analysisOnly);
   const reference=availableFiles.find(file=>file.id===chosenFile)||getTaskFile(selected,files);
   const gradedSelection = reference
     ? reference.metadata?.purpose === "exam_book"
@@ -583,8 +585,8 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
     <section className="pc-practice-chooser">
       <div className="pc-practice-step"><span>01</span><div><h2>What would you like to practise?</h2><p>Choose one of your saved learning tasks, or work from a score in your collection.</p></div></div>
       <div className="pc-chooser-fields">
-        <label>Learning task<select value={chosenTask} onChange={e=>{setChosenTask(e.target.value);setChosenFile("");setChosenSection("full");}}><option value="">No task · free practice</option>{tasks.map(task=><option key={task.id} value={task.id}>{task.category.slice(0,-1)} · {task.title}</option>)}</select></label>
-        <label>Sheet music<select value={chosenFile} onChange={e=>{const next=files.find(file=>file.id===e.target.value);setChosenFile(e.target.value);if(next&&next.metadata?.purpose!=="exam_book"){setChosenTask("");setChosenSection("full");}}}><option value="">Use linked score or no score</option>{availableFiles.map(file=><option value={file.id} key={file.id}>{file.original_name}</option>)}</select></label>
+        <label>Learning task<select value={chosenTask} onChange={e=>{setChosenTask(e.target.value);setChosenFile("");setChosenSection("full");}}><option value="">No task · free practice</option>{safeTasks.map(task=><option key={task.id} value={task.id}>{task.category.slice(0,-1)} · {task.title}</option>)}</select></label>
+        <label>Sheet music<select value={chosenFile} onChange={e=>{const next=safeFiles.find(file=>file.id===e.target.value);setChosenFile(e.target.value);if(next&&next.metadata?.purpose!=="exam_book"){setChosenTask("");setChosenSection("full");}}}><option value="">Use linked score or no score</option>{availableFiles.map(file=><option value={file.id} key={file.id}>{file.original_name}</option>)}</select></label>
         {selected&&<label>Practice focus<select value={chosenSection} onChange={e=>setChosenSection(e.target.value)}><option value="full">Whole task</option>{Array.from({length:selected.section_count},(_,i)=><option key={i} value={"section-"+(i+1)}>Section {i+1}</option>)}</select></label>}
       </div>
       {selected&&<div className="pc-selected-task-info"><strong>{selected.title}</strong><span>{taskHasProgress(selected,attempts)?taskProgress(selected,attempts)+"% recent achievement":"Not assessed yet"}</span></div>}
