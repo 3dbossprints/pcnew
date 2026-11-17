@@ -294,7 +294,7 @@ export default function App() {
   }
 
   if (loading) return <PianoLoader variant="loading" enableMicrophone />;
-  if (loadError) return <main className="pc-intro-screen is-loading"><div className="pc-intro-content"><img className="pc-loader-error-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><h1>Your account needs<br/><em>attention.</em></h1><p>{loadError}</p><button className="pc-intro-retry" onClick={() => window.location.reload()}>Try again ↗</button></div></main>;
+  if (loadError) return <main className="pc-intro-screen is-loading"><div className="pc-intro-content"><img className="pc-loader-error-logo" src="/assets/logos/piano-coach-mark.png" alt="Piano Coach"/><h1>Your account needs<br/><em>attention.</em></h1><p>{loadError}</p><button className="pc-intro-retry" onClick={() => window.location.reload()}>Try again ↗</button></div></main>;
 
   return <div className="pc-app">
     <aside className="pc-sidebar">
