@@ -286,7 +286,7 @@ export default function App() {
     setPage("practice");
   }
 
-  if (loading) return <PianoLoader variant="loading" />;
+  if (loading) return <PianoLoader variant="loading" enableMicrophone />;
   if (loadError) return <main className="pc-intro-screen is-loading"><div className="pc-intro-content"><img className="pc-loader-error-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><h1>Your account needs<br/><em>attention.</em></h1><p>{loadError}</p><button className="pc-intro-retry" onClick={() => window.location.reload()}>Try again ↗</button></div></main>;
 
   return <div className="pc-app">
@@ -296,6 +296,7 @@ export default function App() {
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Home</span></button>
         <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
+        <button className={showLibrary ? "active" : ""} onClick={() => setShowLibrary(true)}><Icon>▤</Icon><span>Sheet Music</span></button>
       </nav>
       <div className="pc-sidebar-spacer" />
       <div className="pc-sidebar-encouragement"><span>✧</span><strong>Small steps.<br/>Beautiful music.</strong><p>A little thoughtful practice adds up.</p><button onClick={() => { setPage("practice"); setPracticeConfig(null); }}>Begin a session <b>↗</b></button></div>
@@ -312,7 +313,7 @@ export default function App() {
       <div className="pc-content">
         {page === "home" && !selectedTask && <Dashboard data={data} displayName={displayName} tasks={tasks} attempts={attempts} files={files} onOpenTask={setSelectedTask} onAddTask={category => setTaskEditor({ ...blankTask, category })} onOpenLibrary={() => setShowLibrary(true)} onOpenFile={openFile} onPractice={beginPractice} freeLocked={freeLocked} onRefresh={refresh}/>}
         {page === "home" && selectedTask && <TaskDetails task={selectedTask} attempts={attempts} files={files} onBack={() => setSelectedTask(null)} onPractice={beginPractice} onEdit={() => setTaskEditor({ ...blankTask, ...selectedTask, sourceFileId: selectedTask.source_file_id || "" })} onDelete={deleteTask} onOpenFile={openFile}/>}
-        {page === "practice" && <PracticeHub tasks={tasks} files={files} attempts={attempts} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked} config={practiceConfig} onStart={beginPractice} onOpenFile={openFile} onReturn={() => { setPracticeConfig(null); setFeedback(null); setPage("home"); }} feedback={feedback} setFeedback={setFeedback} toast={toast} refresh={refresh}/>}
+        {page === "practice" && <PracticeHub tasks={tasks} files={files} attempts={attempts} plan={plan} hasExamBook={hasExamBook} freeLocked={freeLocked} config={practiceConfig} onStart={beginPractice} onOpenFile={openFile} onUpload={uploadFile} onReturn={() => { setPracticeConfig(null); setFeedback(null); setPage("home"); }} feedback={feedback} setFeedback={setFeedback} toast={toast} refresh={refresh}/>}
         {page === "profile" && <ProfilePage data={data} onSaved={async () => { await refresh(); toast("Your profile has been saved."); }} toast={toast} onRefresh={refresh}/>}
       </div>
     </main>
@@ -345,7 +346,7 @@ function Dashboard({ data, displayName, tasks, attempts, files, onOpenTask, onAd
     <div className="pc-dash-header">
       <div className="pc-dash-greeting"><span className="pc-eyebrow">{today.toUpperCase()}</span><h1>{greeting}, {displayName.split(" ")[0]}</h1><p>{[[user.grade, user.exam_board].filter(Boolean).join(" · "), user.target_date ? "Exam target · " + formatDate(user.target_date) : ""].filter(Boolean).join("  /  ") || "Your musical journey starts here."}</p></div>
       <div className="pc-dash-actions">
-        <button className="pc-button primary" onClick={() => onPractice(null)}>Start practice <span>→</span></button>
+        <button className="pc-button outline" onClick={onOpenLibrary}>Upload sheet music <span>＋</span></button><button className="pc-button primary" onClick={() => onPractice(null)}>Start practice <span>→</span></button>
       </div>
     </div>
     <section className="pc-dashboard-summary" aria-label="Your progress">
@@ -561,11 +562,24 @@ function LibraryModal({ files, busy, onClose, onOpen, onUpload, onRefresh, toast
   </section></div>;
 }
 
-function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, config, onStart, onOpenFile, onReturn, feedback, setFeedback, toast, refresh }) {
+function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, config, onStart, onOpenFile, onUpload, onReturn, feedback, setFeedback, toast, refresh }) {
   const [chosenTask,setChosenTask]=useState("");
   const [chosenSection,setChosenSection]=useState("full");
   const [mode,setMode]=useState("standard");
   const [chosenFile,setChosenFile]=useState("");
+  const [uploading,setUploading]=useState(false);
+  async function handleSheetUpload(event) {
+    const file=event.target.files?.[0];
+    event.target.value="";
+    if(!file)return;
+    setUploading(true);
+    try {
+      const saved=await onUpload(file,{purpose:"library",category:"pieces"});
+      if(saved?.id)setChosenFile(saved.id);
+      toast((saved?.original_name||file.name)+" added to your sheet music collection.");
+    } catch(error) { toast(error.message||"The sheet music could not be uploaded.","error"); }
+    finally { setUploading(false); }
+  }
   if (feedback) return <FeedbackPage feedback={feedback} onBack={onReturn} onAgain={() => {setFeedback(null);toast("Choose another practice session.");}} onOpenFile={onOpenFile}/>;
   if (config) return <PracticeSession key={config.task?.id+":"+config.sectionKey+":"+config.mode+":"+(config.referenceFile?.id||"none")} config={config} files={files} onComplete={result=>{setFeedback(result);refresh().catch(()=>{});}} onExit={onReturn}/>;
   const selected=tasks.find(task=>task.id===chosenTask)||null;
@@ -573,7 +587,7 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
   const reference=availableFiles.find(file=>file.id===chosenFile)||getTaskFile(selected,files);
   const locked=freeLocked || (plan!=="free"&&!hasExamBook);
   return <div className="pc-practice-hub">
-    <div className="pc-welcome-row"><div><span className="pc-eyebrow">MAKE MUSIC TODAY</span><h1>Practice, with purpose<em>.</em></h1><p>Choose a task, decide how you would like to practise, and take it at your own pace.</p></div></div>
+    <div className="pc-welcome-row"><div><span className="pc-eyebrow">MAKE MUSIC TODAY</span><h1>Practice, with purpose<em>.</em></h1><p>Choose a task, decide how you would like to practise, and take it at your own pace.</p></div><label className="pc-button outline pc-upload-button pc-practice-upload">{uploading?"Uploading…":"＋ Upload sheet music"}<input type="file" accept=".pdf,.epub,.xml,.musicxml,.musiccoach,.mid,.midi,.png,.jpg,.jpeg" disabled={uploading} onChange={handleSheetUpload}/></label></div>
     <section className="pc-practice-chooser">
       <div className="pc-practice-step"><span>01</span><div><h2>What would you like to practise?</h2><p>Choose one of your saved learning tasks, or work from a score in your collection.</p></div></div>
       <div className="pc-chooser-fields">
@@ -589,7 +603,7 @@ function PracticeHub({ tasks, files, attempts, plan, hasExamBook, freeLocked, co
       </div>
       {locked&&<div className="pc-inline-warning">{freeLocked?"Your lifetime free hour has been used.":"Upload your exam-board ebook to unlock graded learning."} Your account and profile remain available.</div>}
       {mode==="assisted"&&(!reference||(!isMusicXml(reference)&&!isMusicCoach(reference)))&&<div className="pc-inline-warning">Choose a MusicXML score or a book that has already been prepared for Assisted Practice. PDF and EPUB pages remain the music you read; the linked MusicCoach file supplies note analysis.</div>}
-      <div className="pc-practice-start-row"><button className="pc-button dark" disabled={locked||!reference} onClick={()=>onStart(selected,chosenSection,mode,reference?.metadata?.purpose==="personal_piece"?"personal":"graded",reference)}>Begin session ↗</button><span>Recording begins when your session starts. Microphone permission is requested then.</span></div>
+      <div className="pc-practice-start-row"><button className="pc-button dark" disabled={locked||(mode==="assisted"&&!reference)} onClick={()=>onStart(selected,chosenSection,mode,reference?.metadata?.purpose==="personal_piece"?"personal":"graded",reference)}>Begin session ↗</button><span>{reference?"Recording begins when your session starts. Microphone permission is requested then.":"No score selected · Start a free practice session, or upload sheet music above."}</span></div>
     </section>
     <section className="pc-recent-practice"><div className="pc-section-heading"><div><span className="pc-eyebrow">YOUR LIBRARY</span><h2>Scores ready to practise</h2></div></div>
       {availableFiles.length ? <div className="pc-practice-file-grid">{availableFiles.slice(0,6).map(file=><button key={file.id} onClick={()=>onOpenFile(file)}><span className="pc-file-icon">{isMusicXml(file)?"♫":isPdf(file)?"▤":"♪"}</span><strong>{file.original_name}</strong><small>{file.metadata?.purpose==="personal_piece"?"Pro Extras":"Your collection"}</small><b>Open ↗</b></button>)}</div> : <div className="pc-empty-library"><p>No scores in your collection yet.</p><small>Upload MusicXML for Assisted Practice, or PDF/EPUB for reading during Standard Practice.</small></div>}
