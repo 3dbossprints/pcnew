@@ -280,20 +280,37 @@ async function init() {
   if (typeof WebAssembly.Suspending !== "function") {
     throw new Error("This browser lacks WebAssembly JSPI. Use an up-to-date Chrome.");
   }
-  ort = await import(ORT_URL + "ort.webgpu.min.mjs");
+  try {
+    ort = await import(ORT_URL + "ort.webgpu.min.mjs");
+  } catch (error) {
+    throw new Error("Could not fetch ONNX Runtime from jsDelivr. Check your connection or content blocker and try again. " + (error.message || error));
+  }
   ort.env.wasm.wasmPaths = ORT_URL;
   ort.env.wasm.numThreads = self.crossOriginIsolated
     ? Math.min(4, navigator.hardwareConcurrency || 1)
     : 1;
   post({ type: "log", msg: `WASM threads: ${ort.env.wasm.numThreads}` });
-  const { loadPyodide } = await import(PYODIDE_URL + "pyodide.mjs");
+  let loadPyodide;
+  try {
+    ({ loadPyodide } = await import(PYODIDE_URL + "pyodide.mjs"));
+  } catch (error) {
+    throw new Error("Could not fetch the Pyodide runtime. Check your connection or content blocker and try again. " + (error.message || error));
+  }
   useGpu = !!(self.navigator.gpu && (await navigator.gpu.requestAdapter()));
 
   post({ type: "progress", stage: "python" });
-  pyodide = await loadPyodide({ indexURL: PYODIDE_URL });
+  try {
+    pyodide = await loadPyodide({ indexURL: PYODIDE_URL });
+  } catch (error) {
+    throw new Error("Pyodide could not be downloaded or started. Check your connection and browser compatibility. " + (error.message || error));
+  }
   pyodide.setStderr({ batched: (msg) => post({ type: "log", msg }) });
   pyodide.setStdout({ batched: (msg) => post({ type: "log", msg }) });
-  await pyodide.loadPackage(["numpy", "opencv-python", "pillow", "typing-extensions"]);
+  try {
+    await pyodide.loadPackage(["numpy", "opencv-python", "pillow", "typing-extensions"]);
+  } catch (error) {
+    throw new Error("A required local notation package could not be fetched. Check your connection and try again. " + (error.message || error));
+  }
 
   const lib = "/home/pyodide/lib";
   pyodide.FS.mkdirTree(lib);
