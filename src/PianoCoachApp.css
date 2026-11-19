@@ -1604,3 +1604,24 @@ button{color:inherit}
   .pc-profile-page{max-width:none}
   .pc-sidebar-wordmark{display:none}
 }
+
+
+/* Final reference alignment: use the supplied complete logo, with a mark-only compact rail. */
+.pc-brand{align-items:flex-start;justify-content:flex-start;padding:0 4px 58px;min-height:86px}
+.pc-brand-logo{display:block;width:102px;height:auto;max-height:24px;object-fit:contain;object-position:left center}
+.pc-brand-symbol{display:none;width:34px;height:44px;object-fit:contain;object-position:center}
+.pc-grade-progress{display:grid;grid-template-columns:minmax(0,643px);justify-items:stretch;align-items:start;gap:0;width:100%;max-width:643px}
+.pc-grade-progress-track{display:block;width:100%;max-width:none;height:9px;margin:0 0 1px}
+.pc-grade-progress>strong{display:block;font-size:25px;line-height:1.12;margin:0}
+.pc-grade-overview{padding-top:0}
+.pc-grade-tasks>h1{margin-top:14px}
+.pc-grade-task-column:first-child{margin-left:0;padding-left:0}
+.pc-grade-task-column+.pc-grade-task-column{margin-left:0;padding-left:22px}
+@media(max-width:900px){
+ .pc-brand{align-items:center;justify-content:center;padding:0 0 35px;min-height:70px}
+ .pc-brand-logo{display:none}
+ .pc-brand-symbol{display:block}
+}
+@media(max-width:680px){
+ .pc-grade-task-column+.pc-grade-task-column{margin-left:12px;padding-left:15px}
+}
