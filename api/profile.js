@@ -261,11 +261,11 @@ export default async function handler(req, res) {
     );
     if (onboardingRequested) {
       await db.query(
-        "UPDATE users SET plan=CASE WHEN $4='free' THEN 'free' ELSE plan END, pending_plan=CASE WHEN $4='free' THEN NULL ELSE $4 END, " +
-        "pending_interval=CASE WHEN $4='free' THEN NULL ELSE $7 END, book_sources=$6::jsonb, " +
-        "exam_book_skipped=CASE WHEN $4='free' THEN false ELSE $8 END, onboarding_completed=($4='free'), " +
-        "demo_started_at=CASE WHEN $4='free' AND demo_started_at IS NULL THEN NOW() ELSE demo_started_at END, updated_at=NOW() WHERE firebase_uid=$1",
-        [user.uid,body.examBoard,body.grade,body.plan,targetDate,JSON.stringify(sources),body.interval||null,body.plan==="free"?false:Boolean(body.examBookSkipped)],
+        "UPDATE users SET plan=CASE WHEN $2='free' THEN 'free' ELSE plan END, pending_plan=CASE WHEN $2='free' THEN NULL ELSE $2 END, " +
+        "pending_interval=CASE WHEN $2='free' THEN NULL ELSE $3 END, book_sources=$4::jsonb, " +
+        "exam_book_skipped=CASE WHEN $2='free' THEN false ELSE $5 END, onboarding_completed=($2='free'), " +
+        "demo_started_at=CASE WHEN $2='free' AND demo_started_at IS NULL THEN NOW() ELSE demo_started_at END, updated_at=NOW() WHERE firebase_uid=$1",
+        [user.uid,body.plan,body.interval||null,JSON.stringify(sources),body.plan==="free"?false:Boolean(body.examBookSkipped)],
       );
     }
     if (preferences) {
