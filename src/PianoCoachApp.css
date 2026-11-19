@@ -1567,40 +1567,102 @@ button{color:inherit}
  .pc-feedback-reference-grid{grid-template-columns:1fr}
 }
 
-/* Updated brand lockup and screenshot-led app layout */
-.pc-sidebar{width:204px;flex-basis:204px;padding:27px 17px 18px}
+/* Sidebar and dashboard: faithful to the supplied Piano Coach PDF, refined for the live app. */
+.pc-sidebar{width:204px;flex-basis:204px;padding:27px 17px 18px;background:#fff0dc;border-right:1px solid rgba(36,36,35,.09)}
 .pc-main{margin-left:204px}
-.pc-brand{display:flex;flex-direction:row;align-items:center;padding:0 5px 58px}
-.pc-brand-lockup{display:flex;align-items:center;gap:7px;min-width:0}
-.pc-brand-logo{width:17px;height:29px;max-height:29px;object-fit:contain;object-position:center}
-.pc-brand-lockup>span{font-family:"Playfair Display",Georgia,serif;font-size:13px;font-weight:700;letter-spacing:-.35px;white-space:nowrap;color:var(--pc-ink)}
-.pc-brand-lockup>span em{font-style:italic;color:var(--pc-sage-dark);font-weight:600}
-.pc-sidebar-wordmark{display:block;width:150px;height:auto;max-height:26px;object-fit:contain;object-position:left center;padding:8px 0 0 2px}
+.pc-brand{display:flex;align-items:center;padding:0 5px 58px}
+.pc-brand-lockup{display:flex;align-items:center;gap:3px;min-width:0}
+.pc-brand-logo{display:block;width:48px;height:28px;max-height:none;object-fit:contain;object-position:left center;filter:invert(43%) sepia(13%) saturate(750%) hue-rotate(48deg) brightness(91%) contrast(84%)}
+.pc-brand-lockup>span{font-family:"Playfair Display",Georgia,serif;font-size:13px;font-style:italic;font-weight:600;white-space:nowrap;color:#58764b}
+.pc-sidebar-account{margin-top:auto;display:grid;gap:10px;padding-top:14px;border-top:1px solid rgba(36,36,35,.12)}
+.pc-sidebar-account .pc-sidebar-profile{display:flex;align-items:center;gap:10px;border:0;padding:0;text-align:left}
+.pc-sidebar-account .pc-sidebar-profile strong{font-family:"Playfair Display",Georgia,serif;font-size:13px}
+.pc-sidebar-account .pc-sidebar-profile small{font-size:10px}
+.pc-sidebar-plan{justify-self:start;margin-left:47px;font-size:9px;letter-spacing:1.2px;font-weight:700;color:#526b45;background:rgba(157,193,131,.28);border-radius:30px;padding:5px 9px}
+.pc-sidebar-wordmark{display:block;width:150px;height:auto;max-height:24px;object-fit:contain;object-position:left center;padding:7px 0 0 2px}
 .pc-profile-page{width:100%;max-width:1224px}
-.pc-grade-task-columns{display:grid;grid-template-columns:minmax(0,1fr);gap:17px}
-.pc-grade-task-column{padding:0;border:0;min-width:0}
-.pc-grade-task-column+.pc-grade-task-column{margin-left:24px;padding-left:22px;border-left:1px solid rgba(36,36,35,.12)}
-.pc-grade-task-column>header{display:block;margin:0 0 12px}
-.pc-grade-task-column>header h2{display:block;width:100%;margin:0;padding:0 0 8px;border:0;border-bottom:2px solid var(--pc-sage);font-family:"Playfair Display",Georgia,serif;font-size:20px;line-height:1.25}
-.pc-add-task-icon{display:grid;place-items:center;width:38px;height:36px;margin:0 0 9px;border:1px solid rgba(89,116,72,.34);border-radius:8px;background:var(--pc-paper);color:var(--pc-sage-dark);font-size:23px;line-height:1;transition:background .18s,transform .18s}
-.pc-add-task-icon:hover{background:var(--pc-sage-pale);transform:translateY(-1px)}
+.pc-content{padding-top:34px}
+
+/* Grade overview echoes the PDF's sage summary panel without copying its old card treatment. */
+.pc-dashboard-reference{gap:22px}
+.pc-grade-overview{background:#e8efdf;border:1px solid rgba(87,116,69,.12);border-radius:16px;padding:19px 22px;display:grid;gap:15px}
+.pc-grade-progress{width:100%;max-width:none;display:flex;align-items:center;gap:14px}
+.pc-grade-progress-track{flex:1;max-width:none;height:10px;border:0;background:#fff6eb;border-radius:30px;overflow:hidden}
+.pc-grade-progress-track span{background:#789a67;border-radius:30px}
+.pc-grade-progress>strong{font-family:"Playfair Display",Georgia,serif;font-size:25px;color:#242423}
+.pc-grade-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pc-grade-meta-card{min-height:0;background:#fffaf2;border:1px solid rgba(36,36,35,.07);border-radius:12px;padding:11px 15px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pc-grade-meta-card span{font-family:inherit;font-size:10px;letter-spacing:.7px;text-transform:uppercase;color:#777166;font-weight:700}
+.pc-grade-meta-card strong{font-family:"Playfair Display",Georgia,serif;font-size:19px;text-align:right;color:#242423}
+.pc-grade-tasks{background:#fffaf2;border:1px solid rgba(36,36,35,.09);border-radius:16px;padding:21px 22px}
+.pc-grade-tasks>h1{background:transparent;border-radius:0;text-align:left;padding:0 0 17px;margin:0 0 17px;border-bottom:1px solid rgba(36,36,35,.1);font-family:"Playfair Display",Georgia,serif;font-size:clamp(25px,2.7vw,34px);letter-spacing:-.7px;color:#242423}
+.pc-grade-task-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;background:transparent;padding:0}
+.pc-grade-task-column{padding:0 18px;border-left:1px solid rgba(36,36,35,.1);min-width:0}
+.pc-grade-task-column:first-child{padding-left:0;border-left:0}
+.pc-grade-task-column:last-child{padding-right:0}
+.pc-grade-task-column>header{display:block;margin:0 0 13px}
+.pc-grade-task-column>header h2{display:block;width:100%;margin:0;padding:0 0 8px;border:0;border-bottom:2px solid #9dc183;font-family:"Playfair Display",Georgia,serif;font-size:19px;line-height:1.25;text-align:left}
+.pc-add-task-icon{display:grid;place-items:center;width:36px;height:34px;margin:0 0 10px;border:1px solid rgba(89,116,72,.34);border-radius:8px;background:#fffaf2;color:#58764b;font-size:22px;line-height:1;transition:background .18s,transform .18s}
+.pc-add-task-icon:hover{background:#edf3e6;transform:translateY(-1px)}
 .pc-grade-task-empty{display:flex;align-items:center;gap:7px;padding:0 0 3px}
-.pc-grade-task-empty>span{font-size:13px;color:var(--pc-ink)}
-.pc-grade-task-empty button{border:1px solid var(--pc-line);border-radius:7px;background:var(--pc-paper);padding:6px 10px;color:var(--pc-ink);font-size:11px;font-weight:600;transition:background .18s,border-color .18s}
-.pc-grade-task-empty button:hover{background:var(--pc-paper-soft);border-color:var(--pc-sage)}
+.pc-grade-task-empty>span{font-size:13px;color:#242423}
+.pc-grade-task-empty button{border:1px solid rgba(36,36,35,.14);border-radius:7px;background:#fffaf2;padding:6px 10px;color:#242423;font-size:11px;font-weight:600;transition:background .18s,border-color .18s}
+.pc-grade-task-empty button:hover{background:#f4f0e7;border-color:#9dc183}
 .pc-grade-task-list{display:grid;gap:2px}
-.pc-grade-task-row{width:100%;border-bottom:1px solid rgba(36,36,35,.08)}
+.pc-grade-task-row{width:100%;border-bottom:1px solid rgba(36,36,35,.08);padding:11px 8px;border-radius:7px}
 .pc-grade-task-row:hover{background:rgba(157,193,131,.1)}
+.pc-grade-task-row .pc-task-name strong{font-family:inherit;font-size:12px;font-weight:600;color:#34332f}
+.pc-grade-task-row .pc-task-score{font-family:"Playfair Display",Georgia,serif;font-size:15px;color:#6f925f}
+
+/* Practice and Profile keep their supplied layout; only shared details are refined. */
+.pc-task-reference-heading{margin:12px 0 23px}
+.pc-task-reference-heading h1{font-size:clamp(32px,4.4vw,54px);letter-spacing:-1.2px}
+.pc-task-reference-stats>div{background:#e8efdf;border:1px solid rgba(87,116,69,.12);border-radius:13px;padding:13px 17px}
+.pc-task-reference-stats span{font-family:inherit;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#65735a}
+.pc-task-reference-stats strong{font-size:30px}
+.pc-task-reference-grid{gap:22px}
+.pc-task-reference-grid>.pc-panel{border:1px solid rgba(36,36,35,.1);border-radius:15px;background:#fffaf2;padding:22px;box-shadow:0 8px 26px rgba(55,48,34,.035)}
+.pc-task-reference-grid .pc-panel h2{font-size:23px}
+.pc-task-reference-issues{max-height:560px}
+.pc-reference-issue{padding-bottom:13px}
+.pc-task-reference-actions .pc-button{border-radius:10px;min-height:44px}
+.pc-task-reference-actions .pc-button.dark{background:#242423}
+.pc-task-reference-actions .pc-button.danger{background:#f6e6df;color:#914c38;border-color:#efd5c8}
+.pc-practice-chooser{border-radius:16px;border:1px solid rgba(36,36,35,.1);background:#fffaf2;box-shadow:0 8px 26px rgba(55,48,34,.035)}
+.pc-mode-grid>button{border-radius:13px}
+.pc-mode-grid>button.selected{border-color:#9dc183;background:#f1f5eb}
+.pc-feedback-reference-grid>.pc-feedback-written,.pc-feedback-reference-grid>.pc-feedback-recordings{background:#fffaf2;border:1px solid rgba(36,36,35,.1);border-radius:15px}
+.pc-feedback-reference-heading h1{letter-spacing:-1.2px}
+.pc-listening-indicator{background:#e8efdf;color:#34442d}
+.pc-session-reference-footer .pc-button{border-radius:11px}
+
+@media(max-width:1050px){
+ .pc-grade-task-columns{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:20px}
+ .pc-grade-task-column:nth-child(3){grid-column:1/-1;padding:16px 0 0;border-left:0;border-top:1px solid rgba(36,36,35,.1)}
+}
 @media(max-width:900px){
-  .pc-sidebar{width:76px;flex-basis:76px;padding:22px 10px 14px}
-  .pc-main{margin-left:76px}
-  .pc-brand{padding:0 0 35px;min-height:70px;justify-content:center}
-  .pc-brand-lockup{justify-content:center}
-  .pc-brand-lockup>span{display:none}
-  .pc-brand-logo{width:34px;height:46px;max-height:46px}
+ .pc-sidebar{width:76px;flex-basis:76px;padding:22px 10px 14px}
+ .pc-main{margin-left:76px}
+ .pc-brand{padding:0 0 35px;min-height:70px;justify-content:center}
+ .pc-brand-lockup{justify-content:center}
+ .pc-brand-lockup>span{display:none}
+ .pc-brand-logo{width:34px;height:30px;max-height:30px;object-position:center}
+ .pc-nav{width:100%}
+ .pc-nav button{justify-content:center;padding:13px 5px}
+ .pc-nav button span:last-child{display:none}
+ .pc-sidebar-account{width:100%;justify-items:center}
+ .pc-sidebar-account .pc-sidebar-profile{justify-content:center}
+ .pc-sidebar-account .pc-sidebar-profile>span:nth-child(2){display:none}
+ .pc-sidebar-plan{margin:0}
+ .pc-sidebar-wordmark{display:none}
 }
 @media(max-width:680px){
-  .pc-grade-task-column+.pc-grade-task-column{margin-left:12px;padding-left:15px}
-  .pc-profile-page{max-width:none}
-  .pc-sidebar-wordmark{display:none}
+ .pc-grade-meta{grid-template-columns:1fr 1fr}
+ .pc-grade-task-columns{grid-template-columns:1fr;gap:18px}
+ .pc-grade-task-column,.pc-grade-task-column:first-child,.pc-grade-task-column:last-child{padding:0;border:0}
+ .pc-grade-task-column+.pc-grade-task-column{padding-top:14px;border-top:1px solid rgba(36,36,35,.12)}
+ .pc-grade-task-column:nth-child(3){grid-column:auto;padding-top:14px;border-top:1px solid rgba(36,36,35,.12)}
+ .pc-task-reference-grid,.pc-feedback-reference-grid{grid-template-columns:1fr}
+ .pc-profile-page{max-width:none}
+ .pc-sidebar-wordmark{display:none}
 }
