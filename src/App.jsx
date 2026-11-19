@@ -298,14 +298,20 @@ export default function App() {
 
   return <div className="pc-app">
     <aside className="pc-sidebar">
-      <div className="pc-brand"><img className="pc-brand-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach"/><img className="pc-brand-symbol" src="/assets/logos/piano-coach-mark.png" alt="" aria-hidden="true"/></div>
+      <div className="pc-brand"><span className="pc-sidebar-piano" aria-label="Piano">Piano</span></div>
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Dashboard</span></button>
         <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
       </nav>
       <div className="pc-sidebar-spacer" />
-      
-      <div className="pc-sidebar-account"><button className="pc-sidebar-profile" onClick={() => setPage("profile")}><span className="pc-avatar">{initials}</span><span><strong>{displayName}</strong><small>{user.grade || "Piano student"}{user.exam_board ? " · " + user.exam_board : ""}</small></span></button><span className={"pc-sidebar-plan " + plan}>{plan === "free" ? "FREE" : plan.toUpperCase()}</span><img className="pc-sidebar-wordmark" src="/assets/logos/music-coach-wordmark.png" alt="Music Coach"/></div>
+      <div className="pc-sidebar-account">
+        <div className="pc-sidebar-account-top">
+          <button className="pc-sidebar-avatar-button" onClick={() => setPage("profile")} aria-label="Open profile"><span className="pc-avatar">{initials}</span></button>
+          <span className={"pc-sidebar-plan " + plan}>{plan === "free" ? "Free" : plan.toUpperCase()}</span>
+        </div>
+        <button className="pc-sidebar-name" onClick={() => setPage("profile")}>{displayName}</button>
+        <img className="pc-sidebar-wordmark" src="/assets/logos/music-coach-wordmark.png" alt="Music Coach"/>
+      </div>
     </aside>
     <main className="pc-main">
       <header className="pc-topbar">
