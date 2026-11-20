@@ -735,6 +735,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
                   }
                   const run=standardRunRef.current;
                   if(match>=0){
+                    if(run&&match>cursor){for(let skipped=cursor;skipped<match;skipped+=1){const missed=standardFeedbackEvents[skipped];run.missed.push({midi:missed.midi,bar:Number(missed.measure)||1,timeSeconds:Math.max(0,(now-state.startedAt)/1000)});}}
                     standardCursorRef.current=match+1;
                     if(run)run.hits+=1;
                     state.lastStandardHit=now;
@@ -862,7 +863,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
 
   async function startSession(){
     if(session||busy)return;
-    setBusy(true);setScoreLoadError("");standardCursorRef.current=0;standardRunRef.current={hits:0,wrong:[],total:standardFeedbackEvents.length};setCurrentBar(null);
+    setBusy(true);setScoreLoadError("");standardCursorRef.current=0;standardRunRef.current={hits:0,wrong:[],missed:[],total:standardFeedbackEvents.length};setCurrentBar(null);
     try{
       const body=await api("/api/practice/start",{method:"POST",body:{
         mode:config.mode,taskId:config.task?.id||null,sectionKey:config.sectionKey,
@@ -881,13 +882,15 @@ function PracticeSession({ config, files, onComplete, onExit }) {
     endingRef.current=true;setBusy(true);
     try{
       const durationSeconds=Math.min(14400,Math.max(elapsed,Math.floor((Date.now()-sessionStartRef.current)/1000)));
+      const standardAnalysisAvailable=Boolean(captureRef.current?.analyser);
       const blob=await stopCapture();
       const standardRun=standardRunRef.current;
-      const standardSummary=!engineSummary&&config.mode==="standard"&&standardRun?.total>0?{
+      const allStandardMistakes=[...(standardRun?.wrong||[]),...(standardRun?.missed||[])];
+      const standardSummary=!engineSummary&&config.mode==="standard"&&standardAnalysisAvailable&&standardRun?.total>0?{
         source:"standard-mic-melody",score:Math.round(100*standardRun.hits/standardRun.total),hits:standardRun.hits,total:standardRun.total,
-        wrong:standardRun.wrong.length,perfect:0,good:standardRun.hits,almost:0,maxCombo:0,
+        wrong:standardRun.wrong.length,missed:standardRun.missed.length,perfect:0,good:standardRun.hits,almost:0,maxCombo:0,
         analysisScope:"monophonic melody estimate; simultaneous chord tones are not individually scored",
-        trouble:[...new Set(standardRun.wrong.map(item=>item.bar))].map(bar=>({bar,notes:standardRun.wrong.filter(item=>item.bar===bar).map(item=>midiName(item.midi)),timeSeconds:standardRun.wrong.find(item=>item.bar===bar)?.timeSeconds??null}))
+        trouble:[...new Set(allStandardMistakes.map(item=>item.bar))].map(bar=>({bar,notes:allStandardMistakes.filter(item=>item.bar===bar).map(item=>midiName(item.midi)),timeSeconds:allStandardMistakes.find(item=>item.bar===bar)?.timeSeconds??null}))
       }:null;
       const finalSummary=engineSummary||standardSummary;
       const recordingFileId=await saveRecording(blob);
@@ -902,6 +905,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
         good:finalSummary.good,
         almost:finalSummary.almost,
         wrong:finalSummary.wrong,
+        missed:finalSummary.missed||0,
         maxCombo:finalSummary.maxCombo,
         hands:finalSummary.hands,
         tempo:finalSummary.tempo,
@@ -1026,7 +1030,7 @@ function FeedbackPage({feedback,onBack,onAgain}){
     <div className="pc-feedback-reference-grid">
       <section className="pc-feedback-written pc-feedback-overview">
         <h2>Your Overview</h2>
-        <p>{summary ? "You matched " + summary.hits + " of " + summary.total + " expected notes in this session. " + (summary.wrong ? summary.wrong + " incorrect note attempts were detected. " : "") + "Use the recordings to revisit the bars below, then try the passage again at a comfortable pace." : "Your practice session has been saved. This score did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p>
+        <p>{summary ? "You matched " + summary.hits + " of " + summary.total + " expected notes in this session. " + (summary.wrong ? summary.wrong + " incorrect note attempts were detected. " : "") + (summary.missed ? summary.missed + " expected melody notes were missed. " : "") + "Use the recordings to revisit the bars below, then try the passage again at a comfortable pace." : "Your practice session has been saved. This score did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p>
         {summary?.analysisScope&&<small>{summary.analysisScope}</small>}
         {summary && <strong className="pc-feedback-overview-score">{summary.score}%</strong>}
       </section>
