@@ -1027,6 +1027,7 @@ function FeedbackPage({feedback,onBack,onAgain}){
       <section className="pc-feedback-written pc-feedback-overview">
         <h2>Your Overview</h2>
         <p>{summary ? "You matched " + summary.hits + " of " + summary.total + " expected notes in this session. " + (summary.wrong ? summary.wrong + " incorrect note attempts were detected. " : "") + "Use the recordings to revisit the bars below, then try the passage again at a comfortable pace." : "Your practice session has been saved. This score did not provide note-level analysis, so no accuracy score or mistake claims have been generated."}</p>
+        {summary?.analysisScope&&<small>{summary.analysisScope}</small>}
         {summary && <strong className="pc-feedback-overview-score">{summary.score}%</strong>}
       </section>
       <section className="pc-feedback-recordings pc-feedback-where">
