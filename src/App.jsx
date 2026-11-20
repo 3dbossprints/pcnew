@@ -631,7 +631,19 @@ function PracticeSession({ config, files, onComplete, onExit }) {
     if(!xml)return [];
     try{return buildKeystoneTimeline(parseKeystoneMusicXML(xml));}catch{return [];}
   },[config.mode,xml,analysisNotes]);
+  // Standard practice can only score a monophonic microphone melody. Collapse
+  // simultaneous chord tones to the highest note so the score is explicit.
+  const standardFeedbackEvents=useMemo(()=>{
+    const groups=[];
+    standardEvents.forEach(event=>{
+      const last=groups[groups.length-1];
+      if(last&&Math.abs(last.t-event.t)<0.045){if(event.midi>last.midi)groups[groups.length-1]=event;}
+      else groups.push(event);
+    });
+    return groups;
+  },[standardEvents]);
   const standardCursorRef=useRef(0);
+  const standardRunRef=useRef(null);
   const micInputRef=useRef(null);
   const captureRef=useRef(null);
   const engineControlRef=useRef(null);
@@ -716,14 +728,19 @@ function PracticeSession({ config, files, onComplete, onExit }) {
                 }else{
                   state.currentMidi=midi;
                   const cursor=standardCursorRef.current;
-                  const limit=Math.min(standardEvents.length,cursor+18);
+                  const limit=Math.min(standardFeedbackEvents.length,cursor+18);
                   let match=-1;
                   for(let index=cursor;index<limit;index+=1){
-                    if(standardEvents[index].midi===midi){match=index;break;}
+                    if(standardFeedbackEvents[index].midi===midi){match=index;break;}
                   }
+                  const run=standardRunRef.current;
                   if(match>=0){
                     standardCursorRef.current=match+1;
-                    setCurrentBar(standardEvents[match].measure);
+                    if(run)run.hits+=1;
+                    setCurrentBar(standardFeedbackEvents[match].measure);
+                  }else if(run){
+                    const expected=standardFeedbackEvents[Math.min(cursor,standardFeedbackEvents.length-1)];
+                    run.wrong.push({midi,bar:Number(expected?.measure)||Number(currentBar)||1,timeSeconds:Math.max(0,(now-state.startedAt)/1000)});
                   }
                 }
               }
@@ -844,7 +861,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
 
   async function startSession(){
     if(session||busy)return;
-    setBusy(true);setScoreLoadError("");standardCursorRef.current=0;setCurrentBar(null);
+    setBusy(true);setScoreLoadError("");standardCursorRef.current=0;standardRunRef.current={hits:0,wrong:[],total:standardFeedbackEvents.length};setCurrentBar(null);
     try{
       const body=await api("/api/practice/start",{method:"POST",body:{
         mode:config.mode,taskId:config.task?.id||null,sectionKey:config.sectionKey,
@@ -864,27 +881,36 @@ function PracticeSession({ config, files, onComplete, onExit }) {
     try{
       const durationSeconds=Math.min(14400,Math.max(elapsed,Math.floor((Date.now()-sessionStartRef.current)/1000)));
       const blob=await stopCapture();
+      const standardRun=standardRunRef.current;
+      const standardSummary=!engineSummary&&config.mode==="standard"&&standardRun?.total>0?{
+        source:"standard-mic-melody",score:Math.round(100*standardRun.hits/standardRun.total),hits:standardRun.hits,total:standardRun.total,
+        wrong:standardRun.wrong.length,perfect:0,good:standardRun.hits,almost:0,maxCombo:0,
+        analysisScope:"monophonic melody estimate; simultaneous chord tones are not individually scored",
+        trouble:[...new Set(standardRun.wrong.map(item=>item.bar))].map(bar=>({bar,notes:standardRun.wrong.filter(item=>item.bar===bar).map(item=>"MIDI "+item.midi),timeSeconds:standardRun.wrong.find(item=>item.bar===bar)?.timeSeconds??null}))
+      }:null;
+      const finalSummary=engineSummary||standardSummary;
       const recordingFileId=await saveRecording(blob);
-      const mistakeClips=engineSummary?.trouble?.length?await saveMistakeClips(blob,engineSummary.trouble):[];
-      const score=engineSummary&&Number.isFinite(engineSummary.score)?engineSummary.score:null;
-      const feedbackPayload=engineSummary?{
-        source:"assisted-engine",
-        score:engineSummary.score,
-        hits:engineSummary.hits,
-        total:engineSummary.total,
-        perfect:engineSummary.perfect,
-        good:engineSummary.good,
-        almost:engineSummary.almost,
-        wrong:engineSummary.wrong,
-        maxCombo:engineSummary.maxCombo,
-        hands:engineSummary.hands,
-        tempo:engineSummary.tempo,
-        trouble:engineSummary.trouble||[],
+      const mistakeClips=finalSummary?.trouble?.length?await saveMistakeClips(blob,finalSummary.trouble):[];
+      const score=finalSummary&&Number.isFinite(finalSummary.score)?finalSummary.score:null;
+      const feedbackPayload=finalSummary?{
+        source:finalSummary.source||"assisted-engine",
+        score:finalSummary.score,
+        hits:finalSummary.hits,
+        total:finalSummary.total,
+        perfect:finalSummary.perfect,
+        good:finalSummary.good,
+        almost:finalSummary.almost,
+        wrong:finalSummary.wrong,
+        maxCombo:finalSummary.maxCombo,
+        hands:finalSummary.hands,
+        tempo:finalSummary.tempo,
+        analysisScope:finalSummary.analysisScope||null,
+        trouble:finalSummary.trouble||[],
         mistakeClips,
       }:null;
       const saved=await api("/api/practice/finish",{method:"PATCH",body:{sessionId:session.id,durationSeconds,score,feedback:feedbackPayload,recordingFileId}});
       const result={
-        session:saved.session,summary:engineSummary,durationSeconds:Number(saved.session?.duration_seconds ?? durationSeconds),recordingFileId,
+        session:saved.session,summary:finalSummary,durationSeconds:Number(saved.session?.duration_seconds ?? durationSeconds),recordingFileId,
         task:config.task,sectionKey:config.sectionKey,mode:config.mode,referenceFile:config.referenceFile||null,
         recordingSaved:Boolean(recordingFileId),mistakeClips,
       };
