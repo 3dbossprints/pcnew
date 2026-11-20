@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import PianoLoader from "./PianoLoader.jsx";
 import { EmailAuthProvider, OAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, signOut, updatePassword, updateProfile } from "firebase/auth";
 import { auth, googleProvider } from "./lib/firebase.js";
-import { buildKeystoneTimeline, parseKeystoneMusicXML, scoreNotesToKeystoneTimeline } from "./keystone-engine.js";
+import { buildKeystoneTimeline, midiName, parseKeystoneMusicXML, scoreNotesToKeystoneTimeline } from "./keystone-engine.js";
 import { searchScales } from "./scale-library.js";
 import { parseMusicCoachFile } from "./musiccoach-format.js";
 import "./PianoCoachApp.css";
@@ -720,7 +720,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
             const midi=Math.round(69+12*Math.log2(frequency/440));
             if(midi>=21&&midi<=108&&now-state.lastDetection>90){
               state.lastDetection=now;
-              if(state.currentMidi!==midi){
+              if(state.currentMidi!==midi||(!assisted&&standardFeedbackEvents[standardCursorRef.current]?.midi===midi&&now-(state.lastStandardHit||0)>280)){
                 if(assisted){
                   if(state.currentMidi!==null)micInputRef.current?.noteUp?.(state.currentMidi);
                   state.currentMidi=midi;
@@ -737,6 +737,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
                   if(match>=0){
                     standardCursorRef.current=match+1;
                     if(run)run.hits+=1;
+                    state.lastStandardHit=now;
                     setCurrentBar(standardFeedbackEvents[match].measure);
                   }else if(run){
                     const expected=standardFeedbackEvents[Math.min(cursor,standardFeedbackEvents.length-1)];
@@ -886,7 +887,7 @@ function PracticeSession({ config, files, onComplete, onExit }) {
         source:"standard-mic-melody",score:Math.round(100*standardRun.hits/standardRun.total),hits:standardRun.hits,total:standardRun.total,
         wrong:standardRun.wrong.length,perfect:0,good:standardRun.hits,almost:0,maxCombo:0,
         analysisScope:"monophonic melody estimate; simultaneous chord tones are not individually scored",
-        trouble:[...new Set(standardRun.wrong.map(item=>item.bar))].map(bar=>({bar,notes:standardRun.wrong.filter(item=>item.bar===bar).map(item=>"MIDI "+item.midi),timeSeconds:standardRun.wrong.find(item=>item.bar===bar)?.timeSeconds??null}))
+        trouble:[...new Set(standardRun.wrong.map(item=>item.bar))].map(bar=>({bar,notes:standardRun.wrong.filter(item=>item.bar===bar).map(item=>midiName(item.midi)),timeSeconds:standardRun.wrong.find(item=>item.bar===bar)?.timeSeconds??null}))
       }:null;
       const finalSummary=engineSummary||standardSummary;
       const recordingFileId=await saveRecording(blob);
