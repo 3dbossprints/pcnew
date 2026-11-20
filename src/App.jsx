@@ -298,7 +298,7 @@ export default function App() {
 
   return <div className="pc-app">
     <aside className="pc-sidebar">
-      <div className="pc-brand"><span className="pc-sidebar-piano" aria-label="Piano">Piano</span></div>
+      <div className="pc-brand" aria-label="Piano Coach"><img className="pc-brand-full-logo" src="/assets/logos/piano-coach-sage.svg" alt="Piano Coach" /><img className="pc-brand-compact-logo" src="/assets/logos/piano-coach-mark.png" alt="" aria-hidden="true" /></div>
       <nav className="pc-nav" aria-label="Main navigation">
         <button className={page === "home" ? "active" : ""} onClick={() => { setSelectedTask(null); setPage("home"); }}><Icon>⌂</Icon><span>Dashboard</span></button>
         <button className={page === "practice" ? "active" : ""} onClick={() => { setSelectedTask(null); setPracticeConfig(null); setFeedback(null); setPage("practice"); }}><Icon>♫</Icon><span>Practice</span></button>
